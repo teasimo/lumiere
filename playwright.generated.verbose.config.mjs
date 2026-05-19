@@ -1,0 +1,16 @@
+import { defineConfig } from '@playwright/test'
+
+export default defineConfig({
+  testDir: '.',
+  testMatch: ['**/*.spec.js'],
+  outputDir: 'temp/test-results',
+  reporter: [
+    ['list'],
+    ['html', { outputFolder: 'temp/report', open: 'never' }],
+  ],
+  use: {
+    screenshot: 'on',
+    video: 'on',
+    trace: 'on',
+  },
+})

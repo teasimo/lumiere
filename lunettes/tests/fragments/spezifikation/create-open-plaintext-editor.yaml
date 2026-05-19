@@ -1,0 +1,51 @@
+# Erstellt eine Spezifikation
+# Öffnet den Plaintext-Editor für die Spezifikation
+fragment:
+  id: spezifikation-create-open-plaintext-editor
+
+  parameters:
+    - title
+    - spezifikation_typ
+
+  flow:
+
+    - id: app-header-main-tab-Anforderungen
+      interaction:
+        type: click
+        target:
+          testid: app-header-main-tab-Anforderungen
+    - id: anforderungsviewer-left-tab-spezifikationen
+      interaction:
+        type: click
+        target:
+          testid: anforderungsviewer-left-tab-spezifikationen
+    - id: anforderungsviewer-spezifikationen-create-button
+      interaction:
+        type: click
+        target:
+          testid: anforderungsviewer-spezifikationen-create-button
+    - id: spezifikation-form-title-input
+      interaction:
+        type: fill
+        target:
+          testid: spezifikation-form-title-input
+        value: "{{title}}"
+    - id: spezifikation-form-typ-select
+      interaction:
+        type: select
+        target:
+          testid: spezifikation-form-typ-select
+        value: "{{spezifikation_typ}}"
+    - id: spezifikation-add-save-button
+      interaction:
+        type: click
+        target:
+          testid: spezifikation-add-save-button
+
+    - id: anforderungsviewer-toggle-plaintext-button
+
+      interaction:
+        type: click
+
+        target:
+          testid: anforderungsviewer-toggle-plaintext-button

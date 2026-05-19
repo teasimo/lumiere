@@ -1,0 +1,120 @@
+interaction:
+  id: beratungsanfrage-erfassen
+  version: 1.0
+
+  video:
+    wait_between_steps: 1000
+    resolution:
+      width: 1280
+      height: 720
+  
+  environment:
+    start:
+      script: ./lunettes/env/start.sh
+    check:
+      script: ./lunettes/env/check.sh
+    reset:
+      script: ./lunettes/env/reset.sh
+    stop:
+      script: ./lunettes/env/stop.sh
+
+  data:
+    runtime:
+      base_url: http://localhost:5173
+    actor:
+      username: schulte
+      password: testtest    
+    spezifikation: "Spezifikation {{randomNumber()}}"      
+
+  flow:
+
+    - id: login
+      include: fragments/auth/login.yml
+      with:
+        username: "{{actor.username}}"
+        password: "{{actor.password}}"          
+    
+    - id: create-idee-referenz
+      include: fragments/idee/create-referenz.yaml
+      with:
+        title: "Neue Idee"
+        description: "Beschreibung der Idee"
+    
+    - id: create-spezifikation-open-plaintext-editor
+      include: fragments/spezifikation/create-open-plaintext-editor.yaml
+      with:
+        title: "Neue {{spezifikation}} :)"
+        description: "Beschreibung der Idee"
+        spezifikation_typ: "Fachspezifikation"
+
+    - id: step-001-append
+      interaction:
+        type: append
+        target:
+          testid: anforderungsviewer-plaintext-editor-content
+        value: "A: Dies ist eine neue Anforderung.\n"
+
+    - id: step-001
+      interaction:
+        type: append
+        target:
+          testid: anforderungsviewer-plaintext-editor-content
+        value: "\nA: Dies ist eine weitere Anforderung.\nG: Mit Geschäftsregel.\nInfo: Und Infos.\nKlärungsbedarf: Und Klärungsbedarf."
+
+
+    - id: anforderungsviewer-save-plaintext-button
+      interaction:
+        type: click
+
+        target:
+          testid: anforderungsviewer-save-plaintext-button
+
+
+    - id: app-confirm-ok-button
+      interaction:
+        type: click
+        target:
+          testid: app-confirm-ok-button
+
+
+    - id: anforderungsviewer-planungsanker-link-button
+      interaction:
+        type: click
+        target:
+          testid: anforderungsviewer-planungsanker-link-button
+
+
+##reload?
+    - id: open-browser
+      interaction:
+        type: open
+        target:
+          url: "{{runtime.base_url}}/app/ideen"
+      expected_results:
+        
+
+    - id: idee-view-status-entscheidungsfaehig-node
+
+      interaction:
+        type: click
+        target:
+          testid: idee-view-status-entscheidungsfaehig-node
+
+    - id: step-008
+
+      interaction:
+        type: click
+        target:
+          testid: idee-view-status-angenommen-node
+
+    - id: idee-view-apply-requirement-statuses-button
+      interaction:
+        type: click
+        target:
+          testid: idee-view-apply-requirement-statuses-button
+
+    - id: step-010
+      interaction:
+        type: click
+        target:
+          testid: idee-view-requirement-statuses-confirm-ok-button

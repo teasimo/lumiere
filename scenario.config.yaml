@@ -1,0 +1,45 @@
+scenario:
+  defaults:
+    scenario_path: lunettes/tests/login.yaml
+    scenario_dir: lunettes/tests
+    output_dir: temp/testfiles
+
+  video:
+    wait_between_steps: 0
+    resolution:
+      width: 1280
+      height: 720
+
+      
+  tts:    
+    - profile: all-channels
+
+      channels:
+        purpose:
+          enabled: true
+          prefix: "Ziel dieses Schritts:"
+        explanation:
+          enabled: true
+          prefix: "Erläuterung:"
+        warning:
+          enabled: true
+          prefix: "Hinweis:"
+        consequence:
+          enabled: false
+          prefix: "Auswirkung:"
+        business_context:
+          enabled: false
+          prefix: "Fachlicher Hintergrund:"
+
+      timing:
+        before_step:
+          - purpose
+          - warning
+        after_step:
+          - explanation
+          - consequence
+
+      pauses:
+        between_channels_ms: 400
+        before_action_ms: 700
+        after_action_ms: 900

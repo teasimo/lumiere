@@ -1,0 +1,62 @@
+# Erstellt eine Idee
+# Setzt den Referenzanker für die Idee
+fragment:
+  id: idee-create-referenz
+
+  parameters:
+    - title
+    - description
+
+  flow:
+    - id: open-ideen-tab
+
+      interaction:
+        type: click
+
+        target:
+          testid: app-header-main-tab-Ideen
+
+    - id: ideen-create-button
+
+      interaction:
+        type: click
+
+        target:
+          testid: idee-page-create-button
+
+    - id: idee-view-title-input
+
+      interaction:
+        type: fill
+
+        target:
+          testid: idee-view-title-input
+
+        value: "{{title}}"
+
+    - id: idee-view-description-editor-input
+
+      interaction:
+        type: fill
+
+        target:
+          testid: idee-view-description-editor-input
+
+        value: "{{description}}"
+
+    - id: panel-right-open
+      interaction:
+        type: click
+        target:
+          testid: app-header-toggle-right-button
+
+    - id: idee-view-save-button
+      interaction:
+        type: click
+        target:
+          testid: idee-view-save-button
+    - id: idee-view-side-set-planungsanker-button
+      interaction:
+        type: click
+        target:
+          testid: idee-view-side-set-planungsanker-button

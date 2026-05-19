@@ -1,0 +1,29 @@
+{
+  "name": "lumiere-scenario-test-generator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "generate:testfile": "node scripts/generate-tests-from-scenario.mjs",
+    "generate:testfiles:all": "node scripts/generate-tests-from-scenario.mjs --all",
+    "clean:testfiles": "node scripts/generate-tests-from-scenario.mjs --clean",
+    "check:testfile": "node scripts/run-generated-testfile.mjs --mode check",
+    "check:testfile:verbose": "node scripts/run-generated-testfile.mjs --mode check --verbose",
+    "check:testfile:force": "node scripts/run-generated-testfile.mjs --mode check --force",
+    "generate:video": "node scripts/run-generated-testfile.mjs --mode video",
+    "generate:video:force": "node scripts/run-generated-testfile.mjs --mode video --force",
+    "generate:tts": "node scripts/run-annotated-video.mjs --scenario-tts",
+    "generate:tts:force": "node scripts/run-annotated-video.mjs --scenario-tts --force-video",
+    "generate:tts:full:force": "node scripts/run-annotated-video.mjs --scenario-tts --force-video --profile=all-channels"
+  },
+  "dependencies": {
+    "@google-cloud/text-to-speech": "^6.4.1",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0"
+  }
+}

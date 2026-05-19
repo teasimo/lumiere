@@ -1,0 +1,60 @@
+interaction:
+  id: login
+  version: 1.0
+
+  video:
+    wait_between_steps: 1000
+    resolution:
+      width: 1280
+      height: 720
+  
+  
+  data:
+    runtime:
+      base_url: https://neo-test.de
+    actor:
+      username: ealles
+      password: "!Neo-2405Neo!"
+  flow:
+    - id: open-browser
+      interaction:
+        type: open
+        target:
+          url: "{{runtime.base_url}}"
+      expected_results:
+        - target:
+            id: username
+          state:
+            visible: true
+     
+    - id: fill-username
+      interaction:
+        type: fill
+        target:
+          id: username
+        value: "{{actor.username}}"
+      expected_results:
+        - target:
+            id: username
+          state:
+            value-present: true
+      
+    - id: fill-password
+      interaction:
+        type: fill
+        target:
+          id: password
+        value: "{{actor.password}}"
+      expected_results:
+        - target:
+            id: password
+          state:
+            value-present: true
+    - id: submit-login    
+      interaction:
+        type: click
+        target:
+          id: kc-login
+      expected_results:
+        - target:
+            url: https://neo-test.de/ssvn/neo/#/
