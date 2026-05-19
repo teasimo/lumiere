@@ -23,7 +23,7 @@ interaction:
           url: "{{runtime.base_url}}"
       expected_results:
         - target:
-            id: username
+            data-id: login/input/user
           state:
             visible: true
      
@@ -31,11 +31,11 @@ interaction:
       interaction:
         type: fill
         target:
-          id: username
+          data-id: login/input/user
         value: "{{actor.username}}"
       expected_results:
         - target:
-            id: username
+            data-id: login/input/user
           state:
             value-present: true
       
@@ -43,18 +43,33 @@ interaction:
       interaction:
         type: fill
         target:
-          id: password
+          data-id: login/input/pass
         value: "{{actor.password}}"
       expected_results:
         - target:
-            id: password
+            data-id: login/input/pass
           state:
             value-present: true
+    
     - id: submit-login    
       interaction:
         type: click
         target:
-          id: kc-login
+          data-id: login/button/submit
       expected_results:
         - target:
-            url: https://neo-test.de/ssvn/neo/#/
+            url: "{{runtime.base_url}}/ssvn/neo/#/"
+          state:
+            url-match: true
+    
+    - id: confirm-organization
+      interaction:
+        type: click
+        target:
+          data-id: login/context/button/submit
+      expected_results:
+        - target:
+            data-id: logo
+          state:
+            visible: true
+
