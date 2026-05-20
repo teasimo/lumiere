@@ -1,0 +1,43 @@
+# Erstellt eine Spezifikation
+# Öffnet den Plaintext-Editor für die Spezifikation
+fragment:
+  id: spezifikation-open
+
+  parameters:
+    - title
+
+  flow:
+    - id: app-header-main-tab-Anforderungen
+      interaction:
+        type: click
+        target:
+          testid: app-header-main-tab-Anforderungen
+
+    - id: anforderungsviewer-left-tab-spezifikationen
+
+      interaction:
+        type: click
+
+        target:
+          testid: anforderungsviewer-left-tab-spezifikationen
+
+    - id: spezifikation-filter-search-input
+      interaction:
+        type: fill
+        target:
+          testid: spezifikation-filter-search-input
+        value: "{{title}}"
+
+    # - id: spezifikation-listview-count
+    #   interaction:
+    #     type: assert
+    #     target:
+    #       testid: spezifikation-listview-count
+    #     value: "Anzahl: 1"
+
+    - id: spezifikation-listview-row-1
+      interaction:
+        type: click
+
+        target:
+          testid: "spezifikation-listview-row-{{select}}"

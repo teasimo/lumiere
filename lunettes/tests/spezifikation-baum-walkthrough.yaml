@@ -1,0 +1,138 @@
+interaction:
+  id: spezifikation-oeffenen
+  version: 1.0
+
+  video:
+    wait_between_steps: 1000
+    resolution:
+      width: 1280
+      height: 720
+
+  environment:
+    start:
+      script: ./lunettes/env/start.sh
+    check:
+      script: ./lunettes/env/check.sh
+    reset:
+      script: ./lunettes/env/reset.sh
+    stop:
+      script: ./lunettes/env/stop.sh
+
+  data:
+    runtime:
+      base_url: http://localhost:5173
+    actor:
+      username: schulte
+      password: testtest
+    spezifikation: "Spezifikation {{randomNumber()}}"
+
+  flow:
+    - id: login
+      include: fragments/auth/login.yml
+      with:
+        username: "{{actor.username}}"
+        password: "{{actor.password}}"
+
+    - id: app-header-main-tab-Anforderungen
+      interaction:
+        type: click
+        target:
+          testid: app-header-main-tab-Anforderungen
+
+    - id: anforderungsviewer-left-tab-spezifikationen
+      interaction:
+        type: click
+        target:
+          testid: anforderungsviewer-left-tab-spezifikationen
+
+    - id: anforderungsviewer-spezifikationen-list-mode-toggle
+      ifnot:
+        - target: anforderungsviewer-spezifikationen-list-mode-toggle
+          state:
+            data-state: tree
+      interaction:
+        type: click
+        target:
+          testid: anforderungsviewer-spezifikationen-list-mode-toggle
+
+    - id: process-model-tree-select-node-prozesslandkarte-bildungsmanagement
+      interaction:
+        type: click
+        target:
+          role: treeitem
+          text: Prozesslandkarte Bildungsmanagement
+    
+    - id: process-model-tree-select-node-schuelermanagement
+      interaction:
+        type: click
+        target:
+          role: treeitem
+          text: Schülermanagement
+    
+    - id: process-model-tree-expand-node-schuelermanagement
+      ifnot:
+        - target:
+            role: treeitem
+            text: Schülermanagement
+          state:
+            aria-expanded: true
+      interaction:
+        type: click
+        target:
+          role: treeitem
+          text: Schülermanagement
+          click_child_selector: .q-tree__arrow
+
+    - id: process-model-tree-select-node-schullaufbahn-organisieren
+      interaction:
+        type: click
+        target:
+          role: treeitem
+          text: Schullaufbahn organisieren
+
+    - id: process-model-tree-select-node-schuelerinformationen-verwalten      
+      interaction:
+        type: click
+        target:
+          role: treeitem
+          text: Schülerinformationen verwalten
+
+##reload?
+# - id: anforderungsviewer-planungsanker-link-button
+#   interaction:
+#     type: click
+#     target:
+#       testid: anforderungsviewer-planungsanker-link-button
+
+# - id: open-browser
+#   interaction:
+#     type: open
+#     target:
+#       url: "{{runtime.base_url}}/app/ideen"
+#   expected_results:
+
+# - id: idee-view-status-entscheidungsfaehig-node
+
+#   interaction:
+#     type: click
+#     target:
+#       testid: idee-view-status-entscheidungsfaehig-node
+
+# - id: step-008
+
+#   interaction:
+#     type: click
+#     target:
+#       testid: idee-view-status-angenommen-node
+
+# - id: idee-view-apply-requirement-statuses-button
+#   interaction:
+#     type: click
+#     target:
+#       testid: idee-view-apply-requirement-statuses-button
+
+# - id: step-010
+#   interaction:
+#     type: click
+#     target:
+#       testid: idee-view-requirement-statuses-confirm-ok-button

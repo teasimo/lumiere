@@ -14,15 +14,28 @@ export function createScenarioTimelineRuntime({
       const startedAtMs = Date.now()
       const startedAtIso = new Date(startedAtMs).toISOString()
 
-      await test.step(stepId, async () => {
-        await execute()
+      const executeResult = await test.step(stepId, async () => {
+        return execute()
       })
+
+      const skipped = Boolean(
+        executeResult
+        && typeof executeResult === 'object'
+        && executeResult.__scenarioStepStatus === 'skipped'
+      )
+      const status = skipped ? 'skipped' : 'executed'
+      const skipReason = skipped
+        ? String(executeResult.reason || 'step guard condition was not met')
+        : null
 
       const endedAtMs = Date.now()
       const endedAtIso = new Date(endedAtMs).toISOString()
 
       timeline.push({
         stepId,
+        status,
+        skipped,
+        skipReason,
         startedAtMs,
         endedAtMs,
         startedAtIso,
@@ -30,7 +43,8 @@ export function createScenarioTimelineRuntime({
         durationMs: endedAtMs - startedAtMs,
       })
 
-      console.log(`[scenario-step] ${stepId} | ${startedAtIso} -> ${endedAtIso} (${endedAtMs - startedAtMs}ms)`)
+      const statusText = skipped ? `SKIPPED (${skipReason})` : 'EXECUTED'
+      console.log(`[scenario-step] ${stepId} | ${statusText} | ${startedAtIso} -> ${endedAtIso} (${endedAtMs - startedAtMs}ms)`)
     },
 
     async flush() {

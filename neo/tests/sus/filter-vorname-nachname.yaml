@@ -1,0 +1,80 @@
+fragment:
+  id: filter-vorname-nachname
+
+  parameters:
+    - nachname
+    - vorname    
+  flow:
+
+    - id: filters
+
+      interaction:
+        type: click
+
+        target:
+          data-id: filters
+
+    - id: filters/basic/choose
+
+      interaction:
+        type: click
+
+        target:
+          data-id: filters/basic/choose
+
+
+    - id: filters/basic/choose/vornamen
+
+      interaction:
+        type: click
+
+        target:
+          data-id: filters/basic/choose/vornamen
+
+    - id: filters/basic/0
+
+      interaction:
+        type: fill
+
+        target:
+          data-id: filters/basic/0
+        value: "{{vorname}}"
+
+    - id: filters/basic/choose
+
+      interaction:
+        type: click
+
+        target:
+          data-id: filters/basic/choose
+
+
+    - id: filters/basic/choose/familienname
+
+      interaction:
+        type: click
+
+        target:
+          data-id: filters/basic/choose/familienname
+
+
+    - id: filters/basic/1
+
+      interaction:
+        type: fill
+
+        target:
+          data-id: filters/basic/1
+        value: "{{nachname}}"
+
+
+    
+
+
+    - id: filters/apply
+
+      interaction:
+        type: click
+
+        target:
+          data-id: filters/apply

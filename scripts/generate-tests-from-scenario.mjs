@@ -125,7 +125,7 @@ function resolveTemplateString(text, context, dataFunctions = {}) {
       return undefined
     }, context)
 
-    return value === undefined || value === null ? '' : String(value)
+    return value === undefined || value === null ? `{{${expr}}}` : String(value)
   })
 }
 
@@ -168,8 +168,11 @@ async function resolveExistingPath(candidatePaths) {
   return null
 }
 
-async function resolveFragmentPath(includePath, baseDir) {
-  const rawAbsolutePath = resolve(baseDir, includePath)
+async function resolveFragmentPath(includePath, { baseDir, includeRootDir }) {
+  const includePathString = String(includePath || '').trim()
+  const rawAbsolutePath = includePathString.startsWith('/')
+    ? resolve(includeRootDir, includePathString.slice(1))
+    : resolve(baseDir, includePathString)
   const normalizedExt = extname(rawAbsolutePath).toLowerCase()
   const withoutExt = rawAbsolutePath.slice(0, rawAbsolutePath.length - normalizedExt.length)
 
@@ -186,7 +189,7 @@ async function resolveFragmentPath(includePath, baseDir) {
 
   const resolved = await resolveExistingPath(candidatePaths)
   if (!resolved) {
-    throw new Error(`Could not resolve included fragment path "${includePath}" from ${baseDir}`)
+    throw new Error(`Could not resolve included fragment path "${includePath}" from ${baseDir} (include root: ${includeRootDir})`)
   }
 
   return resolved
@@ -210,14 +213,38 @@ function prefixFlowEntryId(entry, prefix) {
   return nextEntry
 }
 
-async function expandFlowIncludes(flowEntries, { baseDir, context, dataFunctions, includeStack = [], idPrefix = '' }) {
+function createIncludeOutputSteps(outputs, { idPrefix = '', includeStepId = '' } = {}) {
+  if (!outputs || typeof outputs !== 'object' || Array.isArray(outputs)) {
+    return []
+  }
+
+  const baseId = String(includeStepId || 'include').trim() || 'include'
+
+  return Object.entries(outputs).map(([outputPath, outputValue], index) => {
+    const outputToken = String(outputPath)
+      .trim()
+      .replace(/[^a-zA-Z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || `output-${index + 1}`
+
+    return prefixFlowEntryId({
+      id: `${baseId}-output-${outputToken}`,
+      interaction: {
+        type: 'set-runtime-variable',
+        output: outputPath,
+        value: outputValue,
+      },
+    }, idPrefix)
+  })
+}
+
+async function expandFlowIncludes(flowEntries, { baseDir, includeRootDir, context, dataFunctions, includeStack = [], idPrefix = '' }) {
   const expanded = []
 
   for (const entry of flowEntries || []) {
     if (entry && typeof entry === 'object' && entry.include) {
       const includePathTemplate = String(entry.include ?? '')
       const includePath = resolveTemplateString(includePathTemplate, context, dataFunctions)
-      const fragmentPath = await resolveFragmentPath(includePath, baseDir)
+      const fragmentPath = await resolveFragmentPath(includePath, { baseDir, includeRootDir })
       const fragmentPrefix = String(entry.id || '').trim() || String(entry.fragmentId || '').trim() || ''
       const nextPrefix = idPrefix && fragmentPrefix ? `${idPrefix}-${fragmentPrefix}` : (fragmentPrefix || idPrefix)
 
@@ -247,6 +274,7 @@ async function expandFlowIncludes(flowEntries, { baseDir, context, dataFunctions
       const fragmentFlow = Array.isArray(fragment.flow) ? fragment.flow : []
       const resolvedFragmentFlow = await expandFlowIncludes(fragmentFlow, {
         baseDir: dirname(fragmentPath),
+        includeRootDir,
         context: fragmentContext,
         dataFunctions,
         includeStack: [...includeStack, fragmentPath],
@@ -254,6 +282,10 @@ async function expandFlowIncludes(flowEntries, { baseDir, context, dataFunctions
       })
 
       expanded.push(...resolvedFragmentFlow)
+      expanded.push(...createIncludeOutputSteps(resolveTemplatesDeep(entry.outputs || {}, context, dataFunctions), {
+        idPrefix,
+        includeStepId: fragmentPrefix,
+      }))
       continue
     }
 
@@ -366,6 +398,7 @@ async function scenarioToSpecSource(scenario, scenarioPath, centralConfig, gener
   // Expand flow includes before the general template resolution so fragments become part of one complete scenario.
   const expandedFlow = await expandFlowIncludes(rootWithDefaults.flow || [], {
     baseDir: dirname(resolve(scenarioPath)),
+    includeRootDir: dirname(resolve(scenarioPath)),
     context: {
       ...resolvedData,
     },

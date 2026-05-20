@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@google-cloud/text-to-speech": "^6.4.1",
+    "pdfjs-dist": "^5.6.205",
     "yaml": "^2.8.1"
   },
   "devDependencies": {

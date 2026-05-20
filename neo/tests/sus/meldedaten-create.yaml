@@ -1,0 +1,253 @@
+fragment:
+  id: meldedaten-create
+
+  parameters:
+    - schueler.nachname
+    - schueler.vorname
+    - schueler.geburtsdatum
+    - schueler.geburtsort
+    - schueler.adresseSuche
+    - schueler.ez1.nachname
+    - schueler.ez1.vorname
+    - schueler.ez1.anrede
+    - schueler.ez1.adresseSuche
+    - schueler.ez2.nachname
+    - schueler.ez2.vorname
+    - schueler.ez2.anrede
+    - schueler.ez2.adresseSuche
+  flow:
+
+    - id: button/menu-toggle
+
+      interaction:
+        type: click
+
+        target:
+          data-id: button/menu-toggle
+
+    - id: menu/item/schueler/
+
+      interaction:
+        type: click
+
+        target:
+          data-id: menu/item/schueler/
+
+
+    - id: menu/link/schueler/meldedaten/
+
+      interaction:
+        type: click
+
+        target:
+          data-id: menu/link/schueler/meldedaten/
+
+    - id: sus-auswaehlen-aufforderung-zur-schulanmeldung
+
+      interaction:
+        type: click
+
+        target:
+          role: menuitem
+          text: Aufforderung zur Schulanmeldung (Nur Verknüpfungscode)
+
+
+    - id: pin
+      include: /auth/pin.yaml
+      with:
+        pin: "2308"
+
+    - id: btn/create
+
+      interaction:
+        type: click
+
+        target:
+          data-id: btn/create
+
+    - id: btn/action-expandcollapseall
+
+      interaction:
+        type: click
+
+        target:
+          data-id: btn/action-expandcollapseall
+
+
+
+    - id: g_person_angaben/g_person_angaben~2/familienname
+
+      interaction:
+        type: fill
+
+        target:
+          data-id: g_person_angaben/g_person_angaben~2/familienname
+        value: "{{schueler.nachname}}"
+
+
+    - id: g_person_angaben/g_person_angaben~2/vornamen
+
+      interaction:
+        type: fill  
+
+        target:
+          data-id: g_person_angaben/g_person_angaben~2/vornamen
+        value: "{{schueler.vorname}}"
+
+    - id: g_person_angaben/g_person_angaben~2/geburtsdatum
+
+      interaction:
+        type: fill
+
+        target:
+          data-id: g_person_angaben/g_person_angaben~2/geburtsdatum
+        value: "{{schueler.geburtsdatum}}"
+
+
+    - id: g_person_angaben/g_person_angaben~2/geburtsort
+
+      interaction:
+        type: fill
+
+        target:
+          data-id: g_person_angaben/g_person_angaben~2/geburtsort
+        value: "{{schueler.geburtsort}}"
+
+    - id: adresse-suche-und-auswahl
+      interaction:
+        type: search-and-select
+        target:
+          data-id: g_adr_standard/g_adresse/adresseingabe
+        value: "{{schueler.adresseSuche}}"
+        resultSelector: .q-menu .q-item
+        resultIndex: 0
+        # Prüfe, ob die Postleitzahl übernommen wurde (Feld ist nicht leer)
+        assert:
+          target:
+            data-id: g_adresse/g_adresse~3/postleitzahl
+          state:
+            value-present: true
+
+    - id: tabs_gesver/btn/action-createGesver
+
+      interaction:
+        type: click
+
+        target:
+          data-id: tabs_gesver/btn/action-createGesver
+
+
+    - id: g_gesver_person/tabs_gesver/familienname
+
+      interaction:
+        type: fill
+
+        target:
+          data-id: g_gesver_person/tabs_gesver/familienname
+        value: "{{schueler.ez1.nachname}}"
+
+    - id: g_gesver_person/tabs_gesver/vornamen
+
+      interaction:
+        type: fill
+
+        target:
+          data-id: g_gesver_person/tabs_gesver/vornamen
+        value: "{{schueler.ez1.vorname}}"
+
+
+    - id: g_gesver_person
+
+      interaction:
+        type: click
+
+        target:
+          data-id: g_gesver_person
+
+
+    - id: g_gesver_person/tabs_gesver/anrede/option/1040_01
+
+      interaction:
+        type: select
+
+        target:
+          data-id: g_gesver_person/tabs_gesver/anrede
+        value: "{{schueler.ez1.anrede}}"
+
+    - id: ez1-adresse-suche-und-auswahl
+      interaction:
+        type: search-and-select
+        target:
+          data-id: g_adresse/g_gesver_adr/adresseingabe
+        value: "{{schueler.ez1.adresseSuche}}"
+        resultSelector: .q-menu .q-item
+        resultIndex: 0
+
+    - id: tabs_gesver/btn/action-createGesver-2
+
+      interaction:
+        type: click
+
+        target:
+          data-id: tabs_gesver/btn/action-createGesver
+
+
+    - id: g_gesver_person/tabs_gesver/familienname-2
+
+      interaction:
+        type: fill
+
+        target:
+          data-id: g_gesver_person/tabs_gesver/familienname
+        value: "{{schueler.ez2.nachname}}"
+
+    - id: g_gesver_person/tabs_gesver/vornamen-2
+
+      interaction:
+        type: fill
+
+        target:
+          data-id: g_gesver_person/tabs_gesver/vornamen
+        value: "{{schueler.ez2.vorname}}"
+
+
+    - id: g_gesver_person-2
+
+      interaction:
+        type: click
+
+        target:
+          data-id: g_gesver_person
+
+
+    - id: g_gesver_person/tabs_gesver/anrede/option/1040_01-2
+
+      interaction:
+        type: select
+
+        target:
+          data-id: g_gesver_person/tabs_gesver/anrede
+        value: "{{schueler.ez2.anrede}}"
+
+    - id: ez2-adresse-suche-und-auswahl
+      interaction:
+        type: search-and-select
+        target:
+          data-id: g_adresse/g_gesver_adr/adresseingabe
+        value: "{{schueler.ez2.adresseSuche}}"
+        resultSelector: .q-menu .q-item
+        resultIndex: 0
+
+
+    - id: btn/action-save
+
+      interaction:
+        type: click
+
+        target:
+          data-id: btn/action-save
+      expected_results:
+        - target:
+            id: q-portal--dialog--5
+          state:
+            visible: false

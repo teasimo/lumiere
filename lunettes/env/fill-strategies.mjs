@@ -72,7 +72,14 @@ export const fillStrategies = [
 
       const normalizedActual = await readPlaintextContent()
 
-      if (normalizedActual !== expectedFinalContent) {
+      if (appendMode) {
+        const normalizedExpectedSuffix = normalizePlaintext(rawExpectedValue)
+        if (!normalizedActual.endsWith(normalizedExpectedSuffix)) {
+          throw new Error(
+            `Plaintext editor did not persist appended content. Expected suffix ${JSON.stringify(normalizedExpectedSuffix)}, got ${JSON.stringify(normalizedActual)}`
+          )
+        }
+      } else if (normalizedActual !== expectedFinalContent) {
         throw new Error(
           `Plaintext editor did not persist expected content. Expected ${JSON.stringify(expectedFinalContent)}, got ${JSON.stringify(normalizedActual)}`
         )

@@ -10,6 +10,11 @@ fragment:
   flow:
 
     - id: app-header-main-tab-Anforderungen
+      ifnot: 
+      - target:
+          url: "{{runtime.base_url}}/app/anforderungen"
+          state:
+            visible: true      
       interaction:
         type: click
         target:
@@ -42,10 +47,4 @@ fragment:
         target:
           testid: spezifikation-add-save-button
 
-    - id: anforderungsviewer-toggle-plaintext-button
-
-      interaction:
-        type: click
-
-        target:
-          testid: anforderungsviewer-toggle-plaintext-button
+  

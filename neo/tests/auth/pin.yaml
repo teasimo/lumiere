@@ -1,0 +1,21 @@
+fragment:
+  id: login
+
+  parameters:
+    - pin
+
+  flow:
+    - id: pin-erforderlich/input/pin
+      interaction:
+        type: fill
+
+        target:
+          data-id: pin-erforderlich/input/pin
+        value: "{{pin}}"
+
+    - id: pin-erforderlich/button/continue
+      interaction:
+        type: click
+
+        target:
+          data-id: pin-erforderlich/button/continue

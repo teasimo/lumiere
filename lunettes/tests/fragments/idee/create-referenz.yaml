@@ -1,5 +1,6 @@
 # Erstellt eine Idee
 # Setzt den Referenzanker für die Idee
+# status: funktioniert
 fragment:
   id: idee-create-referenz
 
