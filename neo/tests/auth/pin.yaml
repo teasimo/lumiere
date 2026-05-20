@@ -6,6 +6,12 @@ fragment:
 
   flow:
     - id: pin-erforderlich/input/pin
+      if:
+        - target:
+            data-id: pin-erforderlich/input/pin
+          state:
+            visible: true
+            wait_ms: 3000
       interaction:
         type: fill
 
@@ -14,6 +20,12 @@ fragment:
         value: "{{pin}}"
 
     - id: pin-erforderlich/button/continue
+      if:
+        - target:
+            data-id: pin-erforderlich/button/continue
+          state:
+            visible: true
+            wait_ms: 3000
       interaction:
         type: click
 

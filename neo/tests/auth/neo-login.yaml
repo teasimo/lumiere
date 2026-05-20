@@ -1,0 +1,69 @@
+fragment:
+  id: neo-login
+
+  parameters:
+    - username
+    - password
+
+  flow:
+    - id: open-browser
+      interaction:
+        type: open
+        target:
+          url: "{{runtime.base_url}}"
+      expected_results:
+        - target:
+            data-id: login/input/user
+          state:
+            visible: true
+     
+    - id: fill-username
+      interaction:
+        type: fill
+        target:
+          data-id: login/input/user
+        value: "{{username}}"
+      expected_results:
+        - target:
+            data-id: login/input/user
+          state:
+            value-present: true
+      
+    - id: fill-password
+      interaction:
+        type: fill
+        target:
+          data-id: login/input/pass
+        value: "{{password}}"
+      expected_results:
+        - target:
+            data-id: login/input/pass
+          state:
+            value-present: true
+    
+    - id: submit-login    
+      interaction:
+        type: click
+        target:
+          data-id: login/button/submit
+      expected_results:
+        - target:
+            url: "{{runtime.base_url}}/ssvn/neo/#/"
+          state:
+            url-match: true
+    
+    # Organisationsbestätigung, nur wenn sie kommt
+    - id: confirm-organization
+      if:
+        - target: login/confirm-organization-dialog
+          state:
+            visible: true
+      interaction:
+        type: click
+        target:
+          data-id: login/context/button/submit
+      expected_results:
+        - target:
+            data-id: logo
+          state:
+            visible: true

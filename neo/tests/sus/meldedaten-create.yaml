@@ -42,16 +42,6 @@ fragment:
         target:
           data-id: menu/link/schueler/meldedaten/
 
-    - id: sus-auswaehlen-aufforderung-zur-schulanmeldung
-
-      interaction:
-        type: click
-
-        target:
-          role: menuitem
-          text: Aufforderung zur Schulanmeldung (Nur Verknüpfungscode)
-
-
     - id: pin
       include: /auth/pin.yaml
       with:

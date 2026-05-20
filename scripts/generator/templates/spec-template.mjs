@@ -337,6 +337,7 @@ export function renderScenarioSpecTemplate({ resolvedRoot, scenarioPathRelative,
   const scenarioName = String(resolvedRoot.id || basename(scenarioPathRelative))
   const scenarioVersion = String(resolvedRoot.version || 'unknown')
   const waitBetweenStepsMs = Number(resolvedRoot?.video?.wait_between_steps ?? 0)
+  const dynamicTestTimeoutMs = flow.length * 2000
   const describeTitle = `Scenario: ${scenarioName}`
   const testTitle = `runs generated flow for ${scenarioName}`
 
@@ -350,6 +351,7 @@ export function renderScenarioSpecTemplate({ resolvedRoot, scenarioPathRelative,
   parts.push(`test.describe(${toLiteral(describeTitle)}, () => {`)
   parts.push(`  test(${toLiteral(testTitle)}, async ({ page }, testInfo) => {`)
   parts.push('    const videoModeEnabled = process.env.SCENARIO_VIDEO_MODE === "1"')
+  parts.push(`    test.setTimeout(${dynamicTestTimeoutMs})`)
   parts.push(`    const waitBetweenStepsMs = ${Number.isFinite(waitBetweenStepsMs) ? Math.max(0, Math.floor(waitBetweenStepsMs)) : 0}`)
   parts.push('    const runtimeVariables = {}')
   parts.push('    let lastDownload = null')

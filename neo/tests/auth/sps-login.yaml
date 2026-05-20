@@ -1,5 +1,5 @@
 fragment:
-  id: login
+  id: neo-login
 
   parameters:
     - username
@@ -10,7 +10,19 @@ fragment:
       interaction:
         type: open
         target:
-          url: "{{runtime.base_url}}"
+          url: "{{runtime.base_url}}/portal"
+
+    - id: button/user-menu-toggle
+      if:
+        - target:
+            data-id: button/user-menu-toggle
+          state:
+            visible: true
+            wait_ms: 3000
+      interaction:
+        type: click
+        target:
+          data-id: button/user-menu-toggle
       expected_results:
         - target:
             data-id: login/input/user
@@ -48,22 +60,7 @@ fragment:
           data-id: login/button/submit
       expected_results:
         - target:
-            url: "{{runtime.base_url}}/ssvn/neo/#/"
+            url: "{{runtime.base_url}}/ssvn/portal/#/"
           state:
             url-match: true
     
-    # Organisationsbestätigung, nur wenn sie kommt
-    - id: confirm-organization
-      if:
-        - target: login/confirm-organization-dialog
-          state:
-            visible: true
-      interaction:
-        type: click
-        target:
-          data-id: login/context/button/submit
-      expected_results:
-        - target:
-            data-id: logo
-          state:
-            visible: true

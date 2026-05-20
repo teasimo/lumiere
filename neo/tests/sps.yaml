@@ -11,8 +11,11 @@ interaction:
   
   data:
     runtime:
-      base_url: https://neo-integration.de
-    actor:
+      base_url: https://neo-test.de
+    actorSPS:
+      username: testuser1@portal.de
+      password: "Testuser_Portal1!"
+    actorNEO:
       username: schule_05423_schulleitung
       password: "!Neo-2405Neo!"
     schueler:
@@ -37,16 +40,13 @@ interaction:
         geburtsdatum: 01.01.1970
         geburtsort: Musterstadt
         adresseSuche: Fuchsbau 6 Emmerke
+   
   flow:
-    - id: neo-login
-      include: /auth/neo-login.yaml
+    - id: verknuepfungscode
+      include: /sus/verknuepfungscode-create.yaml
       with:
-        username: "{{actor.username}}"
-        password: "{{actor.password}}"
-
-    - id: meldedaten-create
-      include: /sus/meldedaten-create.yaml
-      with:
+        actor.username: "{{actorNEO.username}}"
+        actor.password: "{{actorNEO.password}}"
         schueler.nachname: "{{schueler.nachname}}"
         schueler.vorname: "{{schueler.vorname}}"
         schueler.geburtsdatum: "{{schueler.geburtsdatum}}"
@@ -60,21 +60,57 @@ interaction:
         schueler.ez2.vorname: "{{schueler.ez2.vorname}}"
         schueler.ez2.anrede: "{{schueler.ez2.anrede}}"
         schueler.ez2.adresseSuche: "{{schueler.ez2.adresseSuche}}"
-
-    
-    - id: aufforderungsschreiben-create
-      include: /sus/aufforderungsschreiben-create.yaml
-      with:
-        schueler.nachname: "{{schueler.nachname}}"
-        schueler.vorname: "{{schueler.vorname}}"        
       outputs:
         verknuepfungscode: "{{verknuepfungscode}}"
 
-    - id: code-anzeigen
+    - id: sps-login
+      include: /auth/sps-login.yaml
+      with:
+        username: "{{actorSPS.username}}"
+        password: "{{actorSPS.password}}"
+
+    - id: button/menu-toggle
+
+      interaction:
+        type: click
+
+        target:
+          data-id: button/menu-toggle
+
+
+    - id: menu/item/sm
+
+      interaction:
+        type: click
+
+        target:
+          data-id: menu/item/sm
+
+
+    - id: menu/link/sm/verknuepfungbestaetigen
+
+      interaction:
+        type: click
+
+        target:
+          data-id: menu/link/sm/verknuepfungbestaetigen
+
+
+    - id: vb_code/vb_code/verknuepfungscode
+
       interaction:
         type: fill
+
         target:
-          text: Schnellfilter
+          data-id: vb_code/vb_code/verknuepfungscode
         value: "{{verknuepfungscode}}"
 
+
+    - id: vb_code_btn/vb_code_btn~2/verknuepfungCodePruefen
+
+      interaction:
+        type: click
+
+        target:
+          data-id: vb_code_btn/vb_code_btn~2/verknuepfungCodePruefen
     

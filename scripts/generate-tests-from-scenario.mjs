@@ -129,6 +129,65 @@ function resolveTemplateString(text, context, dataFunctions = {}) {
   })
 }
 
+function setPathValue(target, pathExpr, value) {
+  const path = String(pathExpr || '').trim()
+  if (!path) {
+    return
+  }
+
+  const keys = path.split('.').filter(Boolean)
+  if (!keys.length) {
+    return
+  }
+
+  let cursor = target
+  for (const key of keys.slice(0, -1)) {
+    if (!cursor[key] || typeof cursor[key] !== 'object' || Array.isArray(cursor[key])) {
+      cursor[key] = {}
+    }
+    cursor = cursor[key]
+  }
+
+  cursor[keys[keys.length - 1]] = value
+}
+
+function getPathValue(source, pathExpr) {
+  const path = String(pathExpr || '').trim()
+  if (!path) {
+    return undefined
+  }
+
+  return path.split('.').reduce((acc, key) => {
+    if (acc && Object.prototype.hasOwnProperty.call(acc, key)) {
+      return acc[key]
+    }
+    return undefined
+  }, source)
+}
+
+function buildIncludeOverrideContext(providedWith) {
+  const overrides = {}
+
+  for (const [key, value] of Object.entries(providedWith || {})) {
+    if (key.includes('.')) {
+      setPathValue(overrides, key, value)
+      continue
+    }
+
+    overrides[key] = value
+  }
+
+  return overrides
+}
+
+function hasContextParameter(context, parameterName) {
+  if (Object.prototype.hasOwnProperty.call(context, parameterName)) {
+    return true
+  }
+
+  return getPathValue(context, parameterName) !== undefined
+}
+
 function resolveTemplatesDeep(value, context, dataFunctions = {}) {
   if (typeof value === 'string') {
     return resolveTemplateString(value, context, dataFunctions)
@@ -260,13 +319,14 @@ async function expandFlowIncludes(flowEntries, { baseDir, includeRootDir, contex
 
       const fragmentParameters = Array.isArray(fragment.parameters) ? fragment.parameters : []
       const providedWith = resolveTemplatesDeep(entry.with || {}, context, dataFunctions)
+      const includeOverrides = buildIncludeOverrideContext(providedWith)
       const fragmentContext = {
         ...context,
-        ...providedWith,
+        ...includeOverrides,
       }
 
       for (const parameterName of fragmentParameters) {
-        if (!Object.prototype.hasOwnProperty.call(fragmentContext, parameterName)) {
+        if (!hasContextParameter(fragmentContext, parameterName)) {
           throw new Error(`Missing fragment parameter "${parameterName}" for include "${includePath}" in ${fragmentPath}`)
         }
       }
