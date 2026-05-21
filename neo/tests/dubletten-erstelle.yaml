@@ -42,7 +42,7 @@ interaction:
         username: "{{actor.username}}"
         password: "{{actor.password}}"
 
-    - id: meldedaten-create
+    - id: meldedaten-create1
       include: /sus/meldedaten-create.yaml
       with:
         schueler.nachname: "{{schueler.nachname}}"
@@ -59,7 +59,7 @@ interaction:
         schueler.ez2.anrede: "{{schueler.ez2.anrede}}"
         schueler.ez2.adresseSuche: "{{schueler.ez2.adresseSuche}}"
 
-    - id: meldedaten-create
+    - id: meldedaten-create2
       include: /sus/meldedaten-create.yaml
       with:
         schueler.nachname: "{{schueler.nachname}}"
