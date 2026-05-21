@@ -1,0 +1,93 @@
+fragment:
+  id: aufforderungsschreiben-create
+  
+  parameters:
+  - verknuepfungscode
+
+  flow:
+
+    - id: button/menu-toggle
+
+      interaction:
+        type: click
+
+        target:
+          data-id: button/menu-toggle
+
+
+    - id: menu/item/sm
+
+      interaction:
+        type: click
+
+        target:
+          data-id: menu/item/sm
+
+
+    - id: menu/link/sm/verknuepfungbestaetigen
+
+      interaction:
+        type: click
+
+        target:
+          data-id: menu/link/sm/verknuepfungbestaetigen
+
+
+    - id: vb_code/vb_code/verknuepfungscode
+
+      interaction:
+        type: fill
+
+        target:
+          data-id: vb_code/vb_code/verknuepfungscode
+        value: "{{verknuepfungscode}}"
+
+
+    - id: vb_code_btn/vb_code_btn~2/verknuepfungCodePruefen
+
+      interaction:
+        type: click
+
+        target:
+          data-id: vb_code_btn/vb_code_btn~2/verknuepfungCodePruefen
+
+    - id: vb_verknuepfung/vb_verknuepfung~1/erziehungsberechtigte_des_kind
+      
+      interaction:
+        type: click
+
+        target:
+          data-id: vb_verknuepfung/vb_verknuepfung~1/erziehungsberechtigte_des_kind
+
+
+    - id: vb_verknuepfung/vb_verknuepfung~1/privacy_policy
+      
+      interaction:
+        type: click
+
+        target:
+          data-id: vb_verknuepfung/vb_verknuepfung~1/privacy_policy
+
+
+    - id: vb_code_btn/vb_code_btn~6/verknuepfungCodeBestaetigen
+      
+      interaction:
+        type: click
+
+        target:
+          data-id: vb_code_btn/vb_code_btn~6/verknuepfungCodeBestaetigen
+
+
+    - id: q-portal--dialog--1
+      
+      interaction:
+        type: click
+
+        target:
+          text: OK
+
+      expected_results:
+        - target:
+            id: q-portal--dialog--1
+          state:
+            visible: false

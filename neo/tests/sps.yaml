@@ -42,7 +42,7 @@ interaction:
         adresseSuche: Fuchsbau 6 Emmerke
    
   flow:
-    - id: verknuepfungscode
+    - id: neo-verknuepfungscode
       include: /sus/verknuepfungscode-create.yaml
       with:
         actor.username: "{{actorNEO.username}}"
@@ -68,49 +68,721 @@ interaction:
       with:
         username: "{{actorSPS.username}}"
         password: "{{actorSPS.password}}"
-
-    - id: button/menu-toggle
-
-      interaction:
-        type: click
-
-        target:
-          data-id: button/menu-toggle
-
-
-    - id: menu/item/sm
-
-      interaction:
-        type: click
-
-        target:
-          data-id: menu/item/sm
-
-
-    - id: menu/link/sm/verknuepfungbestaetigen
-
-      interaction:
-        type: click
-
-        target:
-          data-id: menu/link/sm/verknuepfungbestaetigen
-
-
-    - id: vb_code/vb_code/verknuepfungscode
-
-      interaction:
-        type: fill
-
-        target:
-          data-id: vb_code/vb_code/verknuepfungscode
-        value: "{{verknuepfungscode}}"
-
-
-    - id: vb_code_btn/vb_code_btn~2/verknuepfungCodePruefen
-
-      interaction:
-        type: click
-
-        target:
-          data-id: vb_code_btn/vb_code_btn~2/verknuepfungCodePruefen
     
+    - id: sps-verknuepfen
+      include: /sus/sps/verknuepfen.yaml
+      with:
+        verknuepfungscode: "{{verknuepfungscode}}"
+
+
+    - id: bearbeiten_btn/bearbeiten_btn~1/kindDatenBearbeiten
+      
+      interaction:
+        type: click
+
+        target:
+          data-id: bearbeiten_btn/bearbeiten_btn~1/kindDatenBearbeiten
+
+
+    - id: q-app      
+      interaction:
+        type: click
+
+        target:
+          id: q-app
+
+
+    - id: g_person_bz
+      if:
+        - target:
+            data-id: g_person_bz
+          state:
+            visible: true
+            wait_ms: 3000
+
+      interaction:
+        type: click
+
+        target:
+          data-id: g_person_bz
+
+
+    - id: g_person_bz_hat_aufenthaltsbestimmungsrecht/g_person_bz_hat_aufenthaltsbestimmungsrecht~1/hat_aufenthaltsbestimmungsrecht
+
+      interaction:
+        type: click
+
+        target:
+          data-id: g_person_bz_hat_aufenthaltsbestimmungsrecht/g_person_bz_hat_aufenthaltsbestimmungsrecht~1/hat_aufenthaltsbestimmungsrecht
+
+
+    - id: g_person_sorg/g_person_sorg~1/sorgerecht
+
+      interaction:
+        type: click
+
+        target:
+          data-id: g_person_sorg/g_person_sorg~1/sorgerecht
+
+
+    - id: g_person_sorg/g_person_sorg~1/sorgerecht/option/2007_07
+
+      interaction:
+        type: click
+
+        target:
+          data-id: g_person_sorg/g_person_sorg~1/sorgerecht/option/2007_07
+
+
+    - id: g_person_bz/g_verbindung_schueler/beziehungsart
+
+      interaction:
+        type: click
+
+        target:
+          data-id: g_person_bz/g_verbindung_schueler/beziehungsart
+
+
+    # - id: g_person_bz/g_verbindung_schueler/beziehungsart/option/1137_02
+    #   if:
+    #     - target:
+    #         data-id: g_person_bz/g_verbindung_schueler/beziehungsart/option/1137_02
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       data-id: g_person_bz/g_verbindung_schueler/beziehungsart/option/1137_02
+
+
+    # - id: q-app
+    #   if:
+    #     - target:
+    #         id: q-app
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       id: q-app
+
+
+    # - id: g_person/p_person/geschlecht
+    #   if:
+    #     - target:
+    #         data-id: g_person/p_person/geschlecht
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       data-id: g_person/p_person/geschlecht
+
+
+    # - id: g_person/p_person/geschlecht/option/1000_01
+    #   if:
+    #     - target:
+    #         data-id: g_person/p_person/geschlecht/option/1000_01
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       data-id: g_person/p_person/geschlecht/option/1000_01
+
+
+    # - id: g_person/p_person/geburtsort
+    #   if:
+    #     - target:
+    #         data-id: g_person/p_person/geburtsort
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       data-id: g_person/p_person/geburtsort
+
+
+    # - id: g_person/p_person/geburtsland
+    #   if:
+    #     - target:
+    #         data-id: g_person/p_person/geburtsland
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       data-id: g_person/p_person/geburtsland
+
+
+    # - id: g_person/p_person/geburtsland/option/1002_0037
+    #   if:
+    #     - target:
+    #         data-id: g_person/p_person/geburtsland/option/1002_0037
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       data-id: g_person/p_person/geburtsland/option/1002_0037
+
+
+    # - id: g_person/p_person/staatan
+    #   if:
+    #     - target:
+    #         data-id: g_person/p_person/staatan
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       data-id: g_person/p_person/staatan
+
+
+    # - id: g_person/p_person/staatan/option/1015_0037
+    #   if:
+    #     - target:
+    #         data-id: g_person/p_person/staatan/option/1015_0037
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       data-id: g_person/p_person/staatan/option/1015_0037
+
+
+    # - id: g_person/p_person/herkunftssprache
+    #   if:
+    #     - target:
+    #         data-id: g_person/p_person/herkunftssprache
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       data-id: g_person/p_person/herkunftssprache
+
+
+    # - id: g_person/p_person/herkunftssprache/option/1001_020
+    #   if:
+    #     - target:
+    #         data-id: g_person/p_person/herkunftssprache/option/1001_020
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       data-id: g_person/p_person/herkunftssprache/option/1001_020
+
+
+    # - id: g_person/p_person/umgangssprache
+    #   if:
+    #     - target:
+    #         data-id: g_person/p_person/umgangssprache
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       data-id: g_person/p_person/umgangssprache
+
+
+    # - id: g_person/p_person/umgangssprache/option/1001_020
+    #   if:
+    #     - target:
+    #         data-id: g_person/p_person/umgangssprache/option/1001_020
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       data-id: g_person/p_person/umgangssprache/option/1001_020
+
+
+    # - id: g_person/p_person/religion
+    #   if:
+    #     - target:
+    #         data-id: g_person/p_person/religion
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       data-id: g_person/p_person/religion
+
+
+    # - id: g_person/p_person/religion/option/1038_01
+    #   if:
+    #     - target:
+    #         data-id: g_person/p_person/religion/option/1038_01
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       data-id: g_person/p_person/religion/option/1038_01
+
+
+    # - id: q-app
+    #   if:
+    #     - target:
+    #         id: q-app
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       id: q-app
+
+
+    # - id: g_person_auskunftssperre/g_wichtige_informationen/auskunftssperre
+    #   if:
+    #     - target:
+    #         data-id: g_person_auskunftssperre/g_wichtige_informationen/auskunftssperre
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       data-id: g_person_auskunftssperre/g_wichtige_informationen/auskunftssperre
+
+
+    # - id: g_person_auskunftssperre/g_wichtige_informationen/sperrvermerk
+    #   if:
+    #     - target:
+    #         data-id: g_person_auskunftssperre/g_wichtige_informationen/sperrvermerk
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       data-id: g_person_auskunftssperre/g_wichtige_informationen/sperrvermerk
+
+
+    # - id: q-app
+    #   if:
+    #     - target:
+    #         id: q-app
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       id: q-app
+
+
+    # - id: q-app
+    #   if:
+    #     - target:
+    #         id: q-app
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       id: q-app
+
+
+    # - id: tabs_adresse/btn/action-createAdress
+    #   if:
+    #     - target:
+    #         data-id: tabs_adresse/btn/action-createAdress
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       data-id: tabs_adresse/btn/action-createAdress
+
+
+    # - id: g_adr_standard/tabs_adresse/adresseingabe
+    #   if:
+    #     - target:
+    #         data-id: g_adr_standard/tabs_adresse/adresseingabe
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       data-id: g_adr_standard/tabs_adresse/adresseingabe
+
+
+    # - id: f_7199de68-5294-4463-8d59-118157752570_0
+    #   if:
+    #     - target:
+    #         id: f_7199de68-5294-4463-8d59-118157752570_0
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       id: f_7199de68-5294-4463-8d59-118157752570_0
+
+
+    # - id: q-app
+    #   if:
+    #     - target:
+    #         id: q-app
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       id: q-app
+
+
+    # - id: g_gesundheitsdaten/p_gesundheitsdaten/hat_koerper_gesund_beeintraechtigung
+    #   if:
+    #     - target:
+    #         data-id: g_gesundheitsdaten/p_gesundheitsdaten/hat_koerper_gesund_beeintraechtigung
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       data-id: g_gesundheitsdaten/p_gesundheitsdaten/hat_koerper_gesund_beeintraechtigung
+
+
+    # - id: q-app
+    #   if:
+    #     - target:
+    #         id: q-app
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       id: q-app
+
+
+    # - id: q-app
+    #   if:
+    #     - target:
+    #         id: q-app
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       id: q-app
+
+
+    # - id: g_schwimmfaehigkeit/g_weitere_angaben/schwimmabzeichen
+    #   if:
+    #     - target:
+    #         data-id: g_schwimmfaehigkeit/g_weitere_angaben/schwimmabzeichen
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       data-id: g_schwimmfaehigkeit/g_weitere_angaben/schwimmabzeichen
+
+
+    # - id: g_schwimmfaehigkeit/g_weitere_angaben/schwimmabzeichen/option/4100_05
+    #   if:
+    #     - target:
+    #         data-id: g_schwimmfaehigkeit/g_weitere_angaben/schwimmabzeichen/option/4100_05
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       data-id: g_schwimmfaehigkeit/g_weitere_angaben/schwimmabzeichen/option/4100_05
+
+
+    # - id: g_impfstatus/g_impfstatus~1/masernschutzimpfungsstatus
+    #   if:
+    #     - target:
+    #         data-id: g_impfstatus/g_impfstatus~1/masernschutzimpfungsstatus
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       data-id: g_impfstatus/g_impfstatus~1/masernschutzimpfungsstatus
+
+
+    # - id: g_impfstatus/g_impfstatus~1/masernschutzimpfungsstatus/option/1141_01
+    #   if:
+    #     - target:
+    #         data-id: g_impfstatus/g_impfstatus~1/masernschutzimpfungsstatus/option/1141_01
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       data-id: g_impfstatus/g_impfstatus~1/masernschutzimpfungsstatus/option/1141_01
+
+
+    # - id: g_lernmittelausleihe/g_lernmittelausleihe~2/wunsch_teilnahme_lernmittelausleihe
+    #   if:
+    #     - target:
+    #         data-id: g_lernmittelausleihe/g_lernmittelausleihe~2/wunsch_teilnahme_lernmittelausleihe
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       data-id: g_lernmittelausleihe/g_lernmittelausleihe~2/wunsch_teilnahme_lernmittelausleihe
+
+
+    # - id: q-app
+    #   if:
+    #     - target:
+    #         id: q-app
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       id: q-app
+
+
+    # - id: q-app
+    #   if:
+    #     - target:
+    #         id: q-app
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       id: q-app
+
+
+    # - id: q-app
+    #   if:
+    #     - target:
+    #         id: q-app
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       id: q-app
+
+
+    # - id: q-app
+    #   if:
+    #     - target:
+    #         id: q-app
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       id: q-app
+
+
+    # - id: g_unterricht/g_einschulungsrelevantes/roe_unterrichts
+    #   if:
+    #     - target:
+    #         data-id: g_unterricht/g_einschulungsrelevantes/roe_unterrichts
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       data-id: g_unterricht/g_einschulungsrelevantes/roe_unterrichts
+
+
+    # - id: g_unterricht/g_einschulungsrelevantes/roe_unterrichts/option/1140_02
+    #   if:
+    #     - target:
+    #         data-id: g_unterricht/g_einschulungsrelevantes/roe_unterrichts/option/1140_02
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       data-id: g_unterricht/g_einschulungsrelevantes/roe_unterrichts/option/1140_02
+
+
+    # - id: g_unterricht/g_einschulungsrelevantes/wunsch_teilnahme_hsu
+    #   if:
+    #     - target:
+    #         data-id: g_unterricht/g_einschulungsrelevantes/wunsch_teilnahme_hsu
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       data-id: g_unterricht/g_einschulungsrelevantes/wunsch_teilnahme_hsu
+
+
+    # - id: g_kindertagesstaette/g_kindertagesstaette~1/besuch_kindertagesstaette
+    #   if:
+    #     - target:
+    #         data-id: g_kindertagesstaette/g_kindertagesstaette~1/besuch_kindertagesstaette
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       data-id: g_kindertagesstaette/g_kindertagesstaette~1/besuch_kindertagesstaette
+
+
+    # - id: g_antizipation/g_antizipation~2/besteht_sonderpaed_unterstuetz_bedarf
+    #   if:
+    #     - target:
+    #         data-id: g_antizipation/g_antizipation~2/besteht_sonderpaed_unterstuetz_bedarf
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       data-id: g_antizipation/g_antizipation~2/besteht_sonderpaed_unterstuetz_bedarf
+
+
+    # - id: g_grundschule/g_grundschule~3/shift_planung_wechsel
+    #   if:
+    #     - target:
+    #         data-id: g_grundschule/g_grundschule~3/shift_planung_wechsel
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       data-id: g_grundschule/g_grundschule~3/shift_planung_wechsel
+
+
+    # - id: btn/action-save
+    #   if:
+    #     - target:
+    #         data-id: btn/action-save
+    #       state:
+    #         visible: true
+    #         wait_ms: 3000
+
+    #   interaction:
+    #     type: click
+
+    #     target:
+    #       data-id: btn/action-save

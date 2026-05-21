@@ -5,25 +5,27 @@ import { dirname } from 'path'
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs'
 
 async function ensurePdfPath(pdfPath, download, response) {
-  try {
-    await fs.access(pdfPath)
-    return pdfPath
-  } catch {
-    if (!download && !response) {
-      throw new Error(`PDF file not found: ${pdfPath}`)
-    }
-  }
-
   await fs.mkdir(dirname(pdfPath), { recursive: true })
 
   if (download) {
+    // Playwright download.saveAs may keep an existing file; remove it first to force a fresh file.
+    await fs.rm(pdfPath, { force: true })
     await download.saveAs(pdfPath)
     return pdfPath
   }
 
-  const pdfBuffer = await response.body()
-  await fs.writeFile(pdfPath, pdfBuffer)
-  return pdfPath
+  if (response) {
+    const pdfBuffer = await response.body()
+    await fs.writeFile(pdfPath, pdfBuffer)
+    return pdfPath
+  }
+
+  try {
+    await fs.access(pdfPath)
+    return pdfPath
+  } catch {
+    throw new Error(`PDF file not found: ${pdfPath}`)
+  }
 }
 
 export async function extractCodeFromPdf(pdfPath, regex, options = {}) {
