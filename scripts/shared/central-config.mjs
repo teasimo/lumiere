@@ -10,6 +10,8 @@ const DEFAULTS = {
   },
   video: {
     wait_between_steps: 0,
+    scroll_delay_ms: 35,
+    autoscroll_smooth: false,
     resolution: {
       width: 1280,
       height: 720,

@@ -1,0 +1,579 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "lumiere-test-schema",
+  "title": "Lumiere Test / Fragment YAML",
+  "description": "Schema für Lumiere Interaktions-Tests und Fragment-Dateien (neo & lunettes)",
+  "oneOf": [
+    { "$ref": "#/definitions/InteractionDocument" },
+    { "$ref": "#/definitions/FragmentDocument" }
+  ],
+  "definitions": {
+    "InteractionDocument": {
+      "type": "object",
+      "required": ["interaction"],
+      "additionalProperties": false,
+      "properties": {
+        "interaction": { "$ref": "#/definitions/Interaction" }
+      }
+    },
+    "FragmentDocument": {
+      "type": "object",
+      "required": ["fragment"],
+      "additionalProperties": false,
+      "properties": {
+        "fragment": { "$ref": "#/definitions/Fragment" }
+      }
+    },
+
+    "Interaction": {
+      "type": "object",
+      "required": ["id", "flow"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Eindeutige ID dieses Tests"
+        },
+        "version": {
+          "type": ["string", "number"],
+          "description": "Versionsnummer (z. B. 1.0)"
+        },
+        "video": { "$ref": "#/definitions/VideoConfig" },
+        "presentation": { "$ref": "#/definitions/Presentation" },
+        "environment": { "$ref": "#/definitions/EnvironmentConfig" },
+        "data": {
+          "type": "object",
+          "description": "Testdaten – frei erweiterbar",
+          "properties": {
+            "runtime": {
+              "type": "object",
+              "properties": {
+                "base_url": {
+                  "type": "string",
+                  "description": "Basis-URL der Anwendung",
+                  "examples": ["https://neo-test.de", "http://localhost:5173"]
+                }
+              },
+              "additionalProperties": true
+            },
+            "actor": {
+              "type": "object",
+              "properties": {
+                "username": { "type": "string" },
+                "password": { "type": "string" }
+              },
+              "additionalProperties": true
+            }
+          },
+          "additionalProperties": true
+        },
+        "flow": {
+          "type": "array",
+          "description": "Abfolge der Testschritte",
+          "items": { "$ref": "#/definitions/FlowStep" }
+        }
+      }
+    },
+
+    "Fragment": {
+      "type": "object",
+      "required": ["id", "flow"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Eindeutige ID dieses Fragments"
+        },
+        "parameters": {
+          "type": "array",
+          "description": "Parameternamen, die beim Einbinden übergeben werden müssen",
+          "items": { "type": "string" }
+        },
+        "outputs": {
+          "description": "Ausgabewerte des Fragments – entweder als Liste oder als Mapping",
+          "oneOf": [
+            {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            {
+              "type": "object",
+              "additionalProperties": { "type": "string" }
+            }
+          ]
+        },
+        "flow": {
+          "type": "array",
+          "description": "Schritte dieses Fragments",
+          "items": { "$ref": "#/definitions/FlowStep" }
+        }
+      }
+    },
+
+    "VideoConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "wait_between_steps": {
+          "type": "integer",
+          "description": "Wartezeit in Millisekunden zwischen Schritten"
+        },
+        "scroll_delay_ms": {
+          "type": "integer",
+          "description": "Globale Verzögerung in Millisekunden zwischen Scroll-Schritten (kleiner = schneller)"
+        },
+        "autoscroll_smooth": {
+          "type": "boolean",
+          "description": "Wenn true, werden vor scroll-relevanten Interaktionen automatisch Scroll-Schritte in den Flow injiziert"
+        },
+        "resolution": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "width": { "type": "integer", "description": "Breite in Pixeln" },
+            "height": { "type": "integer", "description": "Höhe in Pixeln" }
+          }
+        }
+      }
+    },
+
+    "EnvironmentConfig": {
+      "type": "object",
+      "description": "Skripte zum Starten/Stoppen der Testumgebung (lunettes)",
+      "additionalProperties": false,
+      "properties": {
+        "start": { "$ref": "#/definitions/EnvScript" },
+        "check": { "$ref": "#/definitions/EnvScript" },
+        "reset": { "$ref": "#/definitions/EnvScript" },
+        "stop":  { "$ref": "#/definitions/EnvScript" }
+      }
+    },
+
+    "EnvScript": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "script": {
+          "type": "string",
+          "description": "Pfad zum Shell-Skript"
+        }
+      }
+    },
+
+    "FlowStep": {
+      "type": "object",
+      "required": ["id"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Eindeutige Schritt-ID (wird als Testname verwendet)"
+        },
+        "if": {
+          "$ref": "#/definitions/Condition",
+          "description": "Schritt wird nur ausgeführt, wenn diese Bedingung zutrifft"
+        },
+        "ifnot": {
+          "$ref": "#/definitions/Condition",
+          "description": "Schritt wird nur ausgeführt, wenn diese Bedingung NICHT zutrifft"
+        },
+        "include": {
+          "type": "string",
+          "description": "Pfad zu einem Fragment (relativ oder mit führendem /)"
+        },
+        "with": {
+          "type": "object",
+          "description": "Parameter-Werte für ein eingebundenes Fragment",
+          "additionalProperties": { "type": "string" }
+        },
+        "open": {
+          "type": "string",
+          "description": "Kurzschreibweise: URL direkt öffnen (entspricht interaction.type=open)"
+        },
+        "click": {
+          "description": "Kurzschreibweise: Klick-Ziel direkt am Step",
+          "oneOf": [
+            { "type": "string" },
+            { "$ref": "#/definitions/Target" }
+          ]
+        },
+        "fill": {
+          "description": "Kurzschreibweise: Fill-Ziel direkt am Step",
+          "oneOf": [
+            { "type": "string" },
+            { "$ref": "#/definitions/Target" }
+          ]
+        },
+        "append": {
+          "description": "Kurzschreibweise: Append-Ziel direkt am Step",
+          "oneOf": [
+            { "type": "string" },
+            { "$ref": "#/definitions/Target" }
+          ]
+        },
+        "select": {
+          "description": "Kurzschreibweise: Select-Ziel direkt am Step",
+          "oneOf": [
+            { "type": "string" },
+            { "$ref": "#/definitions/Target" }
+          ]
+        },
+        "search-and-select": {
+          "description": "Kurzschreibweise: Search-and-select-Ziel direkt am Step",
+          "oneOf": [
+            { "type": "string" },
+            { "$ref": "#/definitions/Target" }
+          ]
+        },
+        "scroll": {
+          "description": "Kurzschreibweise: Scroll-Ziel direkt am Step",
+          "oneOf": [
+            { "type": "string" },
+            { "$ref": "#/definitions/Target" }
+          ]
+        },
+        "wait": {
+          "description": "Kurzschreibweise: Wait-Kriterium direkt am Step",
+          "oneOf": [
+            { "type": "integer" },
+            { "$ref": "#/definitions/Target" }
+          ]
+        },
+        "assert": {
+          "description": "Kurzschreibweise: Assert-Ziel direkt am Step",
+          "oneOf": [
+            { "type": "string" },
+            { "$ref": "#/definitions/Target" }
+          ]
+        },
+        "extract-pdf-code": {
+          "description": "Kurzschreibweise: extract-pdf-code Konfiguration direkt am Step",
+          "oneOf": [
+            { "type": "string" },
+            { "type": "object" }
+          ]
+        },
+        "set-runtime-variable": {
+          "description": "Kurzschreibweise: set-runtime-variable Ziel direkt am Step",
+          "oneOf": [
+            { "type": "string" },
+            { "$ref": "#/definitions/Target" }
+          ]
+        },
+        "value": {
+          "type": "string",
+          "description": "Kurzschreibweise: Wert für fill/select/append/assert"
+        },
+        "state": {
+          "$ref": "#/definitions/State",
+          "description": "Kurzschreibweise: Zustand für wait/assert"
+        },
+        "resultSelector": {
+          "type": "string",
+          "description": "Kurzschreibweise: CSS-Selektor für search-and-select"
+        },
+        "resultIndex": {
+          "type": "integer",
+          "description": "Kurzschreibweise: Ergebnisindex für search-and-select"
+        },
+        "output": {
+          "type": "string",
+          "description": "Kurzschreibweise: Output-Zielpfad für set-runtime-variable / extract-pdf-code"
+        },
+        "pdfPath": {
+          "type": "string",
+          "description": "Kurzschreibweise: PDF-Pfad für extract-pdf-code"
+        },
+        "regex": {
+          "type": "string",
+          "description": "Kurzschreibweise: Regex-Pattern für extract-pdf-code"
+        },
+        "outputs": {
+          "type": "object",
+          "description": "Ausgaben aus einem Fragment in Datenvariablen mappen",
+          "additionalProperties": { "type": "string" }
+        },
+        "interaction": { "$ref": "#/definitions/InteractionStep" },
+        "flow": {
+          "type": "array",
+          "description": "Untergeordnete Schritte (Gruppe)",
+          "items": { "$ref": "#/definitions/FlowStep" }
+        },
+        "expected_results": {
+          "type": "array",
+          "description": "Erwartete Zustände nach Ausführung dieses Schritts",
+          "items": { "$ref": "#/definitions/ExpectedResult" }
+        },
+        "didactics": {
+          "$ref": "#/definitions/Didactics",
+          "description": "Didaktische Zusatzinformationen (lunettes)"
+        },
+        "presentation": {
+          "$ref": "#/definitions/Presentation",
+          "description": "Optionale Praesentations-Hinweise fuer nachgelagerte Verarbeitung (z. B. TTS-Videoschnitt)"
+        },
+        "chapter": {
+          "$ref": "#/definitions/Chapter",
+          "description": "Kapitelkarte als Standbild-Overlay im Video (inklusive Text)"
+        }
+      }
+    },
+
+    "Chapter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text"],
+      "properties": {
+        "text": {
+          "type": "string",
+          "description": "Titeltext der Kapitelkarte"
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 1000,
+          "description": "Einblenddauer der Kapitelkarte in Millisekunden (Standard: 2000)"
+        }
+      }
+    },
+
+    "InteractionStep": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Art der Interaktion",
+          "enum": ["click", "fill", "open", "wait", "select", "search-and-select", "append", "scroll"],
+          "enumDescriptions": [
+            "Element anklicken",
+            "Textfeld befüllen",
+            "URL im Browser öffnen",
+            "Auf eine Bedingung warten",
+            "Dropdown-Option auswählen",
+            "Suche ausführen und Ergebnis auswählen",
+            "Text an vorhandenen Inhalt anhängen",
+            "Zum Ziel-Element scrollen"
+          ]
+        },
+        "target": { "$ref": "#/definitions/Target" },
+        "value": {
+          "type": "string",
+          "description": "Eingabewert (für fill, select, search-and-select, append). Unterstützt {{template}}-Syntax."
+        },
+        "until": {
+          "$ref": "#/definitions/WaitCondition",
+          "description": "Warte-Bedingung (nur bei type: wait)"
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "description": "Maximale Wartezeit in Millisekunden"
+        },
+        "poll_ms": {
+          "type": "integer",
+          "description": "Polling-Intervall in Millisekunden"
+        },
+        "resultSelector": {
+          "type": "string",
+          "description": "CSS-Selektor für die Ergebnisliste (nur bei search-and-select)"
+        },
+        "resultIndex": {
+          "type": "integer",
+          "description": "Index des auszuwählenden Suchergebnisses (nur bei search-and-select)",
+          "default": 0
+        },
+        "focus": {
+          "type": "boolean",
+          "description": "Setzt nach dem Scrollen den Fokus auf das Ziel-Element (nur bei type: scroll)"
+        }
+      }
+    },
+
+    "Target": {
+      "type": "object",
+      "description": "Element-Selektor",
+      "additionalProperties": false,
+      "properties": {
+        "data-id": {
+          "type": "string",
+          "description": "Wert des data-id-Attributs"
+        },
+        "text": {
+          "type": "string",
+          "description": "Sichtbarer Text des Elements"
+        },
+        "url": {
+          "type": "string",
+          "description": "URL (für open oder URL-Assertions)"
+        },
+        "id": {
+          "type": "string",
+          "description": "HTML-id-Attribut"
+        },
+        "aria-label": {
+          "type": "string",
+          "description": "aria-label-Attribut"
+        },
+        "testid": {
+          "type": "string",
+          "description": "data-testid-Attribut (lunettes)"
+        }
+      }
+    },
+
+    "Condition": {
+      "description": "Bedingung – entweder ein einzelnes Objekt oder eine Liste von Bedingungen",
+      "oneOf": [
+        { "$ref": "#/definitions/ConditionItem" },
+        {
+          "type": "array",
+          "items": { "$ref": "#/definitions/ConditionItem" }
+        }
+      ]
+    },
+
+    "ConditionItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "target": { "$ref": "#/definitions/Target" },
+        "state": { "$ref": "#/definitions/State" }
+      }
+    },
+
+    "WaitCondition": {
+      "type": "object",
+      "description": "Bedingung für wait-Interaktion",
+      "additionalProperties": false,
+      "properties": {
+        "target": { "$ref": "#/definitions/Target" },
+        "state": { "$ref": "#/definitions/State" }
+      }
+    },
+
+    "State": {
+      "type": "object",
+      "description": "Erwarteter Zustand eines Elements",
+      "additionalProperties": false,
+      "properties": {
+        "visible": {
+          "type": "boolean",
+          "description": "Element soll sichtbar (true) oder unsichtbar (false) sein"
+        },
+        "aria-expanded": {
+          "description": "Wert des aria-expanded-Attributs",
+          "oneOf": [
+            { "type": "boolean" },
+            { "type": "string" }
+          ]
+        },
+        "aria-pressed": {
+          "description": "Wert des aria-pressed-Attributs",
+          "oneOf": [
+            { "type": "boolean" },
+            { "type": "string" }
+          ]
+        },
+        "value-present": {
+          "type": "boolean",
+          "description": "Feld hat einen Wert (true) oder ist leer (false)"
+        },
+        "url-match": {
+          "type": "boolean",
+          "description": "Aktuelle URL entspricht dem target.url"
+        },
+        "wait_ms": {
+          "type": "integer",
+          "description": "Maximale Wartezeit in Millisekunden bis der Zustand eintritt"
+        }
+      }
+    },
+
+    "ExpectedResult": {
+      "type": "object",
+      "description": "Erwartetes Ergebnis nach einem Schritt",
+      "additionalProperties": false,
+      "properties": {
+        "target": { "$ref": "#/definitions/Target" },
+        "state": { "$ref": "#/definitions/State" }
+      }
+    },
+
+    "Didactics": {
+      "type": "object",
+      "description": "Didaktische Zusatzinformationen für Dokumentationszwecke",
+      "additionalProperties": true,
+      "properties": {
+        "purpose": {
+          "type": "object",
+          "properties": {
+            "text": { "type": "string" }
+          },
+          "additionalProperties": true
+        }
+      }
+    },
+
+    "Presentation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "indicators": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "click": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Aktiviert/deaktiviert Klick-Indikator-Einblendungen"
+                },
+                "before_ms": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Anteil der Klick-Haltezeit vor dem Klick in Millisekunden"
+                },
+                "after_ms": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Anteil der Klick-Haltezeit nach dem Klick in Millisekunden"
+                },
+                "fade_ms": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Ein-/Ausblenddauer des Klick-Indikators in Millisekunden"
+                },
+                "image": {
+                  "type": "string",
+                  "description": "Pfad zu einem Bild, das als Klick-Symbol ueberlagert wird"
+                }
+              }
+            }
+          }
+        },
+        "didactics": {
+          "$ref": "#/definitions/Didactics",
+          "description": "Didaktische Inhalte fuer nachgelagerte Praesentationsverarbeitung (z. B. TTS)"
+        },
+        "video": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "start": {
+              "type": "string",
+              "enum": ["before", "after"],
+              "description": "Startanker relativ zum referenzierten Step"
+            },
+            "stop": {
+              "type": "string",
+              "enum": ["before", "after"],
+              "description": "Stopanker relativ zum referenzierten Step"
+            }
+          }
+        }
+      }
+    }
+  }
+}

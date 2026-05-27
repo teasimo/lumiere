@@ -6,6 +6,8 @@ scenario:
 
   video:
     wait_between_steps: 0
+    scroll_delay_ms: 35
+    autoscroll_smooth: false
     resolution:
       width: 1280
       height: 720
@@ -17,7 +19,7 @@ scenario:
       channels:
         purpose:
           enabled: true
-          prefix: "Ziel dieses Schritts:"
+          prefix: "Einleitung:"
         explanation:
           enabled: true
           prefix: "Erläuterung:"
@@ -35,11 +37,12 @@ scenario:
         before_step:
           - purpose
           - warning
-        after_step:
+        during_step:
           - explanation
+        after_step:
           - consequence
 
       pauses:
-        between_channels_ms: 400
-        before_action_ms: 700
-        after_action_ms: 900
+        between_channels_ms: 200
+        before_action_ms: 300
+        after_action_ms: 300

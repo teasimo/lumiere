@@ -1,0 +1,16 @@
+{
+  "github.copilot.enable": {
+    "yaml": false
+  },
+  "yaml.schemas": {
+    "./schemas/lumiere-test.schema.json": [
+      "neo/tests/**/*.yaml",
+      "neo/tests/**/*.yml",
+      "lunettes/tests/**/*.yaml",
+      "lunettes/tests/**/*.yml"
+    ]
+  },
+  "yaml.validate": true,
+  "yaml.completion": true,
+  "yaml.hover": true
+}

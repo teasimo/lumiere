@@ -17,7 +17,8 @@
     "generate:video:force": "node scripts/run-generated-testfile.mjs --mode video --force",
     "generate:tts": "node scripts/run-annotated-video.mjs --scenario-tts",
     "generate:tts:force": "node scripts/run-annotated-video.mjs --scenario-tts --force-video",
-    "generate:tts:full:force": "node scripts/run-annotated-video.mjs --scenario-tts --force-video --profile=all-channels"
+    "generate:tts:full:force": "node scripts/run-annotated-video.mjs --scenario-tts --force-video --profile=all-channels",
+    "generate:tts:full": "node scripts/run-annotated-video.mjs --scenario-tts --profile=all-channels"
   },
   "dependencies": {
     "@google-cloud/text-to-speech": "^6.4.1",

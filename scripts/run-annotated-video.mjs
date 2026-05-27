@@ -8,13 +8,15 @@ import { createHash } from 'crypto'
 import { parse as parseYaml } from 'yaml'
 import { loadCentralConfig } from './shared/central-config.mjs'
 
+const OUTPUT_ROOT = resolve('output')
+const OUTPUT_MANUAL_RUNS_ROOT = join(OUTPUT_ROOT, '_manual-runs')
 const DEMO_LOGO_PATH = resolve('demo', 'img', 'lunettes.png')
 const DEMO_LOGO_INTRO_DURATION_SEC = 2
 const DEMO_TITLE_INTRO_DURATION_SEC = 2
 const DEMO_TITLE_FONT = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
 const DEMO_INTRO_FADE_DURATION_SEC = 0.4
 const DEMO_STEP_TITLE_DURATION_MS = 2000
-const DEMO_TTS_CACHE_DIR = resolve('temp', 'tts')
+const DEMO_TTS_CACHE_DIR = join(OUTPUT_ROOT, '_tts-cache')
 const DEMO_TTS_INDEX_PATH = join(DEMO_TTS_CACHE_DIR, 'index.json')
 const VIDEO_HOLD_FRAME_SLICE_SEC = 0.04
 const VIDEO_HOLD_FRAME_LEAD_SEC = 0.08
@@ -24,7 +26,7 @@ let googleTtsModulePromise
 
 function printUsage() {
   console.log(`Verwendung:
-  node scripts/run-annotated-video.mjs --scenario-tts <scenario.yaml> --profile=<profil> [output.mp4] [--force-video] [--tts-voice=<name>]
+  node scripts/run-annotated-video.mjs --scenario-tts <scenario.yaml> --profile=<profil> [output.mp4] [--tts-voice=<name>]
   node scripts/run-annotated-video.mjs <testfile> [output.mp4] [--slowmo=<ms>] [--tts] [--tts-voice=<name>] [weitere Playwright-Argumente]
   node scripts/run-annotated-video.mjs --rerender <testfile> [output.mp4] [--tts] [--tts-voice=<name>]
   node scripts/run-annotated-video.mjs --annotate-only <trace.zip> <video.webm> <demoDir> [output.mp4] [--tts] [--tts-voice=<name>]
@@ -32,14 +34,13 @@ function printUsage() {
 
 Beispiele:
   node scripts/run-annotated-video.mjs --scenario-tts lunettes/tests/login.yaml --profile=training-basic
-  node scripts/run-annotated-video.mjs --scenario-tts lunettes/tests/login.yaml --profile=training-basic --force-video
   node scripts/run-annotated-video.mjs tests/e2e/idee-planungsanker-plaintext-flow.spec.js
   node scripts/run-annotated-video.mjs tests/e2e/idee-planungsanker-plaintext-flow.spec.js --slowmo=1000
   node scripts/run-annotated-video.mjs tests/e2e/idee-planungsanker-plaintext-flow.spec.js annotated.mp4 --project=chromium
   node scripts/run-annotated-video.mjs --rerender tests/e2e/idee-flow.spec.js --tts
-  node scripts/run-annotated-video.mjs --annotate-only ../test-artifacts/run/demo/trace.zip ../test-artifacts/run/demo/video.webm ../test-artifacts/run/demo annotated.mp4 --tts
+  node scripts/run-annotated-video.mjs --annotate-only ../output/my-scenario_1_0/artifacts/trace.zip ../output/my-scenario_1_0/artifacts/video.webm ../output/my-scenario_1_0/artifacts/demo annotated.mp4 --tts
   node scripts/run-annotated-video.mjs tests/e2e/idee-flow.spec.js --project=chromium --tts
-  node scripts/run-annotated-video.mjs --tts-only test-artifacts/idee-flow.spec-annotated-20260425191328.mp4 test-artifacts/annotate-run-20260425191328/idee-flow-Idee-Planungsank-b4e8c-ntext-und-setzt-die-Idee-um-chromium/demo --tts-voice=de-DE-Neural2-B
+  node scripts/run-annotated-video.mjs --tts-only output/_manual-runs/idee-flow-spec/20260425191328/final/idee-flow-spec-annotated-20260425191328.mp4 output/_manual-runs/idee-flow-spec/20260425191328/artifacts/demo --tts-voice=de-DE-Neural2-B
   npm run test:e2e:annotated-video -- tests/e2e/idee-planungsanker-plaintext-flow.spec.js --project=chromium
 `)
 }
@@ -59,17 +60,12 @@ function parseArgs(argv) {
     args.splice(scenarioTtsIndex, 1)
 
     let profile = null
-    let forceVideo = false
     let ttsVoice = null
     const positionalArgs = []
     const unsupportedArgs = []
     for (const arg of args) {
       if (arg.startsWith('--profile=')) {
         profile = arg.slice('--profile='.length).trim()
-        continue
-      }
-      if (arg === '--force-video') {
-        forceVideo = true
         continue
       }
       if (arg.startsWith('--tts-voice=')) {
@@ -114,7 +110,6 @@ function parseArgs(argv) {
       scenarioPath,
       profile,
       outputVideo,
-      forceVideo,
       ttsVoice,
     }
   }
@@ -350,6 +345,135 @@ function normalizeWorkspaceRelativePath(pathValue) {
     .trim()
 }
 
+const SCENARIO_INTERACTION_SHORTHAND_KEYS = new Set([
+  'open',
+  'click',
+  'fill',
+  'append',
+  'select',
+  'wait',
+  'assert',
+  'scroll',
+  'search-and-select',
+  'extract-pdf-code',
+  'set-runtime-variable',
+])
+
+function isChapterOnlyMarkerStep(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false
+  }
+
+  const chapterText = typeof value?.chapter?.text === 'string'
+    ? value.chapter.text.trim()
+    : ''
+  if (!chapterText) {
+    return false
+  }
+
+  const hasExecutionContent = Boolean(
+    value.include
+    || value.interaction
+    || (Array.isArray(value.flow) && value.flow.length > 0)
+    || Object.keys(value).some((key) => SCENARIO_INTERACTION_SHORTHAND_KEYS.has(key)),
+  )
+
+  return !hasExecutionContent
+}
+
+function stripPresentationDeep(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => stripPresentationDeep(entry))
+      .filter((entry) => entry !== null)
+  }
+
+  if (!value || typeof value !== 'object') {
+    return value
+  }
+
+  if (isChapterOnlyMarkerStep(value)) {
+    // Chapter-only markers do not affect raw test interaction execution and
+    // therefore must not invalidate reuse of an existing raw video/timeline.
+    return null
+  }
+
+  const result = {}
+  for (const [key, entry] of Object.entries(value)) {
+    if (key === 'presentation' || key === 'didactics' || key === 'didactic' || key === 'chapter') {
+      continue
+    }
+    result[key] = stripPresentationDeep(entry)
+  }
+
+  return result
+}
+
+function toCanonicalComparable(value) {
+  if (Array.isArray(value)) {
+    return value.map((entry) => toCanonicalComparable(entry))
+  }
+
+  if (!value || typeof value !== 'object') {
+    return value
+  }
+
+  const ordered = {}
+  for (const key of Object.keys(value).sort()) {
+    ordered[key] = toCanonicalComparable(value[key])
+  }
+
+  return ordered
+}
+
+function buildScenarioComparablePayload(parsedScenario) {
+  const root = parsedScenario?.interaction || parsedScenario || {}
+  return toCanonicalComparable(stripPresentationDeep(root))
+}
+
+async function assertScenarioMatchesRawVideoIgnoringPresentation({
+  scenarioAbsolutePath,
+  scenarioPathRelative,
+  artifactsDir,
+}) {
+  const scenarioOutputRoot = dirname(artifactsDir)
+  const runMetaPath = join(scenarioOutputRoot, 'run-meta.json')
+  const runMeta = await readJsonIfExists(runMetaPath)
+
+  const sourcePathFromMeta = normalizeWorkspaceRelativePath(runMeta?.scenario?.sourcePathRelative || scenarioPathRelative)
+  const snapshotScenarioPath = join(scenarioOutputRoot, basename(sourcePathFromMeta))
+
+  if (!existsSync(snapshotScenarioPath)) {
+    throw new Error([
+      'Kompatibilitaetspruefung fehlgeschlagen: Kein YAML-Snapshot zum Rohvideo gefunden.',
+      `Erwartet: ${snapshotScenarioPath}`,
+      'Bitte Rohvideo neu erzeugen.',
+    ].join(' '))
+  }
+
+  const [currentRaw, snapshotRaw] = await Promise.all([
+    readFile(scenarioAbsolutePath, 'utf8'),
+    readFile(snapshotScenarioPath, 'utf8'),
+  ])
+
+  const currentParsed = parseYaml(currentRaw) || {}
+  const snapshotParsed = parseYaml(snapshotRaw) || {}
+
+  const currentComparable = buildScenarioComparablePayload(currentParsed)
+  const snapshotComparable = buildScenarioComparablePayload(snapshotParsed)
+
+  const currentJson = JSON.stringify(currentComparable)
+  const snapshotJson = JSON.stringify(snapshotComparable)
+
+  if (currentJson !== snapshotJson) {
+    throw new Error([
+      'Das aktuelle YAML passt nicht mehr zum vorhandenen Rohvideo (Vergleich ignoriert presentation).',
+      'Bitte zuerst das Rohvideo neu generieren:',
+      `npm run generate:video:force -- ${scenarioPathRelative}`,
+    ].join(' '))
+  }
+}
+
 function resolveScenarioTtsProfile(centralConfig, profileName) {
   const profiles = Array.isArray(centralConfig?.tts) ? centralConfig.tts : []
   const normalizedProfileName = String(profileName || '').trim()
@@ -366,13 +490,268 @@ function resolveScenarioTtsProfile(centralConfig, profileName) {
   return found
 }
 
+function resolveScenarioClickIndicatorConfig(scenarioRoot) {
+  const clickConfig = scenarioRoot?.presentation?.indicators?.click
+  if (!clickConfig || typeof clickConfig !== 'object') {
+    return null
+  }
+
+  const enabled = clickConfig.enabled !== false
+  const beforeMs = Math.max(0, Number(clickConfig.before_ms) || 0)
+  const afterMs = Math.max(0, Number(clickConfig.after_ms) || 0)
+  const fadeMs = Math.max(0, Number(clickConfig.fade_ms) || 0)
+
+  return {
+    enabled,
+    beforeMs,
+    afterMs,
+    fadeMs,
+  }
+}
+
+function buildAnnotateClickIndicatorArgs(clickIndicatorConfig) {
+  if (!clickIndicatorConfig || clickIndicatorConfig.enabled !== true) {
+    return ['--click-enabled=false']
+  }
+
+  const args = ['--click-enabled=true']
+  args.push(`--click-before-ms=${Math.max(0, Math.floor(clickIndicatorConfig.beforeMs || 0))}`)
+  args.push(`--click-after-ms=${Math.max(0, Math.floor(clickIndicatorConfig.afterMs || 0))}`)
+  args.push(`--click-fade-ms=${Math.max(0, Math.floor(clickIndicatorConfig.fadeMs || 0))}`)
+  return args
+}
+
 function resolveDidacticText(stepEntry, channelName) {
-  const didactics = stepEntry?.didactics
+  const didactics =
+    stepEntry?.presentation?.didactics
+    || stepEntry?.didactics
+    || stepEntry?.didactic
   if (!didactics || typeof didactics !== 'object') return null
   const candidate = didactics[channelName]
   if (!candidate || typeof candidate !== 'object') return null
-  const text = typeof candidate.text === 'string' ? candidate.text.trim() : ''
+  const text = typeof candidate.text === 'string'
+    ? candidate.text.trim()
+    : (typeof candidate.explanation === 'string' ? candidate.explanation.trim() : '')
   return text || null
+}
+
+function flattenFlowSteps(flowEntries, out = [], idPrefix = '') {
+  for (const step of flowEntries || []) {
+    if (!step || typeof step !== 'object') {
+      continue
+    }
+
+    const stepId = String(step.id || '').trim()
+    if (!stepId) {
+      continue
+    }
+
+    const fullId = idPrefix ? `${idPrefix}-${stepId}` : stepId
+    out.push({
+      id: fullId,
+      step,
+      isIncludeContainer: Boolean(step.include),
+    })
+
+    if (Array.isArray(step.flow) && step.flow.length > 0) {
+      flattenFlowSteps(step.flow, out, fullId)
+    }
+  }
+
+  return out
+}
+
+function resolveScenarioStepMatchForTimelineStep(timelineStepId, flattenedFlowStepEntries) {
+  const normalizedTimelineStepId = String(timelineStepId || '').trim()
+  if (!normalizedTimelineStepId) {
+    return null
+  }
+
+  let bestMatch = null
+  let bestLength = -1
+
+  for (const entry of flattenedFlowStepEntries || []) {
+    const flowStepId = String(entry?.id || '').trim()
+    if (!flowStepId) {
+      continue
+    }
+
+    const isExact = normalizedTimelineStepId === flowStepId
+    const isPrefix = Boolean(entry?.isIncludeContainer) && normalizedTimelineStepId.startsWith(`${flowStepId}-`)
+    const isMatch = isExact || isPrefix
+    if (!isMatch) {
+      continue
+    }
+
+    if (flowStepId.length > bestLength) {
+      bestLength = flowStepId.length
+      bestMatch = {
+        id: flowStepId,
+        step: entry?.step || null,
+        matchKind: isExact ? 'exact' : 'prefix',
+      }
+    }
+  }
+
+  return bestMatch
+}
+
+function timelineStepMatchesScenarioStepId(timelineStepId, scenarioStepId) {
+  const normalizedTimelineStepId = String(timelineStepId || '').trim()
+  const normalizedScenarioStepId = String(scenarioStepId || '').trim()
+  if (!normalizedTimelineStepId || !normalizedScenarioStepId) {
+    return false
+  }
+  return (
+    normalizedTimelineStepId === normalizedScenarioStepId
+    || normalizedTimelineStepId.startsWith(`${normalizedScenarioStepId}-`)
+  )
+}
+
+function collectPresentationVideoDirectivesFromFlow(flowEntries, out = []) {
+  for (const step of flowEntries || []) {
+    if (!step || typeof step !== 'object') {
+      continue
+    }
+
+    const presentationVideo = step?.presentation?.video
+    if (presentationVideo && typeof presentationVideo === 'object') {
+      const start = presentationVideo.start != null ? String(presentationVideo.start).trim().toLowerCase() : null
+      const stop = presentationVideo.stop != null ? String(presentationVideo.stop).trim().toLowerCase() : null
+      if (start || stop) {
+        out.push({
+          stepId: String(step.id || '').trim(),
+          start,
+          stop,
+        })
+      }
+    }
+
+    if (Array.isArray(step.flow) && step.flow.length > 0) {
+      collectPresentationVideoDirectivesFromFlow(step.flow, out)
+    }
+  }
+
+  return out
+}
+
+function resolvePresentationStepWindowMs(stepId, timelineSteps) {
+  const normalizedStepId = String(stepId || '').trim()
+  if (!normalizedStepId) {
+    return null
+  }
+
+  const exactMatches = timelineSteps.filter((entry) => String(entry?.stepId || '').trim() === normalizedStepId)
+  const prefixMatches = timelineSteps.filter((entry) => String(entry?.stepId || '').trim().startsWith(`${normalizedStepId}-`))
+  const matches = exactMatches.length > 0 ? exactMatches : prefixMatches
+  if (matches.length === 0) {
+    return null
+  }
+
+  let minStartedAt = Number.POSITIVE_INFINITY
+  let maxEndedAt = Number.NEGATIVE_INFINITY
+  for (const match of matches) {
+    const startedAtMs = Number(match?.startedAtMs)
+    const endedAtMs = Number(match?.endedAtMs)
+    if (!Number.isFinite(startedAtMs) || !Number.isFinite(endedAtMs)) {
+      continue
+    }
+    minStartedAt = Math.min(minStartedAt, startedAtMs)
+    maxEndedAt = Math.max(maxEndedAt, endedAtMs)
+  }
+
+  if (!Number.isFinite(minStartedAt) || !Number.isFinite(maxEndedAt)) {
+    return null
+  }
+
+  return {
+    startedAtMs: minStartedAt,
+    endedAtMs: maxEndedAt,
+  }
+}
+
+function resolveScenarioPresentationVideoRangeFromTimeline({ scenarioRoot, timelineReport }) {
+  const flow = Array.isArray(scenarioRoot?.flow) ? scenarioRoot.flow : []
+  const timelineSteps = Array.isArray(timelineReport?.steps) ? timelineReport.steps : []
+  if (!flow.length || !timelineSteps.length) {
+    return null
+  }
+
+  const directives = collectPresentationVideoDirectivesFromFlow(flow)
+  if (!directives.length) {
+    return null
+  }
+
+  const sortedTimelineSteps = [...timelineSteps].sort((left, right) => Number(left.startedAtMs || 0) - Number(right.startedAtMs || 0))
+  const originMs = Number(sortedTimelineSteps[0]?.startedAtMs || 0)
+  if (!Number.isFinite(originMs)) {
+    return null
+  }
+
+  let startAbsMs = null
+  let endAbsMs = null
+  let startDirectiveStepId = null
+
+  for (const directive of directives) {
+    const window = resolvePresentationStepWindowMs(directive.stepId, sortedTimelineSteps)
+    if (!window) {
+      console.warn(`[scenario-tts] presentation.video for step "${directive.stepId}" ignored: step not found in timeline.`)
+      continue
+    }
+
+    if (directive.start === 'before') {
+      startAbsMs = window.startedAtMs
+      startDirectiveStepId = directive.stepId
+    } else if (directive.start === 'after') {
+      startAbsMs = window.endedAtMs
+      startDirectiveStepId = directive.stepId
+    }
+
+    if (directive.stop === 'before') {
+      endAbsMs = window.startedAtMs
+    } else if (directive.stop === 'after') {
+      endAbsMs = window.endedAtMs
+    }
+  }
+
+  if (startAbsMs == null && endAbsMs == null) {
+    return null
+  }
+
+  const startMs = startAbsMs == null ? 0 : Math.max(0, Math.floor(startAbsMs - originMs))
+  const endMs = endAbsMs == null ? null : Math.max(0, Math.floor(endAbsMs - originMs))
+
+  if (endMs != null && endMs <= startMs) {
+    throw new Error(`presentation.video defines an invalid clip range: start=${startMs}ms, stop=${endMs}ms.`)
+  }
+
+  return {
+    startMs,
+    endMs,
+    startDirectiveStepId,
+    directives,
+  }
+}
+
+function cutVideoToRange({ inputVideo, outputVideo, startMs = 0, endMs = null }) {
+  const startSec = Math.max(0, Number(startMs) || 0) / 1000
+  const args = ['-y', '-ss', startSec.toFixed(3), '-i', inputVideo]
+
+  if (endMs != null) {
+    const durationMs = Math.max(0, Number(endMs) - Number(startMs || 0))
+    const durationSec = durationMs / 1000
+    args.push('-t', durationSec.toFixed(3))
+  }
+
+  args.push(
+    '-c:v', 'libx264',
+    '-preset', 'veryfast',
+    '-crf', '20',
+    '-an',
+    outputVideo,
+  )
+
+  runCommand('ffmpeg', args)
 }
 
 function buildNarrationsFromScenarioTimeline({ scenarioRoot, timelineReport, profile, voiceOverride = null }) {
@@ -382,10 +761,11 @@ function buildNarrationsFromScenarioTimeline({ scenarioRoot, timelineReport, pro
     throw new Error('Timeline enthaelt keine Schritte.')
   }
 
-  const stepMap = new Map(flow.map((entry) => [String(entry?.id || ''), entry]))
+  const flattenedFlowStepEntries = flattenFlowSteps(flow)
   const channelsConfig = profile?.channels && typeof profile.channels === 'object' ? profile.channels : {}
   const timing = profile?.timing && typeof profile.timing === 'object' ? profile.timing : {}
   const beforeChannels = Array.isArray(timing.before_step) ? timing.before_step.map(String) : []
+  const duringChannels = Array.isArray(timing.during_step) ? timing.during_step.map(String) : []
   const afterChannels = Array.isArray(timing.after_step) ? timing.after_step.map(String) : []
   const pauses = profile?.pauses && typeof profile.pauses === 'object' ? profile.pauses : {}
   const betweenChannelsMs = Math.max(0, Number(pauses.between_channels_ms) || 0)
@@ -397,8 +777,9 @@ function buildNarrationsFromScenarioTimeline({ scenarioRoot, timelineReport, pro
   const sortedSteps = [...steps].sort((left, right) => Number(left.startedAtMs || 0) - Number(right.startedAtMs || 0))
   const originMs = Number(sortedSteps[0]?.startedAtMs || 0)
   const narrations = []
+  const consumedPrefixDidacticsStepIds = new Set()
 
-  function appendSequence({ stepId, anchor, channelList, baseMs }) {
+  function appendSequence({ stepId, scenarioStepId, stepEntry, anchor, channelList, baseMs }) {
     let cursor = Math.max(0, Math.floor(baseMs))
 
     for (const channelNameRaw of channelList) {
@@ -410,7 +791,6 @@ function buildNarrationsFromScenarioTimeline({ scenarioRoot, timelineReport, pro
         continue
       }
 
-      const stepEntry = stepMap.get(stepId)
       const didacticText = resolveDidacticText(stepEntry, channelName)
       if (!didacticText) {
         continue
@@ -426,6 +806,9 @@ function buildNarrationsFromScenarioTimeline({ scenarioRoot, timelineReport, pro
         startMs,
         endMs,
         text: spokenText,
+        sourceTimelineStepId: stepId,
+        sourceScenarioStepId: scenarioStepId,
+        sourceAnchor: anchor,
         voice: voiceOverride || profileVoice || undefined,
       })
 
@@ -433,7 +816,8 @@ function buildNarrationsFromScenarioTimeline({ scenarioRoot, timelineReport, pro
     }
   }
 
-  for (const timelineStep of sortedSteps) {
+  for (let index = 0; index < sortedSteps.length; index += 1) {
+    const timelineStep = sortedSteps[index]
     const stepId = String(timelineStep?.stepId || '').trim()
     if (!stepId) continue
 
@@ -443,18 +827,85 @@ function buildNarrationsFromScenarioTimeline({ scenarioRoot, timelineReport, pro
       continue
     }
 
-    const stepStartMs = Math.max(0, Math.floor(startedAtMs - originMs))
-    const stepEndMs = Math.max(stepStartMs, Math.floor(endedAtMs - originMs))
+    const stepMatch = resolveScenarioStepMatchForTimelineStep(stepId, flattenedFlowStepEntries)
+    const matchedStepId = String(stepMatch?.id || '').trim()
+    let stepEntry = stepMatch?.step || null
+
+    if (matchedStepId && stepMatch?.matchKind === 'prefix') {
+      if (consumedPrefixDidacticsStepIds.has(matchedStepId)) {
+        stepEntry = null
+      } else {
+        consumedPrefixDidacticsStepIds.add(matchedStepId)
+      }
+    }
+
+    let anchorStartAbsMs = startedAtMs
+    let anchorEndAbsMs = endedAtMs
+    let narrationStepId = stepId
+
+    if (matchedStepId && stepMatch?.matchKind === 'prefix') {
+      let firstPrefixStepId = stepId
+
+      for (let previous = index - 1; previous >= 0; previous -= 1) {
+        const previousStepId = String(sortedSteps[previous]?.stepId || '').trim()
+        if (!timelineStepMatchesScenarioStepId(previousStepId, matchedStepId)) {
+          break
+        }
+
+        if (previousStepId) {
+          firstPrefixStepId = previousStepId
+        }
+
+        const previousStartedAtMs = Number(sortedSteps[previous]?.startedAtMs)
+        const previousEndedAtMs = Number(sortedSteps[previous]?.endedAtMs)
+        if (Number.isFinite(previousStartedAtMs) && Number.isFinite(previousEndedAtMs) && previousEndedAtMs >= previousStartedAtMs) {
+          anchorStartAbsMs = previousStartedAtMs
+        }
+      }
+
+      for (let next = index + 1; next < sortedSteps.length; next += 1) {
+        const nextStepId = String(sortedSteps[next]?.stepId || '').trim()
+        if (!timelineStepMatchesScenarioStepId(nextStepId, matchedStepId)) {
+          break
+        }
+
+        const nextStartedAtMs = Number(sortedSteps[next]?.startedAtMs)
+        const nextEndedAtMs = Number(sortedSteps[next]?.endedAtMs)
+        if (Number.isFinite(nextStartedAtMs) && Number.isFinite(nextEndedAtMs) && nextEndedAtMs >= nextStartedAtMs) {
+          anchorEndAbsMs = nextEndedAtMs
+        }
+      }
+
+      if (firstPrefixStepId) {
+        narrationStepId = firstPrefixStepId
+      }
+    }
+
+    const stepStartMs = Math.max(0, Math.floor(anchorStartAbsMs - originMs))
+    const stepEndMs = Math.max(stepStartMs, Math.floor(anchorEndAbsMs - originMs))
 
     appendSequence({
-      stepId,
+      stepId: narrationStepId,
+      scenarioStepId: matchedStepId || stepId,
+      stepEntry,
       anchor: 'before',
       channelList: beforeChannels,
       baseMs: Math.max(0, stepStartMs - beforeActionMs),
     })
 
     appendSequence({
-      stepId,
+      stepId: narrationStepId,
+      scenarioStepId: matchedStepId || stepId,
+      stepEntry,
+      anchor: 'during',
+      channelList: duringChannels,
+      baseMs: stepStartMs,
+    })
+
+    appendSequence({
+      stepId: narrationStepId,
+      scenarioStepId: matchedStepId || stepId,
+      stepEntry,
       anchor: 'after',
       channelList: afterChannels,
       baseMs: stepEndMs + afterActionMs,
@@ -463,6 +914,126 @@ function buildNarrationsFromScenarioTimeline({ scenarioRoot, timelineReport, pro
 
   narrations.sort((left, right) => left.startMs - right.startMs)
   return narrations
+}
+
+function resolveScenarioChapterCard(stepEntry) {
+  const chapter = stepEntry?.chapter
+  if (!chapter || typeof chapter !== 'object' || Array.isArray(chapter)) {
+    return null
+  }
+
+  const text = typeof chapter.text === 'string' ? chapter.text.trim() : ''
+  if (!text) {
+    return null
+  }
+
+  const rawDuration = Number(chapter.duration_ms ?? chapter.durationMs)
+  const durationMs = Math.max(
+    1000,
+    Number.isFinite(rawDuration) ? Math.floor(rawDuration) : DEMO_STEP_TITLE_DURATION_MS,
+  )
+
+  return {
+    text,
+    durationMs,
+  }
+}
+
+function buildScenarioChapterTitlesFromTimeline({ scenarioRoot, timelineReport, presentationRange = null }) {
+  const flow = Array.isArray(scenarioRoot?.flow) ? scenarioRoot.flow : []
+  const steps = Array.isArray(timelineReport?.steps) ? timelineReport.steps : []
+  if (!flow.length || !steps.length) {
+    return []
+  }
+
+  const flattenedFlowStepEntries = flattenFlowSteps(flow)
+  const sortedSteps = [...steps].sort((left, right) => Number(left.startedAtMs || 0) - Number(right.startedAtMs || 0))
+  const originMs = Number(sortedSteps[0]?.startedAtMs || 0)
+  if (!Number.isFinite(originMs)) {
+    return []
+  }
+
+  const clipStartMs = presentationRange ? Math.max(0, Number(presentationRange.startMs) || 0) : 0
+  const clipEndMs = presentationRange?.endMs == null ? null : Math.max(0, Number(presentationRange.endMs) || 0)
+  const chapterTitles = []
+
+  for (let index = 0; index < flattenedFlowStepEntries.length; index += 1) {
+    const flowEntry = flattenedFlowStepEntries[index]
+    const stepEntry = flowEntry?.step || null
+    const chapterCard = resolveScenarioChapterCard(stepEntry)
+    if (!chapterCard) {
+      continue
+    }
+
+    const chapterStepId = String(flowEntry?.id || '').trim()
+    if (!chapterStepId) {
+      continue
+    }
+
+    let window = resolvePresentationStepWindowMs(chapterStepId, sortedSteps)
+
+    if (!window) {
+      for (let nextIndex = index + 1; nextIndex < flattenedFlowStepEntries.length; nextIndex += 1) {
+        const nextId = String(flattenedFlowStepEntries[nextIndex]?.id || '').trim()
+        if (!nextId) {
+          continue
+        }
+        window = resolvePresentationStepWindowMs(nextId, sortedSteps)
+        if (window) {
+          break
+        }
+      }
+    }
+
+    let anchorAbsMs = null
+    if (window) {
+      anchorAbsMs = Number(window.startedAtMs)
+    } else {
+      for (let previousIndex = index - 1; previousIndex >= 0; previousIndex -= 1) {
+        const previousId = String(flattenedFlowStepEntries[previousIndex]?.id || '').trim()
+        if (!previousId) {
+          continue
+        }
+        const previousWindow = resolvePresentationStepWindowMs(previousId, sortedSteps)
+        if (previousWindow) {
+          anchorAbsMs = Number(previousWindow.endedAtMs)
+          break
+        }
+      }
+    }
+
+    if (!Number.isFinite(anchorAbsMs)) {
+      continue
+    }
+
+    const absoluteAtMs = Math.max(0, Math.floor(anchorAbsMs - originMs))
+    if (absoluteAtMs < clipStartMs) {
+      chapterTitles.push({
+        id: `${chapterStepId}-chapter`,
+        title: chapterCard.text,
+        atMs: 0,
+        durationMs: chapterCard.durationMs,
+        sourceTimelineStepId: chapterStepId,
+        sourceScenarioStepId: chapterStepId,
+      })
+      continue
+    }
+    if (clipEndMs != null && absoluteAtMs >= clipEndMs) {
+      continue
+    }
+
+    chapterTitles.push({
+      id: `${chapterStepId}-chapter`,
+      title: chapterCard.text,
+      atMs: Math.max(0, absoluteAtMs - clipStartMs),
+      durationMs: chapterCard.durationMs,
+      sourceTimelineStepId: chapterStepId,
+      sourceScenarioStepId: chapterStepId,
+    })
+  }
+
+  chapterTitles.sort((left, right) => left.atMs - right.atMs)
+  return chapterTitles
 }
 
 async function findLatestScenarioVideoTimelinePair({ outputDir, scenarioPathRelative }) {
@@ -499,43 +1070,21 @@ async function findLatestScenarioVideoTimelinePair({ outputDir, scenarioPathRela
   return candidates[0] || null
 }
 
-async function ensureScenarioVideoTimelinePair({ scenarioPathRelative, forceVideo = false }) {
-  const outputRoot = resolve('temp', 'test-results')
-  if (!forceVideo) {
-    const existing = await findLatestScenarioVideoTimelinePair({
-      outputDir: outputRoot,
-      scenarioPathRelative,
-    })
-    if (existing) {
-      return existing
-    }
-  }
-
-  console.log('Erzeuge (oder aktualisiere) Scenario-Video per Playwright...')
-  const args = [
-    'scripts/run-generated-testfile.mjs',
-    '--mode',
-    'video',
-  ]
-  if (forceVideo) {
-    args.push('--force')
-  }
-  args.push(scenarioPathRelative)
-
-  const exitCode = runCommand('node', args)
-  if (exitCode !== 0) {
-    throw new Error('Scenario-Video konnte nicht erzeugt werden.')
-  }
-
-  const generated = await findLatestScenarioVideoTimelinePair({
+async function ensureScenarioVideoTimelinePair({ scenarioPathRelative }) {
+  const outputRoot = OUTPUT_ROOT
+  const existing = await findLatestScenarioVideoTimelinePair({
     outputDir: outputRoot,
     scenarioPathRelative,
   })
-  if (!generated) {
-    throw new Error('Video/Timestamp-Artefakte fuer das Szenario wurden nicht gefunden.')
+  if (existing) {
+    return existing
   }
 
-  return generated
+  throw new Error([
+    'Kein vorhandenes Rohvideo fuer das Szenario gefunden.',
+    `Erwartet unter output/* mit scenarioSource=${scenarioPathRelative}.`,
+    `Bitte zuerst ausfuehren: npm run generate:video:force -- ${scenarioPathRelative}`,
+  ].join(' '))
 }
 
 function applyClickHoldShift(timeMs, clickHolds) {
@@ -1076,19 +1625,36 @@ function normalizeNarrationTimeline(audioFiles) {
     const audioDurationMs = Math.max(0, Math.round((entry.durationSec || 0) * 1000))
     const windowMs = Math.max(0, Math.round(entry.endMs - entry.startMs))
     const overflowMs = Math.max(0, audioDurationMs - windowMs)
+    const shiftBeforeMs = cumulativeShiftMs
     const shiftedStartMs = Math.max(0, Math.round(entry.startMs + cumulativeShiftMs))
+    const shiftedWindowEndMs = Math.max(shiftedStartMs, Math.round(entry.endMs + shiftBeforeMs))
+    const finalOutputEndMs = Math.max(shiftedStartMs, shiftedStartMs + audioDurationMs)
 
     adjustedAudioFiles.push({
       ...entry,
+      windowMs,
+      overflowMs,
       startMs: shiftedStartMs,
+      shiftBeforeMs,
+      audioDurationMs,
+      shiftedWindowEndMs,
+      pauseAtMs: null,
+      finalOutputStartMs: shiftedStartMs,
+      finalOutputEndMs,
     })
 
     if (overflowMs > 0) {
-      const pauseAtMs = Math.max(0, Math.round(entry.endMs + cumulativeShiftMs))
+      // Pause anchors for video holds must stay in source-video time space
+      // because muxNarrationAudioIntoVideo trims [0:v] on original timestamps.
+      const anchor = String(entry?.sourceAnchor || '').trim().toLowerCase()
+      const pauseAtMs = anchor === 'before'
+        ? Math.max(0, Math.round(entry.startMs))
+        : Math.max(0, Math.round(entry.endMs))
       pauses.push({
         atMs: pauseAtMs,
         durationMs: overflowMs,
       })
+      adjustedAudioFiles[adjustedAudioFiles.length - 1].pauseAtMs = pauseAtMs
       cumulativeShiftMs += overflowMs
     }
   }
@@ -1100,17 +1666,98 @@ function normalizeNarrationTimeline(audioFiles) {
   }
 }
 
-function muxNarrationAudioIntoVideo({ inputVideo, outputVideo, audioFiles }) {
+function toSortedClickHoldRangesSec(clickHolds) {
+  const ranges = []
+  for (const hold of Array.isArray(clickHolds) ? clickHolds : []) {
+    const atMs = Number(hold?.atMs)
+    const durationMs = Number(hold?.durationMs)
+    if (!Number.isFinite(atMs) || !Number.isFinite(durationMs) || durationMs <= 0) {
+      continue
+    }
+    ranges.push({
+      startSec: Math.max(0, atMs / 1000),
+      endSec: Math.max(0, (atMs + durationMs) / 1000),
+    })
+  }
+  ranges.sort((left, right) => left.startSec - right.startSec)
+  return ranges
+}
+
+function resolveMarkerFreePauseAnchorSec(pauseAtSec, videoDurationSec, clickHoldRangesSec) {
+  let anchorSec = Math.max(0, pauseAtSec - VIDEO_HOLD_FRAME_LEAD_SEC)
+  if (!Array.isArray(clickHoldRangesSec) || clickHoldRangesSec.length === 0) {
+    return Math.min(videoDurationSec, anchorSec)
+  }
+
+  const epsilonSec = 0.001
+  for (let guard = 0; guard < clickHoldRangesSec.length + 2; guard++) {
+    const containingRange = clickHoldRangesSec.find(
+      (range) => anchorSec >= range.startSec && anchorSec < range.endSec
+    )
+    if (!containingRange) {
+      break
+    }
+
+    const beforeSec = containingRange.startSec - epsilonSec
+    if (beforeSec >= 0) {
+      anchorSec = beforeSec
+      continue
+    }
+
+    const afterSec = containingRange.endSec + epsilonSec
+    if (afterSec <= videoDurationSec) {
+      anchorSec = afterSec
+      continue
+    }
+
+    anchorSec = 0
+    break
+  }
+
+  return Math.min(videoDurationSec, Math.max(0, anchorSec))
+}
+
+function muxNarrationAudioIntoVideo({ inputVideo, outputVideo, audioFiles, clickHolds = [] }) {
   const videoDurationSec = getMediaDurationSeconds(inputVideo)
+  const clickHoldRangesSec = toSortedClickHoldRangesSec(clickHolds)
   const audioWithDuration = audioFiles.map((entry) => ({
     ...entry,
     durationSec: getMediaDurationSeconds(entry.file),
   }))
   const { adjustedAudioFiles, pauses, totalHoldMs } = normalizeNarrationTimeline(audioWithDuration)
   const outputDurationSec = videoDurationSec + (totalHoldMs / 1000)
+  const ttsDebugAll = ['1', 'true', 'yes', 'on'].includes(String(process.env.SCENARIO_TTS_DEBUG || '').trim().toLowerCase())
 
   if (totalHoldMs > 0) {
     console.log(`Haltebilder eingefuegt: ${pauses.length}, Gesamtwartezeit: ${(totalHoldMs / 1000).toFixed(2)}s`)
+  }
+
+  if (ttsDebugAll || totalHoldMs > 0) {
+    const debugRows = ttsDebugAll
+      ? adjustedAudioFiles
+      : adjustedAudioFiles.filter((entry) => Number(entry?.overflowMs || 0) > 0)
+
+    if (debugRows.length > 0) {
+      console.log('[tts-debug] Narration timeline diagnostics:')
+      debugRows.forEach((entry) => {
+        const id = String(entry?.id || '')
+        const anchor = String(entry?.sourceAnchor || '')
+        const plannedStartMs = Math.max(0, Math.floor(Number(entry?.startMs || 0) - Number(entry?.shiftBeforeMs || 0)))
+        const plannedEndMs = Math.max(plannedStartMs, Math.floor(Number(entry?.endMs || plannedStartMs)))
+        const shiftedStartMs = Math.max(0, Math.floor(Number(entry?.startMs || 0)))
+        const shiftedWindowEndMs = Math.max(shiftedStartMs, Math.floor(Number(entry?.shiftedWindowEndMs || shiftedStartMs)))
+        const windowMs = Math.max(0, Math.floor(Number(entry?.windowMs || 0)))
+        const audioDurationMs = Math.max(0, Math.floor(Number(entry?.audioDurationMs || 0)))
+        const overflowMs = Math.max(0, Math.floor(Number(entry?.overflowMs || 0)))
+        const shiftBeforeMs = Math.max(0, Math.floor(Number(entry?.shiftBeforeMs || 0)))
+        const pauseAtMs = entry?.pauseAtMs == null ? '-' : String(Math.max(0, Math.floor(Number(entry.pauseAtMs))))
+        const pauseSec = entry?.pauseAtMs == null ? '-' : (Math.max(0, Number(entry.pauseAtMs)) / 1000).toFixed(3)
+
+        console.log(
+          `[tts-debug] id=${id} anchor=${anchor} planned=${plannedStartMs}-${plannedEndMs}ms shifted=${shiftedStartMs}-${shiftedWindowEndMs}ms window=${windowMs}ms audio=${audioDurationMs}ms overflow=${overflowMs}ms shiftBefore=${shiftBeforeMs}ms pauseAt=${pauseAtMs}ms(${pauseSec}s)`
+        )
+      })
+    }
   }
 
   const args = ['-y', '-i', inputVideo, '-f', 'lavfi', '-i', 'anullsrc=r=24000:cl=stereo']
@@ -1147,7 +1794,8 @@ function muxNarrationAudioIntoVideo({ inputVideo, outputVideo, audioFiles }) {
 
       const holdSec = Math.max(0, pause.durationMs / 1000)
       if (holdSec > 0.001) {
-        let frameStart = Math.max(0, Math.min(videoDurationSec - VIDEO_HOLD_FRAME_SLICE_SEC, pauseAtSec - VIDEO_HOLD_FRAME_LEAD_SEC))
+        const frameAnchorSec = resolveMarkerFreePauseAnchorSec(pauseAtSec, videoDurationSec, clickHoldRangesSec)
+        let frameStart = Math.max(0, Math.min(videoDurationSec - VIDEO_HOLD_FRAME_SLICE_SEC, frameAnchorSec))
         if (!Number.isFinite(frameStart)) frameStart = 0
         let frameEnd = Math.min(videoDurationSec, frameStart + VIDEO_HOLD_FRAME_SLICE_SEC)
         if (!(frameEnd > frameStart + 0.001)) {
@@ -1189,6 +1837,78 @@ function muxNarrationAudioIntoVideo({ inputVideo, outputVideo, audioFiles }) {
   )
 
   runCommand('ffmpeg', args)
+
+  return {
+    adjustedAudioFiles,
+    pauses,
+    totalHoldMs,
+    outputDurationSec,
+  }
+}
+
+function buildScenarioTtsDiagnosticsLog({
+  scenarioPath,
+  profileName,
+  sourceVideo,
+  outputVideo,
+  totalHoldMs,
+  pauses,
+  resolvedNarrations,
+  adjustedById,
+}) {
+  const lines = []
+  lines.push(`# TTS Diagnostics`)
+  lines.push(`generatedAt=${new Date().toISOString()}`)
+  lines.push(`scenarioPath=${scenarioPath}`)
+  lines.push(`profile=${profileName}`)
+  lines.push(`sourceVideo=${sourceVideo}`)
+  lines.push(`outputVideo=${outputVideo}`)
+  lines.push(`totalHoldMs=${Math.max(0, Math.floor(Number(totalHoldMs) || 0))}`)
+  lines.push(`pauseCount=${Array.isArray(pauses) ? pauses.length : 0}`)
+  lines.push('')
+  lines.push('[pauses]')
+
+  for (const pause of Array.isArray(pauses) ? pauses : []) {
+    const atMs = Math.max(0, Math.floor(Number(pause?.atMs) || 0))
+    const durationMs = Math.max(0, Math.floor(Number(pause?.durationMs) || 0))
+    lines.push(`pause atMs=${atMs} durationMs=${durationMs}`)
+  }
+
+  lines.push('')
+  lines.push('[narrations]')
+
+  for (const narration of Array.isArray(resolvedNarrations) ? resolvedNarrations : []) {
+    const id = String(narration?.id || '')
+    const adjusted = adjustedById.get(id) || null
+    const clipStartMs = Math.max(0, Math.floor(Number(narration?.clipVideoStartMs || narration?.startMs || 0)))
+    const clipEndMs = Math.max(clipStartMs, Math.floor(Number(narration?.clipVideoEndMs || narration?.endMs || clipStartMs)))
+    const finalStartMs = Math.max(0, Math.floor(Number(narration?.finalInsertedStartMs || clipStartMs)))
+    const finalEndMs = Math.max(finalStartMs, Math.floor(Number(narration?.finalInsertedEndMs || clipEndMs)))
+
+    const windowMs = adjusted ? Math.max(0, Math.floor(Number(adjusted.windowMs || 0))) : Math.max(0, clipEndMs - clipStartMs)
+    const audioDurationMs = adjusted ? Math.max(0, Math.floor(Number(adjusted.audioDurationMs || 0))) : 0
+    const overflowMs = adjusted ? Math.max(0, Math.floor(Number(adjusted.overflowMs || 0))) : 0
+    const shiftBeforeMs = adjusted ? Math.max(0, Math.floor(Number(adjusted.shiftBeforeMs || 0))) : 0
+    const pauseAtMs = adjusted && adjusted.pauseAtMs != null
+      ? Math.max(0, Math.floor(Number(adjusted.pauseAtMs) || 0))
+      : null
+
+    lines.push([
+      `id=${id}`,
+      `anchor=${String(narration?.sourceAnchor || '')}`,
+      `sourceTimelineStepId=${String(narration?.sourceTimelineStepId || '')}`,
+      `sourceScenarioStepId=${String(narration?.sourceScenarioStepId || '')}`,
+      `clip=${clipStartMs}-${clipEndMs}`,
+      `final=${finalStartMs}-${finalEndMs}`,
+      `windowMs=${windowMs}`,
+      `audioDurationMs=${audioDurationMs}`,
+      `overflowMs=${overflowMs}`,
+      `shiftBeforeMs=${shiftBeforeMs}`,
+      `pauseAtMs=${pauseAtMs == null ? '-' : String(pauseAtMs)}`,
+    ].join(' | '))
+  }
+
+  return `${lines.join('\n')}\n`
 }
 
 async function collectArtifactDirs(rootDir) {
@@ -1232,41 +1952,39 @@ async function findArtifactPair(outputDir) {
 
 async function findLatestArtifactsForTestFile(testFile) {
   const testBaseName = basename(testFile).replace(/\.[^.]+$/, '')
-  const artifactsRoot = resolve('test-artifacts')
-  if (!existsSync(artifactsRoot)) {
+  const testToken = sanitizeFileToken(testBaseName)
+  const testRunsRoot = join(OUTPUT_MANUAL_RUNS_ROOT, testToken)
+  if (!existsSync(testRunsRoot)) {
     return null
   }
 
-  const entries = await readdir(artifactsRoot, { withFileTypes: true })
-  const annotatedVideos = entries
-    .filter((entry) => entry.isFile() && entry.name.startsWith(`${testBaseName}-annotated-`) && entry.name.endsWith('.mp4'))
+  const runDirEntries = await readdir(testRunsRoot, { withFileTypes: true })
+  const runIds = runDirEntries
+    .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
-    .filter((name) => !name.includes('-raw') && !name.includes('-tts'))
-    .map((name) => {
-      const match = name.match(new RegExp(`^${testBaseName}-annotated-(\\d{14})\\.mp4$`))
-      if (!match) return null
-      return {
-        runId: match[1],
-        outputVideo: join(artifactsRoot, name),
-      }
-    })
-    .filter(Boolean)
-    .sort((left, right) => right.runId.localeCompare(left.runId))
+    .sort((left, right) => right.localeCompare(left))
 
-  for (const candidate of annotatedVideos) {
-    const outputDir = join(artifactsRoot, `annotate-run-${candidate.runId}`)
-    const artifactPair = await findArtifactPair(outputDir)
+  for (const runId of runIds) {
+    const outputDir = join(testRunsRoot, runId)
+    const artifactsDir = join(outputDir, 'artifacts')
+    const artifactPair = await findArtifactPair(artifactsDir)
     if (!artifactPair) continue
     const demoDir = join(artifactPair.dir, 'demo')
     if (!existsSync(demoDir)) continue
 
+    const finalDir = join(outputDir, 'final')
+    const defaultVideo = join(finalDir, `${testToken}-annotated-${runId}.mp4`)
+    const previousOutputVideo = existsSync(defaultVideo)
+      ? defaultVideo
+      : join(finalDir, `${testToken}-annotated.mp4`)
+
     return {
-      runId: candidate.runId,
+      runId,
       outputDir,
       tracePath: artifactPair.tracePath,
       inputVideo: artifactPair.videoPath,
       demoDir,
-      previousOutputVideo: candidate.outputVideo,
+      previousOutputVideo,
     }
   }
 
@@ -1364,6 +2082,11 @@ async function buildAnnotatedArtifacts({
     // Both are expressed in original clip-relative time, so they can be combined.
     const stepTitleHolds = rawStepTitles.map((st) => ({ atMs: st.atMs, durationMs: st.durationMs }))
     const combinedHolds = [...(annotateMeta.clickHolds || []), ...stepTitleHolds]
+    const stepTitleHoldsForInsertion = stepTitlesForInsertion.map((st) => ({ atMs: st.atMs, durationMs: st.durationMs }))
+    const clickHoldsForMux = (annotateMeta.clickHolds || []).map((hold) => ({
+      ...hold,
+      atMs: applyClickHoldShift(Number(hold?.atMs || 0), stepTitleHoldsForInsertion),
+    }))
 
     console.log('Verarbeite Demo-Timeline fuer TTS...')
     const resolvedNarrations = await resolveNarrationsFromDemoDir(resolvedDemoDir, {
@@ -1383,6 +2106,7 @@ async function buildAnnotatedArtifacts({
       inputVideo: introlessVideoWithTitles,
       outputVideo: outputWithTtsRaw,
       audioFiles,
+      clickHolds: clickHoldsForMux,
     })
     console.log('Setze Logo-Intro vor das Voiceover-Video...')
     prependIntroToVideo({
@@ -1403,7 +2127,32 @@ function sanitizeFileToken(value) {
     .replace(/^-+|-+$/g, '') || 'output'
 }
 
-async function runScenarioTtsMode({ scenarioPath, profileName, outputVideo, forceVideo = false, ttsVoice = null }) {
+function sanitizeScenarioVersionForFolder(value) {
+  let normalized = value
+
+  if (typeof normalized === 'number' && Number.isFinite(normalized)) {
+    if (Number.isInteger(normalized)) {
+      normalized = `${normalized}.0`
+    } else {
+      normalized = String(normalized)
+    }
+  }
+
+  return String(normalized || 'unknown')
+    .trim()
+    .toLowerCase()
+    .replace(/\./g, '_')
+    .replace(/[^a-z0-9_]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'unknown'
+}
+
+function buildScenarioOutputFolderName({ scenarioId, scenarioVersion }) {
+  const idToken = sanitizeFileToken(scenarioId || 'scenario')
+  const versionToken = sanitizeScenarioVersionForFolder(scenarioVersion || 'unknown')
+  return `${idToken}_v${versionToken}`
+}
+
+async function runScenarioTtsMode({ scenarioPath, profileName, outputVideo, ttsVoice = null }) {
   const central = loadCentralConfig(process.cwd())
   const scenarioAbsolutePath = resolve(scenarioPath)
   if (!existsSync(scenarioAbsolutePath)) {
@@ -1422,7 +2171,12 @@ async function runScenarioTtsMode({ scenarioPath, profileName, outputVideo, forc
 
   const artifacts = await ensureScenarioVideoTimelinePair({
     scenarioPathRelative,
-    forceVideo,
+  })
+
+  await assertScenarioMatchesRawVideoIgnoringPresentation({
+    scenarioAbsolutePath,
+    scenarioPathRelative,
+    artifactsDir: artifacts.dir,
   })
 
   const narrations = buildNarrationsFromScenarioTimeline({
@@ -1432,33 +2186,290 @@ async function runScenarioTtsMode({ scenarioPath, profileName, outputVideo, forc
     voiceOverride: ttsVoice,
   })
 
-  if (!narrations.length) {
-    throw new Error(`Keine passenden Didactic-Texte fuer Profil "${profileName}" gefunden.`)
-  }
+  const presentationRange = resolveScenarioPresentationVideoRangeFromTimeline({
+    scenarioRoot,
+    timelineReport: artifacts.timeline,
+  })
 
   const profileToken = sanitizeFileToken(profileName)
   const scenarioToken = sanitizeFileToken(basename(scenarioPathRelative).replace(/\.[^.]+$/, ''))
   const runId = toRunId()
+  const scenarioFolderName = buildScenarioOutputFolderName({
+    scenarioId: scenarioRoot.id || scenarioToken,
+    scenarioVersion: scenarioRoot.version || 'unknown',
+  })
+  const scenarioOutputRoot = join(OUTPUT_ROOT, scenarioFolderName)
+  const ttsOutputDir = join(scenarioOutputRoot, 'tts')
   const resolvedOutputVideo = outputVideo
     ? resolve(outputVideo)
-    : resolve('temp', 'final', `${scenarioToken}-${profileToken}-tts-${runId}.mp4`)
+    : join(ttsOutputDir, `${scenarioToken}-${profileToken}-tts-${runId}.mp4`)
 
   await mkdir(dirname(resolvedOutputVideo), { recursive: true })
+  await mkdir(ttsOutputDir, { recursive: true })
 
-  const resolvedTimelinePath = join(artifacts.dir, `yaml-tts-resolved-${profileToken}.json`)
-  await writeFile(resolvedTimelinePath, JSON.stringify(narrations, null, 2), 'utf8')
+  let effectiveNarrations = narrations
+  const rawChapterTitles = buildScenarioChapterTitlesFromTimeline({
+    scenarioRoot,
+    timelineReport: artifacts.timeline,
+    presentationRange,
+  })
+  if (presentationRange) {
+    const clipStartMs = Math.max(0, Number(presentationRange.startMs) || 0)
+    const clipEndMs = presentationRange.endMs == null ? null : Math.max(0, Number(presentationRange.endMs) || 0)
+    const startDirectiveStepId = String(presentationRange.startDirectiveStepId || '').trim()
 
-  const { audioFiles, engine, cacheHits, cacheMisses, cacheDir } = await synthesizeNarrations(artifacts.dir, narrations, ttsVoice)
+    effectiveNarrations = narrations
+      .map((entry) => {
+        const sourceStartMs = Number(entry.startMs)
+        const sourceEndMs = Number(entry.endMs)
+        if (!Number.isFinite(sourceStartMs) || !Number.isFinite(sourceEndMs)) {
+          return null
+        }
+
+        const clippedStartMs = Math.max(sourceStartMs, clipStartMs)
+        const clippedEndMs = clipEndMs == null ? sourceEndMs : Math.min(sourceEndMs, clipEndMs)
+        if (clippedEndMs <= clippedStartMs) {
+          const sourceScenarioStepId = String(entry.sourceScenarioStepId || '').trim()
+          const sourceAnchor = String(entry.sourceAnchor || '').trim()
+          const shouldKeepBoundaryBeforeNarration = Boolean(
+            clipStartMs > 0
+            && startDirectiveStepId
+            && sourceAnchor === 'before'
+            && sourceScenarioStepId === startDirectiveStepId,
+          )
+
+          if (shouldKeepBoundaryBeforeNarration) {
+            const sourceDurationMs = Math.max(1, Math.floor(sourceEndMs - sourceStartMs))
+            const maxWindowMs = clipEndMs == null ? sourceDurationMs : Math.max(1, Math.floor(clipEndMs - clipStartMs))
+            return {
+              ...entry,
+              startMs: 0,
+              endMs: Math.max(1, Math.min(sourceDurationMs, maxWindowMs)),
+            }
+          }
+
+          return null
+        }
+
+        return {
+          ...entry,
+          startMs: Math.max(0, Math.floor(clippedStartMs - clipStartMs)),
+          endMs: Math.max(1, Math.floor(clippedEndMs - clipStartMs)),
+        }
+      })
+      .filter(Boolean)
+
+  }
+
+  const clickIndicatorConfig = resolveScenarioClickIndicatorConfig(scenarioRoot)
+
+  let sourceVideoForTts = presentationRange
+    ? join(ttsOutputDir, `${scenarioToken}-${profileToken}-clip-${runId}.mp4`)
+    : artifacts.videoPath
+  let clickAnnotateMeta = { clickHolds: [] }
+
+  const resolveClickIndicatorImagePath = (rawImagePath) => {
+    if (!rawImagePath || typeof rawImagePath !== 'string') {
+      return null
+    }
+
+    const normalized = rawImagePath.trim()
+    if (!normalized) {
+      return null
+    }
+
+    if (normalized.startsWith('/')) {
+      return normalized
+    }
+
+    const workspaceCandidate = resolve(normalized)
+    if (existsSync(workspaceCandidate)) {
+      return workspaceCandidate
+    }
+
+    return resolve(dirname(scenarioAbsolutePath), normalized)
+  }
+
+  const tracePath = join(artifacts.dir, 'trace.zip')
+  if (clickIndicatorConfig?.enabled === true && existsSync(tracePath)) {
+    const clickAnnotatedVideo = join(ttsOutputDir, `${scenarioToken}-${profileToken}-click-${runId}.mp4`)
+    const annotateArgs = [
+      'scripts/annotate-video-from-trace.mjs',
+      tracePath,
+      artifacts.videoPath,
+      clickAnnotatedVideo,
+    ]
+
+    if (presentationRange) {
+      annotateArgs.push(`--clip-start-ms=${Math.max(0, Number(presentationRange.startMs) || 0)}`)
+      if (presentationRange.endMs != null) {
+        annotateArgs.push(`--clip-end-ms=${Math.max(0, Number(presentationRange.endMs) || 0)}`)
+      }
+    }
+
+    const clickIndicatorImagePath = resolveClickIndicatorImagePath(clickIndicatorConfig.image)
+    annotateArgs.push(...buildAnnotateClickIndicatorArgs({
+      ...clickIndicatorConfig,
+      image: clickIndicatorImagePath,
+    }))
+
+    const annotateExitCode = runCommand('node', annotateArgs)
+    if (annotateExitCode !== 0) {
+      throw new Error(`Klick-Indikator-Annotation fehlgeschlagen (Exit-Code ${annotateExitCode}).`)
+    }
+
+    sourceVideoForTts = clickAnnotatedVideo
+    clickAnnotateMeta = await readAnnotateMetaIfExists(clickAnnotatedVideo)
+  } else if (presentationRange) {
+    cutVideoToRange({
+      inputVideo: artifacts.videoPath,
+      outputVideo: sourceVideoForTts,
+      startMs: presentationRange.startMs,
+      endMs: presentationRange.endMs,
+    })
+  }
+
+  if (presentationRange) {
+    const presentationMetaPath = join(ttsOutputDir, `yaml-presentation-range-${profileToken}-${runId}.json`)
+    await writeFile(presentationMetaPath, JSON.stringify({
+      sourceVideo: artifacts.videoPath,
+      clippedVideo: sourceVideoForTts,
+      startMs: presentationRange.startMs,
+      endMs: presentationRange.endMs,
+      directives: presentationRange.directives,
+    }, null, 2), 'utf8')
+  }
+
+  const clickHolds = Array.isArray(clickAnnotateMeta?.clickHolds) ? clickAnnotateMeta.clickHolds : []
+  if (clickHolds.length > 0) {
+    effectiveNarrations = effectiveNarrations
+      .map((entry) => {
+        const startMs = Number(entry?.startMs)
+        const endMs = Number(entry?.endMs)
+        if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs) {
+          return null
+        }
+
+        return {
+          ...entry,
+          startMs: applyClickHoldShift(startMs, clickHolds),
+          endMs: applyClickHoldShift(endMs, clickHolds),
+        }
+      })
+      .filter(Boolean)
+  }
+
+  const chapterTitlesForInsertion = rawChapterTitles.map((entry) => ({
+    ...entry,
+    atMs: applyClickHoldShift(entry.atMs, clickHolds),
+  }))
+  const chapterHoldsForInsertion = chapterTitlesForInsertion.map((entry) => ({
+    atMs: entry.atMs,
+    durationMs: entry.durationMs,
+  }))
+
+  if (chapterHoldsForInsertion.length > 0) {
+    effectiveNarrations = effectiveNarrations
+      .map((entry) => {
+        const startMs = Number(entry?.startMs)
+        const endMs = Number(entry?.endMs)
+        if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs) {
+          return null
+        }
+
+        return {
+          ...entry,
+          startMs: applyClickHoldShift(startMs, chapterHoldsForInsertion),
+          endMs: applyClickHoldShift(endMs, chapterHoldsForInsertion),
+        }
+      })
+      .filter(Boolean)
+  }
+
+  let clickHoldsForMux = clickHolds
+  if (clickHolds.length > 0 && chapterHoldsForInsertion.length > 0) {
+    clickHoldsForMux = clickHolds.map((hold) => ({
+      ...hold,
+      atMs: applyClickHoldShift(Number(hold?.atMs || 0), chapterHoldsForInsertion),
+    }))
+  }
+
+  if (chapterTitlesForInsertion.length > 0) {
+    const chapterVideo = join(ttsOutputDir, `${scenarioToken}-${profileToken}-chapter-${runId}.mp4`)
+    console.log(`Fuge ${chapterTitlesForInsertion.length} Kapitelkarte(n) ein...`)
+    insertStepTitleCardsIntoVideo({
+      inputVideo: sourceVideoForTts,
+      outputVideo: chapterVideo,
+      stepTitles: chapterTitlesForInsertion,
+    })
+    sourceVideoForTts = chapterVideo
+  }
+
+  if (!effectiveNarrations.length) {
+    console.log(`[scenario-tts] Keine Didactics fuer Profil "${profileName}" gefunden. Es wird ohne Voiceover exportiert.`)
+
+    const outputWithoutTts = resolvedOutputVideo
+    runCommand('cp', [sourceVideoForTts, outputWithoutTts])
+
+    console.log(`Profil-Video ohne Voiceover bereit: ${outputWithoutTts}`)
+    return
+  }
+
+  const { audioFiles, engine, cacheHits, cacheMisses, cacheDir } = await synthesizeNarrations(artifacts.dir, effectiveNarrations, ttsVoice)
   console.log(`TTS-Engine: ${engine}. Narrationsdateien: ${audioFiles.length}. Cache: ${cacheHits} Treffer, ${cacheMisses} neu erzeugt (${cacheDir})`)
 
-  console.log(`Mische Profil-Voiceover in Video: ${artifacts.videoPath}`)
-  muxNarrationAudioIntoVideo({
-    inputVideo: artifacts.videoPath,
+  console.log(`Mische Profil-Voiceover in Video: ${sourceVideoForTts}`)
+  const muxMeta = muxNarrationAudioIntoVideo({
+    inputVideo: sourceVideoForTts,
     outputVideo: resolvedOutputVideo,
     audioFiles,
+    clickHolds: clickHoldsForMux,
   })
 
+  const clipOffsetMs = presentationRange ? Math.max(0, Number(presentationRange.startMs) || 0) : 0
+  const adjustedByNarrationId = new Map(
+    (muxMeta?.adjustedAudioFiles || []).map((entry) => [String(entry.id || ''), entry])
+  )
+  const resolvedNarrationsForExport = effectiveNarrations.map((entry) => {
+    const adjusted = adjustedByNarrationId.get(String(entry.id || '')) || null
+    const clipVideoStartMs = Math.max(0, Number(entry.startMs) || 0)
+    const clipVideoEndMs = Math.max(clipVideoStartMs, Number(entry.endMs) || clipVideoStartMs)
+    const finalInsertedStartMs = adjusted
+      ? Math.max(0, Number(adjusted.finalOutputStartMs) || 0)
+      : clipVideoStartMs
+    const finalInsertedEndMs = adjusted
+      ? Math.max(finalInsertedStartMs, Number(adjusted.finalOutputEndMs) || finalInsertedStartMs)
+      : clipVideoEndMs
+
+    return {
+      ...entry,
+      clipVideoStartMs,
+      clipVideoEndMs,
+      originalVideoStartMs: clipOffsetMs + clipVideoStartMs,
+      originalVideoEndMs: clipOffsetMs + clipVideoEndMs,
+      finalInsertedStartMs,
+      finalInsertedEndMs,
+    }
+  })
+
+  const resolvedTimelinePath = join(ttsOutputDir, `yaml-tts-resolved-${profileToken}-${runId}.json`)
+  await writeFile(resolvedTimelinePath, JSON.stringify(resolvedNarrationsForExport, null, 2), 'utf8')
+
+  const diagnosticsLogPath = join(ttsOutputDir, `yaml-tts-debug-${profileToken}-${runId}.log`)
+  const diagnosticsLog = buildScenarioTtsDiagnosticsLog({
+    scenarioPath: scenarioPathRelative,
+    profileName,
+    sourceVideo: sourceVideoForTts,
+    outputVideo: resolvedOutputVideo,
+    totalHoldMs: muxMeta?.totalHoldMs,
+    pauses: muxMeta?.pauses,
+    resolvedNarrations: resolvedNarrationsForExport,
+    adjustedById: adjustedByNarrationId,
+  })
+  await writeFile(diagnosticsLogPath, diagnosticsLog, 'utf8')
+
   console.log(`Aufgeloeste Narrations-Timeline: ${resolvedTimelinePath}`)
+  console.log(`TTS-Diagnose-Log: ${diagnosticsLogPath}`)
   console.log(`Profil-Voiceover-Video bereit: ${resolvedOutputVideo}`)
 }
 
@@ -1474,7 +2485,6 @@ async function main() {
       scenarioPath: parsed.scenarioPath,
       profileName: parsed.profile,
       outputVideo: parsed.outputVideo,
-      forceVideo: parsed.forceVideo,
       ttsVoice: parsed.ttsVoice,
     })
     return
@@ -1503,9 +2513,13 @@ async function main() {
 
   if (parsed.annotateOnly) {
     const runId = toRunId()
-    const defaultOutput = resolve(
-      'test-artifacts',
-      `${basename(parsed.inputVideo).replace(/\.[^.]+$/, '')}-annotated-${runId}.mp4`
+    const annotateToken = sanitizeFileToken(basename(parsed.inputVideo).replace(/\.[^.]+$/, 'video'))
+    const defaultOutput = join(
+      OUTPUT_MANUAL_RUNS_ROOT,
+      'annotate-only',
+      runId,
+      'final',
+      `${annotateToken}-annotated-${runId}.mp4`
     )
     const resolvedOutputVideo = parsed.outputVideo ? resolve(parsed.outputVideo) : defaultOutput
     await buildAnnotatedArtifacts({
@@ -1553,6 +2567,7 @@ async function main() {
       inputVideo: resolvedInputVideo,
       outputVideo: outputWithTts,
       audioFiles,
+      clickHolds: annotateMeta.clickHolds || [],
     })
     console.log(`Voiceover-Video bereit: ${outputWithTts}`)
     return
@@ -1565,16 +2580,22 @@ async function main() {
   }
 
   const runId = toRunId()
-  const outputDir = resolve('test-artifacts', `annotate-run-${runId}`)
+  const testToken = sanitizeFileToken(basename(testFile).replace(/\.[^.]+$/, 'test'))
+  const runRootDir = join(OUTPUT_MANUAL_RUNS_ROOT, testToken, runId)
+  const outputDir = join(runRootDir, 'artifacts')
   await mkdir(outputDir, { recursive: true })
   const derivedTestTimeout = Math.max(600_000, 60_000 + (slowMo * 120))
 
-  const defaultOutput = resolve(
-    'test-artifacts',
-    `${basename(testFile).replace(/\.[^.]+$/, '')}-annotated-${runId}.mp4`
+  const defaultOutput = join(
+    runRootDir,
+    'final',
+    `${testToken}-annotated-${runId}.mp4`
   )
   const resolvedOutputVideo = outputVideo ? resolve(outputVideo) : defaultOutput
   const introlessOutputVideo = outputPathWithSuffix(resolvedOutputVideo, '-raw')
+
+  await mkdir(dirname(resolvedOutputVideo), { recursive: true })
+  await mkdir(dirname(introlessOutputVideo), { recursive: true })
 
   const playwrightCommand = [
     'playwright',
@@ -1616,6 +2637,17 @@ async function main() {
     tts,
     ttsVoice,
   })
+
+  const runMetaPath = join(runRootDir, 'run-meta.json')
+  await writeFile(runMetaPath, JSON.stringify({
+    createdAtIso: new Date().toISOString(),
+    runId,
+    mode: 'manual-annotated-video',
+    testFile: normalizeWorkspaceRelativePath(testFile),
+    artifactDir: normalizeWorkspaceRelativePath(relative(process.cwd(), outputDir)),
+    outputVideo: normalizeWorkspaceRelativePath(relative(process.cwd(), resolvedOutputVideo)),
+    outputVideoRaw: normalizeWorkspaceRelativePath(relative(process.cwd(), introlessOutputVideo)),
+  }, null, 2), 'utf8')
 }
 
 main().catch((error) => {

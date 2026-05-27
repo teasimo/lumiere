@@ -1,0 +1,279 @@
+interaction:
+  id: dublette-erstellen
+  version: 1.0
+
+  
+  video:
+    autoscroll_smooth: false
+    wait_between_steps: 1000
+    resolution:
+      width: 1280
+      height: 720
+
+  presentation:
+    indicators:
+      click:
+        enabled: true
+        before_ms: 100
+        after_ms: 100
+        fade_ms: 50  
+  
+  data:
+    runtime:
+      base_url: https://neo-test.de
+    actor:
+      username: schule_05320_schulleitung
+      password: "!Neo-2405Neo!"
+    # random: "{{randomNumber()}}"
+      random: "207563"
+    schueler:
+      vorname1: "Mark"
+      vorname2: "Marc"
+      nachname: "Mustermann"
+      geburtsdatum: 01.01.2020
+      geburtsort: Musterstadt
+      adresseSuche: Fuchsbau 6 Emmerke
+      ez1:
+        anrede: Frau
+        vorname: Laura
+        nachname: Mustermann
+        geburtsdatum: 01.01.1975
+        geburtsort: Musterstadt
+        adresseSuche: Fuchsbau 6 Emmerke
+      ez2:
+        anrede: Herr
+        vorname: Niklas
+        nachname: Mustermann
+        geburtsdatum: 01.01.1970
+        geburtsort: Musterstadt
+        adresseSuche: Fuchsbau 6 Emmerke
+  flow:
+    - id: neo-login
+      include: /auth/neo-login.yaml
+      with:
+        username: "{{actor.username}}"
+        password: "{{actor.password}}"
+
+    # - id: vorbereitung
+    #   flow:
+      # - id: dublette-anlegen
+      #   flow:
+      #   - id: vorbereitung-meldedaten-create1
+      #     include: /sus/meldedaten-create.yaml
+      #     with:
+      #       schueler.nachname: "{{schueler.nachname}} {{random}}"
+      #       schueler.vorname: "{{schueler.vorname1}} {{random}}"
+      #       schueler.geburtsdatum: "{{schueler.geburtsdatum}}"
+      #       schueler.geburtsort: "{{schueler.geburtsort}}"
+      #       schueler.adresseSuche: "{{schueler.adresseSuche}}"
+      #       schueler.ez1.nachname: "{{schueler.ez1.nachname}}"
+      #       schueler.ez1.vorname: "{{schueler.ez1.vorname}}"
+      #       schueler.ez1.anrede: "{{schueler.ez1.anrede}}"
+      #       schueler.ez1.adresseSuche: "{{schueler.ez1.adresseSuche}}"
+      #       schueler.ez2.nachname: "{{schueler.ez2.nachname}}"
+      #       schueler.ez2.vorname: "{{schueler.ez2.vorname}}"
+      #       schueler.ez2.anrede: "{{schueler.ez2.anrede}}"
+      #       schueler.ez2.adresseSuche: "{{schueler.ez2.adresseSuche}}"
+
+      #   - id: vorbereitung-meldedaten-create2
+      #     include: /sus/meldedaten-create.yaml
+      #     with:
+      #       schueler.nachname: "{{schueler.nachname}} {{random}}"
+      #       schueler.vorname: "{{schueler.vorname2}} {{random}}"
+      #       schueler.geburtsdatum: "{{schueler.geburtsdatum}}"
+      #       schueler.geburtsort: "{{schueler.geburtsort}}"
+      #       schueler.adresseSuche: "{{schueler.adresseSuche}}"
+      #       schueler.ez1.nachname: "{{schueler.ez1.nachname}}"
+      #       schueler.ez1.vorname: "{{schueler.ez1.vorname}}"
+      #       schueler.ez1.anrede: "{{schueler.ez1.anrede}}"
+      #       schueler.ez1.adresseSuche: "{{schueler.ez1.adresseSuche}}"
+      #       schueler.ez2.nachname: "{{schueler.ez2.nachname}}"
+      #       schueler.ez2.vorname: "{{schueler.ez2.vorname}}"
+      #       schueler.ez2.anrede: "{{schueler.ez2.anrede}}"
+      #       schueler.ez2.adresseSuche: "{{schueler.ez2.adresseSuche}}"
+      
+      # - id: alle-meldedaten-zu-sus
+      #   flow:      
+      #   - id: navigate-meldedaten            
+      #     include: /navigation/untermenue-navigiere.yaml
+      #     with:
+      #       hauptmenue-data-id: "menu/item/schueler/"
+      #       untermenue-data-id: "menu/link/schueler/meldedaten/"
+        
+      #   - id: filters
+      #     click: filters
+      #   - id: filters/basic/choose
+      #     click: filters/basic/choose
+      #   - id: filters/basic/choose/haserst
+      #     click: filters/basic/choose/haserst
+      #   - id: filters/apply
+      #     click: filters/apply
+
+      #   - id: controlBtn/pagesize
+      #     if:
+      #       target:
+      #         data-id: controlBtn/pagesize
+      #       state:
+      #         visible: true
+      #     flow:
+      #       - id: controlBtn/pagesize
+      #         click:  controlBtn/pagesize
+      #       - id: controlBtn/pagesize/option/0
+      #         click: controlBtn/pagesize/option/0
+
+
+      #   - id: controlBtn/actions2
+      #     interaction:
+      #       type: click
+      #       target:
+      #         data-id: controlBtn/actions
+
+
+      #   - id: action-mehrfachauswahl
+
+      #     interaction:
+      #       type: click
+
+      #       target:
+      #         aria-label: Mehrfachauswahl
+      #   - id: root/btn/action-CommonSelectAllAction
+      #     click: "@root/btn/action-CommonSelectAllAction"
+          
+      #   - id: controlBtn/actions
+
+      #     interaction:
+      #       type: click
+
+      #       target:
+      #         data-id: controlBtn/actions
+
+      #   - id: menuitem-aufforderung-nur-verknuepfungscode
+      #     interaction:
+      #       type: click
+      #       target:
+      #         text: Aufforderung zur Schulanmeldung (Nur Verknüpfungscode)
+
+      #   - id: Dialog-bestaetigen       
+      #     interaction:
+      #       type: click
+      #       target:
+      #         text: Ja
+
+    # - id: asd
+    #   chapter:
+    #     text: Datenqualität
+    #   didactics:
+    #       purpose:
+    #           text: >-
+    #             Datenqualität ist in der Verwaltung sehr wichtig, um immer auf Basis der richtigen Informationen zu entscheiden. Notwendig ist es also, dass pro Schüler*in immer genau nur ein Datensatz mit allen bekannten Informationen vorliegt.
+    #             Daher zeigen wir Ihnen im zum Einen wie NEO Niedersachsen Sie dabei unterstützt, dass keine doppelten Datensätze angelegt werden. Zum anderen wird Ihnen demonstriert, wie doppelte Datensätze, die dennoch entstanden sind, zu einem Datensatz zusammengeführt werden können.
+
+    - id: navigate-sus            
+      include: /navigation/untermenue-navigiere.yaml
+      with:
+        hauptmenue-data-id: "menu/item/schueler/"
+        untermenue-data-id: "menu/link/schueler/schueler/"
+      
+    - id: create-filter-sus      
+      include: /sus/filter-vorname-nachname.yaml
+      with:
+        vorname: "{{schueler.vorname1}} {{random}}"
+        nachname: "{{schueler.nachname}} {{random}}"      
+
+    - id: datensatz öffnen2
+      click: "controlBtn/action-detaillink"
+    
+    - id: g_person_angaben/g_person_angaben~2/vornamen
+      fill: g_person/p_person/vornamen
+      value: "{{schueler.vorname2}} {{random}}"
+
+    - id: save
+      flow:  
+      - id: btn/action-save
+        interaction:
+          type: click
+          target:
+            data-id: btn/action-save
+        
+
+
+      - id: Dialog-bestaetigen       
+        click:
+          text: Ja
+
+    - id: navigate-schueler2            
+      include: /navigation/untermenue-navigiere.yaml
+      with:
+        hauptmenue-data-id: "menu/item/schueler/"
+        untermenue-data-id: "menu/link/schueler/schueler/"
+
+    - id: filter-reset2
+      flow:
+      - id: root/btn/action-reset-settings
+        click: "@root/btn/action-reset-settings"
+
+      - id: Zurücksetzen
+        click:
+          text: Zurücksetzen
+
+    - id: create-filter-sus2
+      flow:
+      - id: filters
+        click: filters
+      - id: filters/basic/choose
+        click: filters/basic/choose
+      - id: filters/basic/choose/vornamen
+        click: filters/basic/choose/vornamen
+        # es gibt bereits feste filter
+      - id: filters/basic/1
+        fill: filters/basic/1
+        value: "{{schueler.vorname2}} {{random}}"
+      - id: filters/basic/choose2
+        click: filters/basic/choose
+      - id: filters/basic/choose/familienname
+        click: filters/basic/choose/familienname
+      - id: filters/basic/2
+        fill: filters/basic/2
+        value: "{{schueler.nachname}} {{random}}"
+      - id: filters/apply
+        click: filters/apply
+
+    - id: datensatz öffnen
+      click: "controlBtn/action-detaillink"
+    
+    - id: Einstellungen-oeffnen
+      click: 
+        text: "Einstellungen"
+    
+    - id: btn_container/btn_container~1/link_schueler_dublette
+      click: btn_container/btn_container~1/link_schueler_dublette
+
+    - id: sus-auswählen
+
+      interaction:
+        type: click
+
+        target:
+          aria-label: "{{schueler.nachname}} {{random}}, {{schueler.vorname2}} {{random}} markieren"
+
+    - id: btn_container/btn_container~1/link_schueler_dublette/uebernehmen
+      click: btn_container/btn_container~1/link_schueler_dublette/uebernehmen
+
+    - id: g_linked/$data0/verschmelzen-btn
+      click: g_linked/$data0/verschmelzen-btn
+
+    - id: g_all_select_btn/g_all_select_btn~1/btn_select_all
+      click: g_all_select_btn/g_all_select_btn~1/btn_select_all
+
+    - id: g_action_btns/g_content/btn_merge
+      click: g_action_btns/g_content/btn_merge
+
+    - id: ja-verschmelzen
+      click:
+        text: Ja
+
+    - id: click-Doku
+      click:
+        text: "Schüler*innen-Dublette verschmolzen"
+
+

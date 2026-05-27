@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
+import { cp, mkdir, readdir, readFile, writeFile } from 'fs/promises'
 import { existsSync, readFileSync, statSync } from 'fs'
-import { basename, extname, relative, resolve } from 'path'
+import { basename, extname, join, relative, resolve } from 'path'
 import { spawnSync } from 'child_process'
 import { parse as parseYaml } from 'yaml'
 import { loadCentralConfig } from './shared/central-config.mjs'
@@ -114,6 +115,201 @@ function runCommand(command, commandArgs, errorMessage, env = process.env) {
   }
 }
 
+function normalizeWorkspaceRelativePath(pathValue) {
+  return String(pathValue || '')
+    .replace(/\\/g, '/')
+    .replace(/^\.\//, '')
+    .trim()
+}
+
+function sanitizeFileToken(value, fallback = 'unknown') {
+  return String(value || fallback)
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '') || fallback
+}
+
+function normalizeScenarioVersionForFolder(value) {
+  let normalized = value
+
+  if (typeof normalized === 'number' && Number.isFinite(normalized)) {
+    if (Number.isInteger(normalized)) {
+      normalized = `${normalized}.0`
+    } else {
+      normalized = String(normalized)
+    }
+  }
+
+  const token = sanitizeFileToken(normalized || 'unknown', 'unknown')
+  return token.replace(/\./g, '_')
+}
+
+function buildScenarioOutputFolderName({ scenarioId, scenarioVersion }) {
+  const normalizedId = sanitizeFileToken(scenarioId || 'scenario', 'scenario')
+  const normalizedVersion = normalizeScenarioVersionForFolder(scenarioVersion || 'unknown')
+  return `${normalizedId}_v${normalizedVersion}`
+}
+
+async function collectArtifactDirs(rootDir) {
+  const entries = await readdir(rootDir, { withFileTypes: true })
+  const dirs = []
+
+  for (const entry of entries) {
+    const fullPath = join(rootDir, entry.name)
+    if (entry.isDirectory()) {
+      dirs.push(fullPath)
+      dirs.push(...await collectArtifactDirs(fullPath))
+    }
+  }
+
+  return dirs
+}
+
+async function readJsonIfExists(filePath) {
+  if (!existsSync(filePath)) {
+    return null
+  }
+
+  try {
+    const raw = await readFile(filePath, 'utf8')
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
+
+function readScenarioIdentity(scenarioAbsolutePath) {
+  const fallbackId = sanitizeFileToken(basename(scenarioAbsolutePath, extname(scenarioAbsolutePath)), 'scenario')
+
+  try {
+    const raw = readFileSync(scenarioAbsolutePath, 'utf8')
+    const parsed = parseYaml(raw) || {}
+    const root = parsed.interaction || parsed || {}
+    const scenarioId = sanitizeFileToken(root.id || fallbackId, fallbackId)
+    const scenarioVersion = root.version ?? 'unknown'
+    return { scenarioId, scenarioVersion }
+  } catch {
+    return { scenarioId: fallbackId, scenarioVersion: 'unknown' }
+  }
+}
+
+function getResolvedYamlOutputPathFromSpec(specAbsolutePath) {
+  if (specAbsolutePath.endsWith('.spec.js')) {
+    return specAbsolutePath.slice(0, -'.spec.js'.length) + '.resolved.yaml'
+  }
+  return `${specAbsolutePath}.resolved.yaml`
+}
+
+async function findLatestScenarioVideoArtifacts({ artifactsRoot, scenarioPathRelative }) {
+  if (!existsSync(artifactsRoot)) {
+    return null
+  }
+
+  const normalizedScenarioPath = normalizeWorkspaceRelativePath(scenarioPathRelative)
+  const dirs = [artifactsRoot, ...await collectArtifactDirs(artifactsRoot)]
+  const candidates = []
+
+  for (const dir of dirs) {
+    const timelinePath = join(dir, 'yaml-step-timeline.json')
+    const videoPath = join(dir, 'video.webm')
+    const tracePath = join(dir, 'trace.zip')
+    if (!existsSync(videoPath) || !existsSync(timelinePath)) {
+      continue
+    }
+
+    const timeline = await readJsonIfExists(timelinePath)
+    const sourcePath = normalizeWorkspaceRelativePath(timeline?.scenarioSource)
+    if (sourcePath !== normalizedScenarioPath) {
+      continue
+    }
+
+    const timelineStat = statSync(timelinePath)
+    candidates.push({
+      dir,
+      timelinePath,
+      videoPath,
+      tracePath: existsSync(tracePath) ? tracePath : null,
+      mtimeMs: timelineStat.mtimeMs,
+    })
+  }
+
+  candidates.sort((left, right) => right.mtimeMs - left.mtimeMs)
+  return candidates[0] || null
+}
+
+async function persistVideoRunArtifacts({ scenarioPath, specPath, mode }) {
+  if (mode !== 'video') {
+    return null
+  }
+
+  const scenarioAbsolutePath = resolve(workspaceRoot, scenarioPath)
+  const scenarioPathRelative = relative(workspaceRoot, scenarioAbsolutePath)
+  const specAbsolutePath = resolve(specPath)
+  const specMetaPath = `${specAbsolutePath}.meta.json`
+  const resolvedYamlPath = getResolvedYamlOutputPathFromSpec(specAbsolutePath)
+  const artifactsRoot = resolve(workspaceRoot, 'temp', 'test-results')
+  const latestArtifacts = await findLatestScenarioVideoArtifacts({
+    artifactsRoot,
+    scenarioPathRelative,
+  })
+
+  if (!latestArtifacts) {
+    console.warn('[scenario-runner] No matching video artifacts found in temp/test-results for persistent output export.')
+    return null
+  }
+
+  const { scenarioId, scenarioVersion } = readScenarioIdentity(scenarioAbsolutePath)
+  const scenarioFolderName = buildScenarioOutputFolderName({ scenarioId, scenarioVersion })
+  const targetRoot = resolve(workspaceRoot, 'output', scenarioFolderName)
+  const targetArtifactsDir = join(targetRoot, 'artifacts')
+  const targetSpecsDir = join(targetRoot, 'generated')
+
+  await mkdir(targetRoot, { recursive: true })
+  await mkdir(targetArtifactsDir, { recursive: true })
+  await mkdir(targetSpecsDir, { recursive: true })
+
+  await cp(latestArtifacts.dir, targetArtifactsDir, { recursive: true, force: true })
+  await cp(specAbsolutePath, join(targetSpecsDir, basename(specAbsolutePath)), { force: true })
+  if (existsSync(specMetaPath)) {
+    await cp(specMetaPath, join(targetSpecsDir, basename(specMetaPath)), { force: true })
+  }
+  await cp(scenarioAbsolutePath, join(targetRoot, basename(scenarioAbsolutePath)), { force: true })
+  if (existsSync(resolvedYamlPath)) {
+    await cp(resolvedYamlPath, join(targetRoot, basename(resolvedYamlPath)), { force: true })
+  } else {
+    console.warn(`[scenario-runner] Resolved YAML not found for export: ${relative(workspaceRoot, resolvedYamlPath)}`)
+  }
+
+  const runMetaPath = join(targetRoot, 'run-meta.json')
+  await writeFile(runMetaPath, JSON.stringify({
+    createdAtIso: new Date().toISOString(),
+    scenario: {
+      id: scenarioId,
+      version: scenarioVersion,
+      outputFolder: scenarioFolderName,
+      sourcePathRelative: scenarioPathRelative,
+    },
+    generatedSpec: {
+      sourcePathRelative: relative(workspaceRoot, specAbsolutePath),
+      metaPathRelative: existsSync(specMetaPath) ? relative(workspaceRoot, specMetaPath) : null,
+      resolvedYamlPathRelative: existsSync(resolvedYamlPath) ? relative(workspaceRoot, resolvedYamlPath) : null,
+    },
+    exportedTo: {
+      rootRelative: relative(workspaceRoot, targetRoot),
+      artifactsRelative: relative(workspaceRoot, targetArtifactsDir),
+      generatedRelative: relative(workspaceRoot, targetSpecsDir),
+    },
+    sourceArtifactsDirRelative: relative(workspaceRoot, latestArtifacts.dir),
+  }, null, 2), 'utf8')
+
+  return {
+    scenarioId,
+    scenarioVersion,
+    scenarioFolderName,
+    outputRoot: targetRoot,
+  }
+}
+
 function formatIso(value) {
   return new Date(value).toISOString()
 }
@@ -192,6 +388,18 @@ function normalizeResolution(value) {
   }
 }
 
+function buildScenarioRunId() {
+  const now = new Date()
+  const yyyy = String(now.getFullYear())
+  const mm = String(now.getMonth() + 1).padStart(2, '0')
+  const dd = String(now.getDate()).padStart(2, '0')
+  const hh = String(now.getHours()).padStart(2, '0')
+  const min = String(now.getMinutes()).padStart(2, '0')
+  const ss = String(now.getSeconds()).padStart(2, '0')
+  const ms = String(now.getMilliseconds()).padStart(3, '0')
+  return `${yyyy}${mm}${dd}-${hh}${min}${ss}-${ms}`
+}
+
 function readVideoConfigFromScenario(scenarioAbsolutePath, centralConfig) {
   const fallbackResolution = normalizeResolution(centralConfig?.video?.resolution)
 
@@ -239,6 +447,7 @@ function runPlaywright(specAbsolutePath, playwrightArgs, mode, scenarioPath, cen
   const videoSizeEnv = videoConfig.resolution
     ? `${videoConfig.resolution.width}x${videoConfig.resolution.height}`
     : ''
+  const scenarioRunId = buildScenarioRunId()
 
   if (mode === 'video' && videoConfig.resolution) {
     const sourceLabel = videoConfig.source === 'scenario' ? 'YAML' : 'central config'
@@ -255,11 +464,12 @@ function runPlaywright(specAbsolutePath, playwrightArgs, mode, scenarioPath, cen
       ...process.env,
       SCENARIO_VIDEO_MODE: mode === 'video' ? '1' : '0',
       SCENARIO_VIDEO_SIZE: videoSizeEnv,
+      SCENARIO_RUN_ID: scenarioRunId,
     }
   )
 }
 
-function main() {
+async function main() {
   const central = loadCentralConfig(workspaceRoot)
   const rawOptions = parseArgs(process.argv.slice(2))
   const options = applyConfigDefaults(rawOptions, central.config)
@@ -277,11 +487,19 @@ function main() {
   const playwrightArgs = options.playwrightArgs
 
   runPlaywright(specPath, playwrightArgs, options.mode, options.scenarioPath, central.config, options.verbose)
+
+  const persistedArtifacts = await persistVideoRunArtifacts({
+    scenarioPath: options.scenarioPath,
+    specPath,
+    mode: options.mode,
+  })
+
+  if (persistedArtifacts) {
+    console.log(`[scenario-runner] Exported run artifacts to ${relative(workspaceRoot, persistedArtifacts.outputRoot)}`)
+  }
 }
 
-try {
-  main()
-} catch (error) {
+main().catch((error) => {
   console.error(error.message)
   process.exitCode = 1
-}
+})

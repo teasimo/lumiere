@@ -1,5 +1,10 @@
 import { defineConfig } from '@playwright/test'
 
+function buildRunScopedOutputDir() {
+  const runId = String(process.env.SCENARIO_RUN_ID || '').trim()
+  return runId ? `temp/test-results/${runId}` : 'temp/test-results'
+}
+
 function parseVideoSize(rawValue) {
   const value = String(rawValue || '').trim()
   const match = value.match(/^(\d+)x(\d+)$/)
@@ -27,8 +32,9 @@ const videoConfig = parsedVideoSize
 export default defineConfig({
   testDir: '.',
   testMatch: ['**/*.spec.js'],
-  outputDir: 'temp/test-results',
+  outputDir: buildRunScopedOutputDir(),
   use: {
     video: videoConfig,
+    trace: 'on',
   },
 })

@@ -2,7 +2,7 @@
 
 import { mkdir, readdir, readFile, rm, stat, writeFile } from 'fs/promises'
 import { basename, dirname, extname, join, relative, resolve } from 'path'
-import { parse as parseYaml } from 'yaml'
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { renderScenarioSpecTemplate } from './generator/templates/spec-template.mjs'
 import { loadCentralConfig } from './shared/central-config.mjs'
 import { centralDataFunctions } from './generator/central-data-functions.mjs'
@@ -10,6 +10,19 @@ import { centralDataFunctions } from './generator/central-data-functions.mjs'
 const workspaceRoot = process.cwd()
 const fallbackScenarioDir = 'lunettes/tests'
 const fallbackOutputDir = 'temp/testfiles'
+const INTERACTION_SHORTHAND_KEYS = new Set([
+  'open',
+  'click',
+  'fill',
+  'append',
+  'select',
+  'wait',
+  'assert',
+  'scroll',
+  'search-and-select',
+  'extract-pdf-code',
+  'set-runtime-variable',
+])
 
 function printUsage() {
   console.log([
@@ -127,6 +140,139 @@ function resolveTemplateString(text, context, dataFunctions = {}) {
 
     return value === undefined || value === null ? `{{${expr}}}` : String(value)
   })
+}
+
+function normalizeInteractionShorthandStep(step) {
+  if (!step || typeof step !== 'object' || Array.isArray(step)) {
+    return step
+  }
+
+  if (step.interaction && typeof step.interaction === 'object' && !Array.isArray(step.interaction)) {
+    return step
+  }
+
+  const shorthandKeys = Object.keys(step).filter((key) => INTERACTION_SHORTHAND_KEYS.has(key))
+  if (shorthandKeys.length === 0) {
+    return step
+  }
+
+  if (shorthandKeys.length > 1) {
+    throw new Error(`Step "${String(step.id || 'unknown')}" mixes multiple shorthand interactions: ${shorthandKeys.join(', ')}`)
+  }
+
+  const shorthandType = shorthandKeys[0]
+  const shorthandValue = step[shorthandType]
+  const nextStep = { ...step }
+  delete nextStep[shorthandType]
+
+  const interaction = { type: shorthandType }
+
+  if (shorthandValue && typeof shorthandValue === 'object' && !Array.isArray(shorthandValue)) {
+    interaction.target = shorthandValue
+  } else if (shorthandValue != null && shorthandType === 'open') {
+    interaction.target = { url: String(shorthandValue) }
+  } else if (shorthandValue != null && shorthandType !== 'wait') {
+    interaction.target = { 'data-id': String(shorthandValue) }
+  }
+
+  if (nextStep.value != null && interaction.value == null) {
+    interaction.value = nextStep.value
+    delete nextStep.value
+  }
+
+  if (nextStep.state != null && interaction.state == null) {
+    interaction.state = nextStep.state
+    delete nextStep.state
+  }
+
+  if (nextStep.resultSelector != null && interaction.resultSelector == null) {
+    interaction.resultSelector = nextStep.resultSelector
+    delete nextStep.resultSelector
+  }
+
+  if (nextStep.resultIndex != null && interaction.resultIndex == null) {
+    interaction.resultIndex = nextStep.resultIndex
+    delete nextStep.resultIndex
+  }
+
+  if (nextStep.output != null && interaction.output == null) {
+    interaction.output = nextStep.output
+    delete nextStep.output
+  }
+
+  if (nextStep.pdfPath != null && interaction.pdfPath == null) {
+    interaction.pdfPath = nextStep.pdfPath
+    delete nextStep.pdfPath
+  }
+
+  if (nextStep.regex != null && interaction.regex == null) {
+    interaction.regex = nextStep.regex
+    delete nextStep.regex
+  }
+
+  nextStep.interaction = interaction
+  return nextStep
+}
+
+function normalizeFlowInteractionShorthand(flowEntries) {
+  return (flowEntries || []).map((entry) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      return entry
+    }
+
+    const normalizedEntry = normalizeInteractionShorthandStep(entry)
+    const nestedFlow = Array.isArray(normalizedEntry.flow)
+      ? normalizeFlowInteractionShorthand(normalizedEntry.flow)
+      : undefined
+
+    if (nestedFlow) {
+      return {
+        ...normalizedEntry,
+        flow: nestedFlow,
+      }
+    }
+
+    return normalizedEntry
+  })
+}
+
+function collectFlowStepIds(flowEntries, out = []) {
+  for (const step of flowEntries || []) {
+    if (!step || typeof step !== 'object' || Array.isArray(step)) {
+      continue
+    }
+
+    const stepId = String(step.id || '').trim()
+    if (stepId) {
+      out.push(stepId)
+    }
+
+    if (Array.isArray(step.flow) && step.flow.length > 0) {
+      collectFlowStepIds(step.flow, out)
+    }
+  }
+
+  return out
+}
+
+function assertUniqueFlowStepIds(flowEntries, scenarioPath) {
+  const ids = collectFlowStepIds(flowEntries)
+  const counts = new Map()
+
+  for (const id of ids) {
+    counts.set(id, (counts.get(id) || 0) + 1)
+  }
+
+  const duplicates = [...counts.entries()]
+    .filter(([, count]) => count > 1)
+    .sort((left, right) => left[0].localeCompare(right[0]))
+
+  if (duplicates.length === 0) {
+    return
+  }
+
+  const duplicateText = duplicates.map(([id, count]) => `${id} (${count}x)`).join(', ')
+  throw new Error(`Duplicate step ids are not allowed in scenario "${scenarioPath}": ${duplicateText}`)
 }
 
 function setPathValue(target, pathExpr, value) {
@@ -300,6 +446,28 @@ async function expandFlowIncludes(flowEntries, { baseDir, includeRootDir, contex
   const expanded = []
 
   for (const entry of flowEntries || []) {
+    if (entry && typeof entry === 'object' && Array.isArray(entry.flow)) {
+      const blockPrefix = String(entry.id || '').trim() || String(entry.fragmentId || '').trim() || ''
+      const nextPrefix = idPrefix && blockPrefix ? `${idPrefix}-${blockPrefix}` : (blockPrefix || idPrefix)
+      const resolvedNestedFlow = await expandFlowIncludes(entry.flow, {
+        baseDir,
+        includeRootDir,
+        context,
+        dataFunctions,
+        includeStack,
+        idPrefix: nextPrefix,
+      })
+
+      const resolvedEntry = resolveTemplatesDeep({ ...entry, flow: undefined }, context, dataFunctions)
+      const normalizedEntry = normalizeInteractionShorthandStep(resolvedEntry)
+      const prefixedEntry = prefixFlowEntryId(normalizedEntry, idPrefix)
+      expanded.push({
+        ...prefixedEntry,
+        flow: resolvedNestedFlow,
+      })
+      continue
+    }
+
     if (entry && typeof entry === 'object' && entry.include) {
       const includePathTemplate = String(entry.include ?? '')
       const includePath = resolveTemplateString(includePathTemplate, context, dataFunctions)
@@ -350,7 +518,8 @@ async function expandFlowIncludes(flowEntries, { baseDir, includeRootDir, contex
     }
 
     const resolvedEntry = resolveTemplatesDeep(entry, context, dataFunctions)
-    expanded.push(prefixFlowEntryId(resolvedEntry, idPrefix))
+    const normalizedEntry = normalizeInteractionShorthandStep(resolvedEntry)
+    expanded.push(prefixFlowEntryId(normalizedEntry, idPrefix))
   }
 
   return expanded
@@ -444,6 +613,12 @@ async function scenarioToSpecSource(scenario, scenarioPath, centralConfig, gener
   if (rootWithDefaults.video.wait_between_steps == null) {
     rootWithDefaults.video.wait_between_steps = centralConfig?.video?.wait_between_steps
   }
+  if (rootWithDefaults.video.scroll_delay_ms == null) {
+    rootWithDefaults.video.scroll_delay_ms = centralConfig?.video?.scroll_delay_ms
+  }
+  if (rootWithDefaults.video.autoscroll_smooth == null) {
+    rootWithDefaults.video.autoscroll_smooth = centralConfig?.video?.autoscroll_smooth
+  }
 
   // Load data functions (central + app-specific)
   const dataFunctions = await loadDataFunctions(scenarioPath)
@@ -487,11 +662,30 @@ async function scenarioToSpecSource(scenario, scenarioPath, centralConfig, gener
     generatedSpecPath,
   })
 
-  return renderScenarioSpecTemplate({
-    resolvedRoot,
+  const normalizedResolvedRoot = {
+    ...resolvedRoot,
+    flow: normalizeFlowInteractionShorthand(Array.isArray(resolvedRoot.flow) ? resolvedRoot.flow : []),
+  }
+
+  assertUniqueFlowStepIds(normalizedResolvedRoot.flow, scenarioPath)
+
+  const specSource = renderScenarioSpecTemplate({
+    resolvedRoot: normalizedResolvedRoot,
     scenarioPathRelative: relative(workspaceRoot, resolve(scenarioPath)),
     envFillStrategiesImportPath,
   })
+
+  return {
+    specSource,
+    resolvedRoot: normalizedResolvedRoot,
+  }
+}
+
+function getResolvedYamlOutputPath(specOutputPath) {
+  if (specOutputPath.endsWith('.spec.js')) {
+    return specOutputPath.slice(0, -'.spec.js'.length) + '.resolved.yaml'
+  }
+  return `${specOutputPath}.resolved.yaml`
 }
 
 async function collectScenarioFiles(options) {
@@ -539,16 +733,23 @@ async function generateOne(scenarioFilePath, outDirPath, centralConfig) {
 
   const outputBaseName = `${basename(scenarioFilePath, extname(scenarioFilePath))}.spec.js`
   const outputPath = join(outDirPath, outputBaseName)
-  const specSource = await scenarioToSpecSource(parsed, scenarioFilePath, centralConfig, outputPath)
+  const { specSource, resolvedRoot } = await scenarioToSpecSource(parsed, scenarioFilePath, centralConfig, outputPath)
   const metaPath = `${outputPath}.meta.json`
+  const resolvedYamlPath = getResolvedYamlOutputPath(outputPath)
 
   await writeFile(outputPath, specSource, 'utf8')
+  await writeFile(
+    resolvedYamlPath,
+    stringifyYaml({ interaction: resolvedRoot }),
+    'utf8'
+  )
   await writeFile(
     metaPath,
     JSON.stringify({
       generatedAtIso: new Date().toISOString(),
       generatedAtMs: Date.now(),
       scenarioPathRelative: relative(workspaceRoot, resolve(scenarioFilePath)),
+      resolvedYamlPathRelative: relative(workspaceRoot, resolvedYamlPath),
       sourceYamlMtimeIso: yamlStats.mtime.toISOString(),
       sourceYamlMtimeMs: yamlStats.mtimeMs,
     }, null, 2),

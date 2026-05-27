@@ -17,16 +17,14 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { execSync, spawnSync } from 'child_process'
 
-// Click marker behavior:
-// - For each detected click, we insert a short freeze-frame hold in the video
-// - During that hold we render a visible marker (circle) at click coordinates
-// - These constants define hold duration and frame sampling around the click
-const CLICK_HOLD_DURATION_SEC = 0.5
-const CLICK_FRAME_SLICE_SEC = 0.04
-const CLICK_FRAME_LEAD_SEC = 0.08
-const CLICK_MARKER_GLYPH = '○'
-const CLICK_MARKER_FONT = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
-const CLICK_MARKER_FONT_SIZE = 72
+// Click marker behavior defaults. Can be overridden via CLI flags.
+const DEFAULT_CLICK_BEFORE_MS = 80
+const DEFAULT_CLICK_AFTER_MS = 420
+const DEFAULT_CLICK_FADE_MS = 0
+const DEFAULT_CLICK_MARKER_GLYPH = '○'
+const DEFAULT_CLICK_MARKER_FONT = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
+const DEFAULT_CLICK_MARKER_FONT_SIZE = 72
+const DEFAULT_CLICK_MARKER_SIZE_PX = 96
 
 function getAnnotateMetaPath(filePath) {
   // Sidecar metadata file used by downstream scripts to keep audio/video timing aligned
@@ -39,6 +37,11 @@ const rawArgs = process.argv.slice(2)
 const positionalArgs = []
 let clipStartMs = 0
 let clipEndMs = null
+let clickEnabled = true
+let clickBeforeMs = DEFAULT_CLICK_BEFORE_MS
+let clickAfterMs = DEFAULT_CLICK_AFTER_MS
+let clickFadeMs = DEFAULT_CLICK_FADE_MS
+let clickImagePath = null
 
 // Keep argument parsing intentionally simple:
 // - Known options are consumed
@@ -50,6 +53,27 @@ for (const arg of rawArgs) {
   }
   if (arg.startsWith('--clip-end-ms=')) {
     clipEndMs = Number.parseInt(arg.slice('--clip-end-ms='.length), 10)
+    continue
+  }
+  if (arg.startsWith('--click-enabled=')) {
+    const raw = String(arg.slice('--click-enabled='.length)).trim().toLowerCase()
+    clickEnabled = !(raw === 'false' || raw === '0' || raw === 'no')
+    continue
+  }
+  if (arg.startsWith('--click-before-ms=')) {
+    clickBeforeMs = Number.parseInt(arg.slice('--click-before-ms='.length), 10)
+    continue
+  }
+  if (arg.startsWith('--click-after-ms=')) {
+    clickAfterMs = Number.parseInt(arg.slice('--click-after-ms='.length), 10)
+    continue
+  }
+  if (arg.startsWith('--click-fade-ms=')) {
+    clickFadeMs = Number.parseInt(arg.slice('--click-fade-ms='.length), 10)
+    continue
+  }
+  if (arg.startsWith('--click-image=')) {
+    clickImagePath = String(arg.slice('--click-image='.length)).trim() || null
     continue
   }
   positionalArgs.push(arg)
@@ -71,6 +95,32 @@ if (clipEndMs !== null && (!Number.isFinite(clipEndMs) || clipEndMs <= clipStart
   console.error(`Ungueltiger Clip-Bereich: ${clipStartMs}..${clipEndMs}`)
   process.exit(1)
 }
+
+if (!Number.isFinite(clickBeforeMs) || clickBeforeMs < 0) {
+  console.error(`Ungueltiger Wert fuer --click-before-ms: ${clickBeforeMs}`)
+  process.exit(1)
+}
+
+if (!Number.isFinite(clickAfterMs) || clickAfterMs < 0) {
+  console.error(`Ungueltiger Wert fuer --click-after-ms: ${clickAfterMs}`)
+  process.exit(1)
+}
+
+if (!Number.isFinite(clickFadeMs) || clickFadeMs < 0) {
+  console.error(`Ungueltiger Wert fuer --click-fade-ms: ${clickFadeMs}`)
+  process.exit(1)
+}
+
+if (clickImagePath && !existsSync(clickImagePath)) {
+  console.error(`Klick-Indikator-Bild nicht gefunden: ${clickImagePath}`)
+  process.exit(1)
+}
+
+const clickBeforeSec = clickBeforeMs / 1000
+const clickAfterSec = clickAfterMs / 1000
+const clickHoldDurationSec = Math.max(0, clickBeforeSec + clickAfterSec)
+const clickFrameLeadSec = clickBeforeSec
+const clickFadeSec = clickFadeMs / 1000
 
 if (!existsSync(traceZip)) {
   console.error(`Trace-Datei nicht gefunden: ${traceZip}`)
@@ -255,9 +305,19 @@ function getMediaDurationSeconds(filePath) {
 // This function builds one filter graph that performs all visual operations:
 // - flatten overlapping step segments to a single active label per time slice
 // - draw top-left step labels
-// - insert click hold segments with marker overlay
+// - overlay click markers in-place (no timeline extension)
 // - concat all generated segments to one output stream [vout]
-function buildVideoFilterComplex(segments, clickMarkers, videoDurationSec) {
+function buildVideoFilterComplex(segments, clickMarkers, videoDurationSec, options = {}) {
+  const clickHoldDurationSec = Math.max(0, Number(options.clickHoldDurationSec) || 0)
+  const clickFrameLeadSec = Math.max(0, Number(options.clickFrameLeadSec) || 0)
+  const clickMarkerFadeSec = Math.max(0, Number(options.clickMarkerFadeSec) || 0)
+  const clickMarkerImageInputLabel = typeof options.clickMarkerImageInputLabel === 'string'
+    ? options.clickMarkerImageInputLabel
+    : null
+  const clickMarkerGlyph = String(options.clickMarkerGlyph || DEFAULT_CLICK_MARKER_GLYPH)
+  const clickMarkerFont = String(options.clickMarkerFont || DEFAULT_CLICK_MARKER_FONT)
+  const clickMarkerFontSize = Math.max(1, Number(options.clickMarkerFontSize) || DEFAULT_CLICK_MARKER_FONT_SIZE)
+  const clickMarkerSizePx = Math.max(1, Number(options.clickMarkerSizePx) || DEFAULT_CLICK_MARKER_SIZE_PX)
   // Escape text for drawtext usage.
   const escape = (text) => text
     .replace(/\\/g, '\\\\')
@@ -322,38 +382,36 @@ function buildVideoFilterComplex(segments, clickMarkers, videoDurationSec) {
   let previousSec = 0
   const operations = []
 
-  // Convert each click into two output operations:
-  // - normal segment up to click time
-  // - fixed-length hold segment around click time with marker
+  // Convert each click into up to three operations:
+  // - normal segment before marker window
+  // - marker segment with overlay on original moving video
+  // - normal segment after marker window
   for (const click of sortedClicks) {
     const clickAtSec = Math.min(videoDurationSec, Math.max(previousSec, click.at))
-    if (clickAtSec > previousSec + 0.001) {
+    const markerStartSec = Math.max(previousSec, clickAtSec - clickFrameLeadSec)
+    const markerTailSec = Math.max(0, clickHoldDurationSec - clickFrameLeadSec)
+    const markerEndSec = Math.min(videoDurationSec, clickAtSec + markerTailSec)
+
+    if (markerStartSec > previousSec + 0.001) {
       operations.push({
         type: 'segment',
         start: previousSec,
-        end: clickAtSec,
+        end: markerStartSec,
       })
     }
 
-    // Extract a tiny source slice near click time and extend with tpad(clone)
-    // to create a hold frame of deterministic duration.
-    let frameStart = Math.max(0, Math.min(videoDurationSec - CLICK_FRAME_SLICE_SEC, clickAtSec - CLICK_FRAME_LEAD_SEC))
-    if (!Number.isFinite(frameStart)) frameStart = 0
-    let frameEnd = Math.min(videoDurationSec, frameStart + CLICK_FRAME_SLICE_SEC)
-    if (!(frameEnd > frameStart + 0.001)) {
-      frameStart = Math.max(0, videoDurationSec - CLICK_FRAME_SLICE_SEC)
-      frameEnd = Math.max(frameStart + CLICK_FRAME_SLICE_SEC, videoDurationSec)
+    if (markerEndSec > markerStartSec + 0.001) {
+      operations.push({
+        type: 'marker',
+        start: markerStartSec,
+        end: markerEndSec,
+        x: click.x,
+        y: click.y,
+      })
+      previousSec = markerEndSec
+    } else {
+      previousSec = markerStartSec
     }
-
-    operations.push({
-      type: 'hold',
-      frameStart,
-      frameEnd,
-      x: click.x,
-      y: click.y,
-    })
-
-    previousSec = clickAtSec
   }
 
   if (videoDurationSec > previousSec + 0.001) {
@@ -365,7 +423,7 @@ function buildVideoFilterComplex(segments, clickMarkers, videoDurationSec) {
   }
 
   if (operations.length === 0) {
-    // No click holds at all, just pass through base stream
+    // No click marker overlays at all, just pass through base stream
     filterParts.push('[basev]null[vout]')
   } else {
     // Split base stream so each operation can trim its own time window
@@ -373,7 +431,23 @@ function buildVideoFilterComplex(segments, clickMarkers, videoDurationSec) {
     filterParts.push(`[basev]split=${operations.length}${splitLabels.join('')}`)
 
     const concatInputs = []
-    const circleText = escape(CLICK_MARKER_GLYPH)
+    const circleText = escape(clickMarkerGlyph)
+    const markerOperationIndices = operations
+      .map((operation, index) => ({ operation, index }))
+      .filter(({ operation }) => operation.type === 'marker')
+      .map(({ index }) => index)
+    const clickImageLabelByOperationIndex = new Map()
+
+    if (clickMarkerImageInputLabel && markerOperationIndices.length > 0) {
+      const imageSplitLabels = markerOperationIndices.map((operationIndex) => `[clickimgsplit${operationIndex}]`)
+      filterParts.push(
+        `[${clickMarkerImageInputLabel}]format=rgba,split=${imageSplitLabels.length}${imageSplitLabels.join('')}`
+      )
+      for (const operationIndex of markerOperationIndices) {
+        clickImageLabelByOperationIndex.set(operationIndex, `clickimgsplit${operationIndex}`)
+      }
+    }
+
     operations.forEach((operation, index) => {
       const sourceLabel = `basesplit${index}`
       if (operation.type === 'segment') {
@@ -385,16 +459,43 @@ function buildVideoFilterComplex(segments, clickMarkers, videoDurationSec) {
         return
       }
 
-      const holdBaseLabel = `vholdbase${index}`
-      const holdLabel = `vhold${index}`
-      // Build hold base, then draw click marker on top.
+      const markerBaseLabel = `vmarkbase${index}`
+      const markerLabel = `vmark${index}`
+      const markerDurationSec = Math.max(0, operation.end - operation.start)
       filterParts.push(
-        `[${sourceLabel}]trim=start=${operation.frameStart.toFixed(3)}:end=${operation.frameEnd.toFixed(3)},setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=${CLICK_HOLD_DURATION_SEC.toFixed(3)}[${holdBaseLabel}]`
+        `[${sourceLabel}]trim=start=${operation.start.toFixed(3)}:end=${operation.end.toFixed(3)},setpts=PTS-STARTPTS[${markerBaseLabel}]`
       )
-      filterParts.push(
-        `[${holdBaseLabel}]drawtext=text='${circleText}':fontfile=${CLICK_MARKER_FONT}:fontsize=${CLICK_MARKER_FONT_SIZE}:fontcolor=yellow:borderw=3:bordercolor=black:x=${operation.x}-text_w/2:y=${operation.y}-text_h/2[${holdLabel}]`
-      )
-      concatInputs.push(`[${holdLabel}]`)
+
+      if (clickMarkerImageInputLabel) {
+        const imageSplitLabel = clickImageLabelByOperationIndex.get(index)
+        const imageScaledLabel = `clickimgscaled${index}`
+        const fadeInSec = Math.min(clickMarkerFadeSec, markerDurationSec / 2)
+        const fadeOutSec = Math.min(clickMarkerFadeSec, Math.max(0, markerDurationSec - fadeInSec))
+        const fadeOutStartSec = Math.max(0, markerDurationSec - fadeOutSec)
+
+        if (fadeInSec > 0 || fadeOutSec > 0) {
+          filterParts.push(
+            `[${imageSplitLabel}]trim=start=0:end=${markerDurationSec.toFixed(3)},setpts=PTS-STARTPTS,format=rgba`
+            + `,scale=w=${clickMarkerSizePx}:h=${clickMarkerSizePx}:force_original_aspect_ratio=decrease`
+            + `${fadeInSec > 0 ? `,fade=t=in:st=0:d=${fadeInSec.toFixed(3)}:alpha=1` : ''}`
+            + `${fadeOutSec > 0 ? `,fade=t=out:st=${fadeOutStartSec.toFixed(3)}:d=${fadeOutSec.toFixed(3)}:alpha=1` : ''}`
+            + `[${imageScaledLabel}]`
+          )
+        } else {
+          filterParts.push(
+            `[${imageSplitLabel}]trim=start=0:end=${markerDurationSec.toFixed(3)},setpts=PTS-STARTPTS,format=rgba,scale=w=${clickMarkerSizePx}:h=${clickMarkerSizePx}:force_original_aspect_ratio=decrease[${imageScaledLabel}]`
+          )
+        }
+
+        filterParts.push(
+          `[${markerBaseLabel}][${imageScaledLabel}]overlay=x=${operation.x}-overlay_w/2:y=${operation.y}-overlay_h/2:eof_action=pass[${markerLabel}]`
+        )
+      } else {
+        filterParts.push(
+          `[${markerBaseLabel}]drawtext=text='${circleText}':fontfile=${clickMarkerFont}:fontsize=${clickMarkerFontSize}:fontcolor=yellow:borderw=3:bordercolor=black:x=${operation.x}-text_w/2:y=${operation.y}-text_h/2[${markerLabel}]`
+        )
+      }
+      concatInputs.push(`[${markerLabel}]`)
     })
 
     // Stitch all generated segments/holds into the final stream.
@@ -421,17 +522,26 @@ async function main() {
 
   console.log(`${steps.length} Schritte gefunden:`)
   const { segments, clickMarkers } = toVideoSeconds(steps, clicks, { clipStartMs, clipEndMs })
+  const effectiveClickMarkers = clickEnabled && clickHoldDurationSec > 0 ? clickMarkers : []
   segments.forEach(({ label, start, end }) => {
     console.log(`  [${start.toFixed(1)}s – ${end.toFixed(1)}s] ${label}`)
   })
-  if (clickMarkers.length > 0) {
-    console.log(`${clickMarkers.length} Klick-Markierungen erkannt.`)
+  if (effectiveClickMarkers.length > 0) {
+    console.log(`${effectiveClickMarkers.length} Klick-Markierungen erkannt.`)
   }
 
   const videoDurationSec = clipEndMs !== null
     ? (clipEndMs - clipStartMs) / 1000
     : getMediaDurationSeconds(inputVideo) - (clipStartMs / 1000)
-  const filter = buildVideoFilterComplex(segments, clickMarkers, videoDurationSec)
+  const filter = buildVideoFilterComplex(segments, effectiveClickMarkers, videoDurationSec, {
+    clickHoldDurationSec,
+    clickFrameLeadSec,
+    clickMarkerFadeSec: clickFadeSec,
+    clickMarkerImageInputLabel: clickImagePath ? '1:v' : null,
+    clickMarkerGlyph: DEFAULT_CLICK_MARKER_GLYPH,
+    clickMarkerFont: DEFAULT_CLICK_MARKER_FONT,
+    clickMarkerFontSize: DEFAULT_CLICK_MARKER_FONT_SIZE,
+  })
 
   // Clip options are applied at input level, so filter timeline starts at 0.
   const clipArgs = []
@@ -445,6 +555,7 @@ async function main() {
   const ffmpegArgs = [
     ...clipArgs,
     '-i', inputVideo,
+    ...(clickImagePath ? ['-loop', '1', '-i', clickImagePath] : []),
     '-filter_complex', filter,
     '-map', '[vout]',
     '-c:v', 'libx264',
@@ -466,16 +577,12 @@ async function main() {
     throw new Error(`ffmpeg fehlgeschlagen mit Exit-Code ${ffmpegResult.status ?? 1}`)
   }
 
-  // Persist click-hold metadata for downstream timing reconciliation (e.g. TTS muxing).
+  // No click holds are persisted because click markers are overlay-only and do
+  // not extend timeline duration.
   const annotateMeta = {
     generatedAt: new Date().toISOString(),
-    clickHoldDurationMs: Math.round(CLICK_HOLD_DURATION_SEC * 1000),
-    clickHolds: clickMarkers.map((marker) => ({
-      atMs: Math.round(marker.at * 1000),
-      durationMs: Math.round(CLICK_HOLD_DURATION_SEC * 1000),
-      x: marker.x,
-      y: marker.y,
-    })),
+    clickHoldDurationMs: 0,
+    clickHolds: [],
   }
   await writeFile(
     getAnnotateMetaPath(outputVideo),

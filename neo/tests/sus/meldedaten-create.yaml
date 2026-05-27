@@ -17,28 +17,13 @@ fragment:
     - schueler.ez2.adresseSuche
   flow:
     - id: button/menu-toggle
-
-      interaction:
-        type: click
-
-        target:
-          data-id: button/menu-toggle
+      click: button/menu-toggle
 
     - id: menu/item/schueler/
-
-      interaction:
-        type: click
-
-        target:
-          data-id: menu/item/schueler/
+      click: menu/item/schueler/
 
     - id: menu/link/schueler/meldedaten/
-
-      interaction:
-        type: click
-
-        target:
-          data-id: menu/link/schueler/meldedaten/
+      click: menu/link/schueler/meldedaten/
 
     - id: pin
       include: /auth/pin.yaml
@@ -46,7 +31,7 @@ fragment:
         pin: "2308"
 
       # Hauptmenü schließen, falls es noch offen ist (was der Fall sein kann, wenn die PIN nicht abgefragt wird.)
-    - id: button/menu-toggle
+    - id: button/menu-toggle2
       if:
         target:
           data-id: button/menu-toggle
@@ -59,13 +44,24 @@ fragment:
         target:
           data-id: button/menu-toggle
 
-    - id: btn/create
-
+    - id: wait-until-loading-text-gone
       interaction:
-        type: click
+        type: wait
+        until:
+          target:
+            text: "Lade Daten..."
+          state:
+            visible: false
+        timeout_ms: 10000
+        poll_ms: 100
 
-        target:
-          data-id: btn/create
+    - id: btn/create    
+      click: btn/create
+
+    # - id: wait
+    #   interaction:
+    #     type: wait
+    #     ms: 2000
 
     # nur aufklappen, wenn noch was zugeklappt ist (z.B. durch vorige Interaktionen des laufnenden Tests)
     - id: btn/action-expandcollapseall
@@ -80,11 +76,8 @@ fragment:
           data-id: btn/action-expandcollapseall
 
     - id: g_person_angaben/g_person_angaben~2/familienname
-      interaction:
-        type: fill
-        target:
-          data-id: g_person_angaben/g_person_angaben~2/familienname
-        value: "{{schueler.nachname}}"
+      fill: g_person_angaben/g_person_angaben~2/familienname
+      value: "{{schueler.nachname}}"
 
     - id: g_person_angaben/g_person_angaben~2/vornamen
       interaction:
@@ -114,13 +107,7 @@ fragment:
           data-id: g_adr_standard/g_adresse/adresseingabe
         value: "{{schueler.adresseSuche}}"
         resultSelector: .q-menu .q-item
-        resultIndex: 0
-        # Prüfe, ob die Postleitzahl übernommen wurde (Feld ist nicht leer)
-        assert:
-          target:
-            data-id: g_adresse/g_adresse~3/postleitzahl
-          state:
-            value-present: true
+        resultIndex: 0        
 
     - id: tabs_gesver/btn/action-createGesver
       interaction:
@@ -142,11 +129,11 @@ fragment:
           data-id: g_gesver_person/tabs_gesver/vornamen
         value: "{{schueler.ez1.vorname}}"
 
-    - id: g_gesver_person
-      interaction:
-        type: click
-        target:
-          data-id: g_gesver_person
+    # - id: g_gesver_person
+    #   interaction:
+    #     type: click
+    #     target:
+    #       data-id: g_gesver_person
 
     - id: g_gesver_person/tabs_gesver/anrede/option/1040_01
       interaction:

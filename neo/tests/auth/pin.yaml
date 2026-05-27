@@ -1,5 +1,5 @@
 fragment:
-  id: login
+  id: pin
 
   parameters:
     - pin

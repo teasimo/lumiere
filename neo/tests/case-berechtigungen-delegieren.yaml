@@ -1,0 +1,90 @@
+interaction:
+  id: berechtigungen-delegieren
+  version: 1.0
+
+  
+  video:
+    autoscroll_smooth: false
+    wait_between_steps: 1000
+    resolution:
+      width: 1280
+      height: 720
+
+  presentation:
+    indicators:
+      click:
+        enabled: true
+        before_ms: 100
+        after_ms: 100
+        fade_ms: 50  
+  
+  data:
+    runtime:
+      base_url: https://neo-integration.de
+    actor:
+      username: schule_05423_schulleitung
+      password: "!Neo-2405Neo!"
+    personal:
+      vorname: "Erin"
+      nachname: "Miles"    
+  flow:
+    - id: neo-login
+      include: /auth/neo-login.yaml
+      with:
+        username: "{{actor.username}}"
+        password: "{{actor.password}}"
+
+    - id: navigate-mein-profil
+      include: /navigation/hauptmenue-navigiere.yaml
+      with:
+        hauptmenue-data-id: "menu/link/mein-profil/"
+      presentation:
+        video:
+          start: before
+        didactics:
+          purpose:
+              text: >-
+                Datenqualität ist in der Verwaltung sehr wichtig, um immer auf Basis der richtigen Informationen zu entscheiden. Wichtig hierfür ist, dass pro Schüler*in immer genau nur ein Datensatz mit allen bekannten Informationen vorliegt.
+                Daher zeigen wir Ihnen im zum Einen wie NEO Niedersachsen Sie dabei unterstützt, dass keine doppelten Datensätze angelegt werden. Zum anderen wird Ihnen demonstriert, wie doppelte Datensätze, die dennoch entstanden sind, zu einem Datensatz zusammengeführt werden können.
+          explanation:
+            text: Es gibt für Schüler zwei Stellen an denen Schüler-Datensätze entstehen können. Dies ist zum einen der Bereich der Meldedaten. 
+    
+    # nur aufklappen, wenn noch was zugeklappt ist (z.B. durch vorige Interaktionen des laufnenden Tests)
+    - id: btn/action-expandcollapseall
+      if:
+        target:
+          data-id: g_adr_standard/g_adresse/adresseingabe
+        state:
+          visible: false
+      interaction:
+        type: click
+        target:
+          data-id: btn/action-expandcollapseall
+
+    # Neuer Eintrag
+    - id: g_prp_org_delegate/btn/action-insert-scope
+      click: g_prp_org_delegate/btn/action-insert-scope
+
+    - id: g_prp_org_delegate/$data1/funktion_anzeige
+      select: g_prp_org_delegate/$data1/funktion_anzeige
+      value: "Schulleitung"
+
+    - id: g_prp_org_delegate/$data1/prp_name
+      select: g_prp_org_delegate/$data1/prp_name
+      value: "Meldedatenimport"
+
+    - id: g_prp_org_delegate/$data1/prp_name
+      select: g_prp_org_delegate/$data1/empfaenger_display_name
+      value: "{{personal.nachname}}, {{personal.vorname}}"
+
+    - id: g_prp_org_delegate/$data1/bbo_wirksam_ab
+      fill: g_prp_org_delegate/$data1/bbo_wirksam_ab
+      value: "07.06.2026"
+    
+    - id: g_prp_org_delegate/$data1/bbo_wirksam_ab
+      fill: g_prp_org_delegate/$data1/bbo_wirksam_bis
+      value: "15.06.2026"
+
+    - id: btn/action-save
+      click: btn/action-save
+

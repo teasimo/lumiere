@@ -1,0 +1,34 @@
+fragment:
+  id: hauptmenue-navigiere
+
+  parameters:
+    - hauptmenue-data-id
+  flow:
+
+    - id: button/menu-toggle
+      click: button/menu-toggle
+
+    - id: Hauptmenüpunkt
+      interaction:
+        type: click
+        target:
+          data-id: "{{hauptmenue-data-id}}"
+
+    - id: pin
+      include: /auth/pin.yaml
+      with:
+        pin: "2308"
+
+      # Hauptmenü schließen, falls es noch offen ist (was der Fall sein kann, wenn die PIN nicht abgefragt wird.)
+    - id: button/menu-toggle2
+      if:
+        target:
+          data-id: "button/menu-toggle"
+        state:
+          aria-expanded: true
+
+      interaction:
+        type: click
+
+        target:
+          data-id: "button/menu-toggle"
