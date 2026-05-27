@@ -4,6 +4,7 @@
   console.log('Interaction recorder gestartet.')
 
   const interactions = []
+  const lastRecordedValues = new Map()
 
   const selectorStrategies = [
     {
@@ -64,6 +65,11 @@
       selectorKey: targetInfo.selectorKey,
       selectorValue: targetInfo.selectorValue,
       tag: targetInfo.targetElement.tagName.toLowerCase(),
+      ariaLabel: String(
+        targetInfo.targetElement.getAttribute('aria-label') ||
+        element.getAttribute?.('aria-label') ||
+        ''
+      ).trim(),
       text: (targetInfo.targetElement.innerText || '')
         .trim()
         .replace(/\s+/g, ' ')
@@ -71,47 +77,186 @@
     }
   }
 
+  function buildInteractionTarget(info) {
+    const target = {
+      [info.selectorKey]: info.selectorValue
+    }
+
+    if (info.text) {
+      target.text = info.text
+    }
+
+    if (info.ariaLabel) {
+      target['aria-label'] = info.ariaLabel
+    }
+
+    return target
+  }
+
+  function formatTargetYaml(target, indent = '      ') {
+    return Object.entries(target || {})
+      .map(([key, value]) => `${indent}${key}: ${JSON.stringify(String(value))}`)
+      .join('\n')
+  }
+
+  function getElementValue(element) {
+    if (!element) {
+      return ''
+    }
+
+    const tagName = String(element.tagName || '').toLowerCase()
+    if (tagName === 'input' || tagName === 'textarea' || tagName === 'select') {
+      return String(element.value ?? '')
+    }
+
+    if (element.isContentEditable) {
+      return String(element.textContent || '').trim()
+    }
+
+    return String(element.getAttribute('value') || '')
+  }
+
+  function makeStepId(info, interactionType) {
+    const suffix = interactionType === 'fill' ? 'fill' : interactionType
+    return `${info.selectorValue}-${suffix}`
+      .toLowerCase()
+      .replace(/[^a-z0-9/_-]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+  }
+
+  function logYamlSnippet(entry) {
+    const target = entry.interaction.target || {}
+    const interactionType = entry.interaction.type
+    const valueLine = entry.interaction.value != null
+      ? `\n    value: ${JSON.stringify(String(entry.interaction.value))}`
+      : ''
+    const firstTargetValue = Object.values(target)[0]
+
+    console.log(
+      `
+- id: ${entry.id || firstTargetValue}
+
+  interaction:
+    type: ${interactionType}
+
+    target:
+${formatTargetYaml(target)}${valueLine}
+`
+    )
+  }
+
+  function recordInteraction(eventName, eventTarget, interactionType, options = {}) {
+    const info = getElementInfo(eventTarget)
+
+    if (!info) {
+      return
+    }
+
+    const rawValue = options.readValue ? getElementValue(eventTarget) : null
+    const value = rawValue == null ? null : String(rawValue)
+    const dedupeKey = `${info.selectorKey}:${info.selectorValue}:${interactionType}`
+
+    if (options.skipEmptyValue && value != null && value.trim() === '') {
+      return
+    }
+
+    if (options.dedupeByValue && value != null) {
+      const previous = lastRecordedValues.get(dedupeKey)
+      if (previous === value) {
+        return
+      }
+      lastRecordedValues.set(dedupeKey, value)
+    }
+
+    const interaction = {
+      id: makeStepId(info, interactionType),
+      ts: new Date().toISOString(),
+      interaction: {
+        type: interactionType,
+        target: buildInteractionTarget(info)
+      },
+      meta: {
+        eventName,
+        selectorKey: info.selectorKey,
+        selectorValue: info.selectorValue,
+        tag: info.tag,
+        text: info.text,
+        ariaLabel: info.ariaLabel
+      }
+    }
+
+    if (value != null) {
+      interaction.interaction.value = value
+      interaction.meta.value = value
+    }
+
+    interactions.push(interaction)
+
+    console.log(`--- ${interactionType.toUpperCase()} RECORDED (${eventName}) ---`)
+    console.log(interaction)
+    logYamlSnippet(interaction)
+  }
+
   document.addEventListener(
     'click',
     (event) => {
-      const info = getElementInfo(event.target)
+      recordInteraction('click', event.target, 'click')
+    },
+    true
+  )
 
-      if (!info) {
+  document.addEventListener(
+    'change',
+    (event) => {
+      const target = event.target
+      if (!(target instanceof Element)) {
         return
       }
 
-      const interaction = {
-        ts: new Date().toISOString(),
-        interaction: {
-          type: 'click',
-          target: {
-            [info.selectorKey]: info.selectorValue
-          }
-        },
-        meta: {
-          selectorKey: info.selectorKey,
-          selectorValue: info.selectorValue,
-          tag: info.tag,
-          text: info.text
-        }
+      const role = String(target.getAttribute('role') || '').toLowerCase()
+      const tagName = String(target.tagName || '').toLowerCase()
+      const isSelectLike =
+        tagName === 'select' ||
+        role === 'combobox' ||
+        role === 'listbox' ||
+        String(target.getAttribute('aria-haspopup') || '').toLowerCase() === 'listbox'
+
+      if (!isSelectLike) {
+        return
       }
 
-      interactions.push(interaction)
+      recordInteraction('change', target, 'select', {
+        readValue: true,
+        skipEmptyValue: true,
+        dedupeByValue: true
+      })
+    },
+    true
+  )
 
-      console.log('--- CLICK RECORDED ---')
-      console.log(interaction)
+  document.addEventListener(
+    'blur',
+    (event) => {
+      const target = event.target
+      if (!(target instanceof Element)) {
+        return
+      }
 
-      console.log(
-        `
-- id: ${info.selectorValue}
+      const tagName = String(target.tagName || '').toLowerCase()
+      const isFillable =
+        tagName === 'input' ||
+        tagName === 'textarea' ||
+        target.isContentEditable === true
 
-  interaction:
-    type: click
+      if (!isFillable) {
+        return
+      }
 
-    target:
-      ${info.selectorKey}: ${info.selectorValue}
-`
-      )
+      recordInteraction('blur', target, 'fill', {
+        readValue: true,
+        dedupeByValue: true
+      })
     },
     true
   )
@@ -130,17 +275,20 @@
       const yaml = interactions
         .map((entry) => {
           const target = entry.interaction.target || {}
-          const selectorKey = Object.keys(target)[0]
-          const selectorValue = target[selectorKey]
+          const interactionType = String(entry.interaction.type || 'click')
+          const valueLine = entry.interaction.value != null
+            ? `\n    value: ${JSON.stringify(String(entry.interaction.value))}`
+            : ''
+          const firstTargetValue = Object.values(target)[0]
 
           return `
-- id: ${selectorValue}
+- id: ${entry.id || firstTargetValue}
 
   interaction:
-    type: click
+    type: ${interactionType}
 
     target:
-      ${selectorKey}: ${selectorValue}
+${formatTargetYaml(target)}${valueLine}
 `
         })
         .join('\n')

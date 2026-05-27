@@ -56,23 +56,42 @@ export const centralFillStrategies = [
         return { handled: false }
       }
 
+      const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const optionPattern = new RegExp(`^\\s*${escapeRegExp(expectedValue)}\\s*$`, 'i')
+
       // Find the actual input or parent q-select container
       const container = locator.locator('..').first()
       await container.click()
       await page.waitForTimeout(300)
 
-      // Find the option by text content and click it
       const optionLocator = page
         .locator('[role="option"], [role="menuitem"], .q-menu .q-item')
-        .filter({ hasText: new RegExp(`^${expectedValue}$`, 'i') })
+        .filter({ hasText: optionPattern })
         .first()
 
-      const optionCount = await optionLocator.count()
+      let optionCount = await optionLocator.count()
       if (optionCount === 0) {
-        throw new Error(`Option "${expectedValue}" not found in select for data-testid`)
+        // Quasar dropdowns can virtualize options. Scroll the opened menu to materialize offscreen entries.
+        const activeMenu = page.locator('.q-menu:visible').last()
+        await activeMenu.waitFor({ state: 'visible', timeout: 1500 }).catch(() => {})
+        await activeMenu.hover().catch(() => {})
+
+        for (let index = 0; index < 18; index += 1) {
+          await page.mouse.wheel(0, 320)
+          await page.waitForTimeout(120)
+          optionCount = await optionLocator.count()
+          if (optionCount > 0) {
+            break
+          }
+        }
       }
 
-      await optionLocator.click()
+      if (optionCount === 0) {
+        throw new Error(`Option "${expectedValue}" not found in select dropdown`)
+      }
+
+      await optionLocator.scrollIntoViewIfNeeded()
+      await optionLocator.click({ force: true })
       await page.waitForTimeout(200)
 
       return { handled: true }

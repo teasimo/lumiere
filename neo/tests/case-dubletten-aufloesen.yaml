@@ -24,6 +24,7 @@ interaction:
     actor:
       username: schule_05423_schulleitung
       password: "!Neo-2405Neo!"
+    # ACHTUNG: random darf nicht eingerückt werden
     random: "{{randomNumber()}}"
     # random: "381893"
     schueler:
