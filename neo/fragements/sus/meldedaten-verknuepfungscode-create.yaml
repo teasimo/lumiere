@@ -1,43 +1,26 @@
-interaction:
-  id: login
-  version: 1.0
+fragment:
+  id: meldedaten-verknuepfungscode-create
 
-  video:
-    wait_between_steps: 1000
-    resolution:
-      width: 1280
-      height: 720
-  
-  
-  data:
-    runtime:
-      base_url: https://neo-integration.de
-    actor:
-      username: schule_05423_schulleitung
-      password: "!Neo-2405Neo!"
-    schueler:
-      # vorname: "Sophie Charlotte"
-      # nachname: "Becker"
-      vorname: "Max {{randomNumber()}}"
-      nachname: "Mustermann"
-      geburtsdatum: 01.01.2020
-      geburtsort: Musterstadt
-      adresseSuche: Fuchsbau 6 Emmerke
-      ez1:
-        anrede: Frau
-        vorname: Erika
-        nachname: Mustermann
-        geburtsdatum: 01.01.1975
-        geburtsort: Musterstadt
-        adresseSuche: Fuchsbau 6 Emmerke
-      ez2:
-        anrede: Herr
-        vorname: Erich
-        nachname: Mustermann
-        geburtsdatum: 01.01.1970
-        geburtsort: Musterstadt
-        adresseSuche: Fuchsbau 6 Emmerke
+  parameters:
+    - actor.username
+    - actor.password
+    - schueler.nachname
+    - schueler.vorname
+    - schueler.geburtsdatum
+    - schueler.geburtsort
+    - schueler.adresseSuche
+    - schueler.ez1.nachname
+    - schueler.ez1.vorname
+    - schueler.ez1.anrede
+    - schueler.ez1.adresseSuche
+    - schueler.ez2.nachname
+    - schueler.ez2.vorname
+    - schueler.ez2.anrede
+    - schueler.ez2.adresseSuche
+  outputs:
+    - verknuepfungscode
   flow:
+
     - id: neo-login
       include: /auth/neo-login.yaml
       with:
@@ -69,12 +52,3 @@ interaction:
         schueler.vorname: "{{schueler.vorname}}"        
       outputs:
         verknuepfungscode: "{{verknuepfungscode}}"
-
-    - id: code-anzeigen
-      interaction:
-        type: fill
-        target:
-          text: Schnellfilter
-        value: "{{verknuepfungscode}}"
-
-    

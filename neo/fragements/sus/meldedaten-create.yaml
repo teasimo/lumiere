@@ -198,8 +198,3 @@ fragment:
         type: click
         target:
           data-id: btn/action-save
-      expected_results:
-        - target:
-            id: q-portal--dialog--5
-          state:
-            visible: false

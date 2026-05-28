@@ -1,0 +1,353 @@
+interaction:
+  id: sus-dublette-zusammenfuehren
+  version: 1.0
+  title: Schüler*innen-Datensätze zusammenführen
+
+  
+  video:
+    autoscroll_smooth: false
+    wait_between_steps: 1000
+    resolution:
+      width: 1280
+      height: 720
+
+  presentation:
+    indicators:
+      click:
+        enabled: true
+        before_ms: 800
+        after_ms: 100
+        fade_ms: 50  
+  
+  data:
+    runtime:
+      base_url: https://neo-test.de
+    random: "{{randomNumber()}}"
+    # random: "207563"
+    actor:
+      username: schule_05320_schulleitung
+      password: "!Neo-2405Neo!"
+      
+    schueler:
+      vorname: "Mark {{random}}"
+      nachname: "Mustermann {{random}}"
+      geburtsdatum: 01.01.2020
+      geburtsort: Musterstadt
+      adresseSuche: Fuchsbau 6 Emmerke
+      ez1:
+        anrede: Frau
+        vorname: Laura
+        nachname: Mustermann
+        geburtsdatum: 01.01.1975
+        geburtsort: Musterstadt
+        adresseSuche: Fuchsbau 6 Emmerke
+      ez2:
+        anrede: Herr
+        vorname: Niklas
+        nachname: Mustermann
+        geburtsdatum: 01.01.1970
+        geburtsort: Musterstadt
+        adresseSuche: Fuchsbau 6 Emmerke
+  flow:
+   
+
+    - id: vorbereitung
+      flow:
+      - id: neo-login
+        fragment: neo-login
+        with:
+          username: "{{actor.username}}"
+          password: "{{actor.password}}"
+
+      - id: dublette-anlegen
+        flow:
+        - id: vorbereitung-meldedaten-create1
+          fragment: meldedaten-create
+          with:
+            schueler.nachname: "{{schueler.nachname}}"
+            schueler.vorname: "{{schueler.vorname}}"
+            schueler.geburtsdatum: "{{schueler.geburtsdatum}}"
+            schueler.geburtsort: "{{schueler.geburtsort}}"
+            schueler.adresseSuche: "{{schueler.adresseSuche}}"
+            schueler.ez1.nachname: "{{schueler.ez1.nachname}}"
+            schueler.ez1.vorname: "{{schueler.ez1.vorname}}"
+            schueler.ez1.anrede: "{{schueler.ez1.anrede}}"
+            schueler.ez1.adresseSuche: "{{schueler.ez1.adresseSuche}}"
+            schueler.ez2.nachname: "{{schueler.ez2.nachname}}"
+            schueler.ez2.vorname: "{{schueler.ez2.vorname}}"
+            schueler.ez2.anrede: "{{schueler.ez2.anrede}}"
+            schueler.ez2.adresseSuche: "{{schueler.ez2.adresseSuche}}"
+
+        - id: vorbereitung-meldedaten-create2
+          fragment: meldedaten-create
+          with:
+            schueler.nachname: "{{schueler.nachname}}"
+            schueler.vorname: "{{schueler.vorname}}"
+            schueler.geburtsdatum: "{{schueler.geburtsdatum}}"
+            schueler.geburtsort: "{{schueler.geburtsort}}"
+            schueler.adresseSuche: "{{schueler.adresseSuche}}"
+            schueler.ez1.nachname: "{{schueler.ez1.nachname}}"
+            schueler.ez1.vorname: "{{schueler.ez1.vorname}}"
+            schueler.ez1.anrede: "{{schueler.ez1.anrede}}"
+            schueler.ez1.adresseSuche: "{{schueler.ez1.adresseSuche}}"
+            schueler.ez2.nachname: "{{schueler.ez2.nachname}}"
+            schueler.ez2.vorname: "{{schueler.ez2.vorname}}"
+            schueler.ez2.anrede: "{{schueler.ez2.anrede}}"
+            schueler.ez2.adresseSuche: "{{schueler.ez2.adresseSuche}}"
+
+        # Dubletten-Dialog
+        - id: Dialog-Dublette-bestaetigen       
+          click:
+            text: Ja
+      
+      - id: alle-meldedaten-zu-sus
+        flow:      
+        - id: navigate-meldedaten            
+          fragment: neo-hauptmenue-sus-meldedaten
+        
+        - id: filters
+          click: filters
+        - id: filters/basic/choose
+          click: filters/basic/choose
+        - id: filters/basic/choose/haserst
+          click: filters/basic/choose/haserst
+        - id: filters/apply
+          click: filters/apply
+        - id: controlBtn/pagesize
+          fragment: list-show-all
+
+        - id: controlBtn/actions2
+          interaction:
+            type: click
+            target:
+              data-id: controlBtn/actions
+
+
+        - id: action-mehrfachauswahl
+          interaction:
+            type: click
+
+            target:
+              aria-label: Mehrfachauswahl
+
+        - id: root/btn/action-CommonSelectAllAction
+          click: "@root/btn/action-CommonSelectAllAction"
+          
+        - id: action-aufforderung-schulanmeldung
+          fragment: call-action
+          with:
+            action-label: "Aufforderung zur Schulanmeldung (Nur Verknüpfungscode)"
+
+        - id: Dialog-bestaetigen       
+          interaction:
+            type: click
+            target:
+              text: Ja
+        - id: navigate-sus            
+          fragment: neo-hauptmenue-sus-schuelerinnen              
+
+
+      # VIDEO START
+
+    - id: navigate-start1
+      fragment: neo-hauptmenue-home      
+      
+    - chapter:
+          text: Schüler*innen-Datensätze zusammenführen
+      presentation:
+        didactics:
+          explanation:
+            text: Folgende Funktionalität ermöglicht Ihnen das Zusammenführen von doppelten Schüler*innen-Datensätzen.
+        video:
+          start: before
+
+    - chapter:
+          text:  |-
+            Zweck: Ein Datensatz pro Schüler*in
+          font_size: 36
+          text_y_start: 160
+          line_spacing: 14
+      presentation:
+        didactics:
+          explanation:
+            text: In NEO Niedersachsen sollte für jede Schüler*in immer nur genau ein Datensatz vorliegen, um keine widersprüchlichen Daten zu erzeugen. Ist dies nicht der Fall, sollte man die Daten der verschiedenen Datensätze zusammenführen.
+
+    - chapter:        
+          text: |-
+            Zweck: Ein Datensatz pro Schüler*in
+            Auslöser: Immer nutzbar
+          font_size: 36
+          text_y_start: 160
+          line_spacing: 14
+      presentation:
+        didactics:
+          explanation:
+            text: Diese Funktionalität ist zu jedem Zeitpunkt in NEO Niedersachsen nutzbar.
+
+    - chapter:
+          text: |-
+            Zweck: Ein Datensatz pro Schüler*in
+            Auslöser: Immer nutzbar
+            Berechtigung: Datenpflege der Funktion Schulleitung
+          font_size: 36
+          text_y_start: 160
+          line_spacing: 14
+      presentation:
+        didactics:
+          explanation:
+            text: Sie benötigen für diese Funktionalität die Berechtigung mit dem Namen - Datenpflege -, die in der Funktion - Schulleitung - enthalten ist.
+      
+    - chapter:
+          text: |-
+            Zweck: Ein Datensatz pro Schüler*in
+            Auslöser: Immer nutzbar
+            Berechtigung: Datenpflege der Funktion Schulleitung
+            Wirkung: Datenübernahme und Vormerkung zur Löschung
+          font_size: 36
+          text_y_start: 160
+          line_spacing: 14
+      presentation:
+        didactics:
+          explanation:
+            text: Das Ergebnis ist, dass bei Bedarf Daten aus dem nachrangigen Datensatz in den führenden Datensatz übernommen wurden und der nachrangige Datensatz ausgeblendet und für die Löschung vorgemerkt ist.
+
+    - id: navigate-schueler3          
+      fragment: neo-hauptmenue-sus-schuelerinnen      
+      
+
+    - id: create-filter-sus2
+      presentation:
+        didactics:
+          consequence:
+            text: In diesem Beispiel liegen zwei Datensätze für die gleiche Person vor.
+      flow:      
+      - id: filters
+        fragment: sus-filter-vorname-nachname
+        with:
+          vorname: "{{schueler.vorname}}"
+          nachname: "{{schueler.nachname}}"
+
+    - id: datensatz öffnen
+      presentation:
+          didactics:
+            purpose:
+              text: Um den nachrangigen Datensatz aufzulösen, muss der führende Datensatz geöffnet werden.
+      click: "controlBtn/action-detaillink"
+    
+    
+    
+    - id: verschmelzen      
+
+      flow:
+      - id: Einstellungen-oeffnen
+        click: 
+          text: "Einstellungen"
+    
+      - id: btn_container/btn_container~1/link_schueler_dublette
+        click: btn_container/btn_container~1/link_schueler_dublette
+
+      - id: sus-auswählen
+        presentation:
+          didactics:
+            explanation:
+              text: Hier kann ein nachrangiger Datensatz identifiziert werden. Der Auswahldialog filtert in den Voreinstellungen auf die in NEO Niedersachsen üblichen Merkmale zur Identifikation doppelter Datensätze. Dies sind - Vorname, Nachname, Geburtsort und Geburtsdatum. Diese Angaben des aktuell geöffneten Datensatzes werden automatisch im Dialog als Filter gesetzt, um die Identifikation von Dubletten zu unterstützen.
+        interaction:
+          type: click
+
+          target:
+            aria-label: "{{schueler.nachname}}, {{schueler.vorname}} markieren"
+
+      - id: btn_container/btn_container~1/link_schueler_dublette/uebernehmen
+        click: btn_container/btn_container~1/link_schueler_dublette/uebernehmen
+
+    - id: g_linked/$data0/verschmelzen-btn
+      presentation:
+          didactics:
+            explanation:
+              text: 
+                Identifizierte Dubletten können nun im Folgeschritt mit dem führenden Datensatz zusammengeführt werden.
+      click: "g_linked/$data0/verschmelzen-btn"
+
+    - id: g_action_btns/g_content/btn_merge
+      click: g_action_btns/g_content/btn_merge
+      presentation:
+        video:
+            stop: before
+
+    - id: ja-verschmelzen
+      click:
+        text: Ja
+      presentation:
+        didactics:          
+          consequence:
+            text: Die ausgewählten Daten des nachrangigen Datensatzes wurden nun übernommen und der nun nicht weiter gebrauchte nachrangige Datensatz wird zur Löschung vorgemerkt. 
+
+    - id: navigate-schueler4            
+      fragment: neo-hauptmenue-sus-schuelerinnen
+      
+      presentation:        
+        didactics:
+          explanation:
+            text: Der nachrangige Datensatz, der in den führenden Datensatz übernommen wurde, ist in der Standard-Filterung nun ausgeblendet. 
+
+
+
+    # ausgeblendet zeigen
+    - id: ausgeblendet-zeigen
+      presentation:
+        didactics:
+          purpose: 
+            text: Die als nachrangig markierten sowie die bereits aufgelösten Datensätze können in der Liste der Schüler*innen bis zur Löschung weiterhin eingesehen werden.
+          explanation:
+            text: Hierzu muss die Standard-Filterung angepasst werden, dass diese angezeigt werden.
+      flow:
+      # - id: filter-reset3
+      #   fragment: list-filter-reset
+      - id: filters
+        click: filters
+      
+      - id: filters/basic/0-click
+        interaction:
+          type: click
+          target:
+            data-id: "filters/basic/0"
+            aria-label: "Schüler*in-Markierung"
+
+
+      - id: markierung/markierung/option/16-click
+        interaction:
+          type: click
+          target:
+            data-id: "markierung/markierung/option/16"
+            text: "Dublette (verschmolzen)"
+
+      - id: markierung/markierung/ohne-weg
+        interaction:
+          type: click
+          target:
+            data-id: "markierung/markierung/option/0"
+      
+      - id: markierung/markierung/in-bearbeitung-weg
+        interaction:
+          type: click
+          target:
+            data-id: "markierung/markierung/option/8"
+
+
+      - id: markierung/markierung/option/1-click
+        interaction:
+          type: click
+          target:
+            data-id: "markierung/markierung/option/1"
+            text: "Dublette"
+
+      - id: filters/apply
+        click: filters/apply
+      
+      # - id: filter-reset4
+      #   fragment: list-filter-reset
+      #   presentation:
+      #     explanation:
+      #       text: Die Funktionalität zur endgültigen Löschung dieser Daten wird in einer zukünftigen Version von NEO Niedersachsen bereitgestellt.
+
+

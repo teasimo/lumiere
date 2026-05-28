@@ -1,0 +1,9 @@
+fragment:
+  id: neo-hauptmenue-sus-meldedaten
+  
+  flow:
+    - id: neo-hauptmenue-sus-meldedaten
+      fragment: neo-untermenue
+      with:
+        hauptmenue-data-id: "menu/item/schueler/"
+        untermenue-data-id: "menu/link/schueler/meldedaten/"

@@ -39,30 +39,30 @@ interaction:
         adresseSuche: Fuchsbau 6 Emmerke
   flow:
     - id: neo-login
-      include: /auth/neo-login.yaml
+      fragment: neo-login
       with:
         username: "{{actor.username}}"
         password: "{{actor.password}}"
 
     
     - id: navigate-meldedaten
-      include: /navigation/untermenue-navigiere.yaml
+      fragment: neo-untermenue
       with:
         hauptmenue-data-id: "menu/item/schueler/"
         untermenue-data-id: "menu/link/schueler/meldedaten/"
 
-      presentation:
-        didactics:
-          purpose:
-            text: "Nach dem Login navigieren wir in den Bereich Schueler und dann Meldedaten, der als Ziel fuer diese kurze Demonstration dient."
-          explanation:
-            text: "Die Navigation prueft gleichzeitig, dass die Session korrekt aufgebaut wurde und Menüzugriffe funktionieren."
-        video:
-          start: before
-          stop: after
+    #   presentation:
+    #     didactics:
+    #       purpose:
+    #         text: "Nach dem Login navigieren wir in den Bereich Schueler und dann Meldedaten, der als Ziel fuer diese kurze Demonstration dient."
+    #       explanation:
+    #         text: "Die Navigation prueft gleichzeitig, dass die Session korrekt aufgebaut wurde und Menüzugriffe funktionieren."
+    #     video:
+    #       start: before
+    #       stop: after
 
     - id: create-filter-sus
-      include: /sus/filter-vorname-nachname.yaml
+      fragment: meldedaten-filter-vorname-nachname
       with:
         vorname: "{{schueler.vorname1}} {{random}}"
         nachname: "{{schueler.nachname}} {{random}}"

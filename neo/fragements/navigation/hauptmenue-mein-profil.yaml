@@ -1,0 +1,8 @@
+fragment:
+  id: neo-hauptmenue-mein-profil
+  
+  flow:
+    - id: mein-profil
+      fragment: neo-hauptmenue
+      with:
+        hauptmenue-data-id: menu/link/mein-profil/

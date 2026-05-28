@@ -50,7 +50,7 @@ interaction:
         adresseSuche: Fuchsbau 6 Emmerke
   flow:
     - id: neo-login
-      include: /auth/neo-login.yaml
+      fragment: neo-login
       with:
         username: "{{actor.username}}"
         password: "{{actor.password}}"
@@ -60,7 +60,7 @@ interaction:
       - id: dublette-anlegen
         flow:
         - id: vorbereitung-meldedaten-create1
-          include: /sus/meldedaten-create.yaml
+          fragment: meldedaten-create
           with:
             schueler.nachname: "{{schueler.nachname}} {{random}}"
             schueler.vorname: "{{schueler.vorname1}} {{random}}"
@@ -77,7 +77,7 @@ interaction:
             schueler.ez2.adresseSuche: "{{schueler.ez2.adresseSuche}}"
 
         - id: vorbereitung-meldedaten-create2
-          include: /sus/meldedaten-create.yaml
+          fragment: meldedaten-create
           with:
             schueler.nachname: "{{schueler.nachname}} {{random}}"
             schueler.vorname: "{{schueler.vorname2}} {{random}}"
@@ -94,7 +94,7 @@ interaction:
             schueler.ez2.adresseSuche: "{{schueler.ez2.adresseSuche}}"
           
       - id: navigate-start
-        include: /navigation/hauptmenue-navigiere.yaml
+        fragment: neo-hauptmenue
         with:
           hauptmenue-data-id: "menu/link/"
 
@@ -108,10 +108,7 @@ interaction:
     #             Daher zeigen wir Ihnen im zum Einen wie NEO Niedersachsen Sie dabei unterstützt, dass keine doppelten Datensätze angelegt werden. Zum anderen wird Ihnen demonstriert, wie doppelte Datensätze, die dennoch entstanden sind, zu einem Datensatz zusammengeführt werden können.
 
     - id: navigate-meldedaten            
-      include: /navigation/untermenue-navigiere.yaml
-      with:
-        hauptmenue-data-id: "menu/item/schueler/"
-        untermenue-data-id: "menu/link/schueler/meldedaten/"
+      fragment: neo-hauptmenue-sus-meldedaten
       presentation:
         video:
           start: before        
@@ -133,7 +130,7 @@ interaction:
             explanation:
               text: Zur Demonstration öffnen wir nun einen Datensatz und passen den Namen an, sodass er einem bereits bekannten entspricht.
      
-      include: /sus/filter-vorname-nachname.yaml
+      fragment: meldedaten-filter-vorname-nachname
       with:
         vorname: "{{schueler.vorname1}} {{random}}"
         nachname: "{{schueler.nachname}} {{random}}"      
@@ -167,23 +164,13 @@ interaction:
     - id: loeschen
       flow:
       - id: navigate-meldedaten2
-        include: /navigation/untermenue-navigiere.yaml
-        with:
-          hauptmenue-data-id: "menu/item/schueler/"
-          untermenue-data-id: "menu/link/schueler/meldedaten/"
+        fragment: neo-hauptmenue-sus-meldedaten        
 
       - id: filter-reset
-        flow:
-        - id: root/btn/action-reset-settings
-          click: "@root/btn/action-reset-settings"
-
-        - id: Zurücksetzen
-          click:
-            text: Zurücksetzen
-      
-        
+        fragment: list-filter-reset
+                      
       - id: create-filter-sus2
-        include: /sus/filter-vorname-nachname.yaml
+        fragment: meldedaten-filter-vorname-nachname
         with:
           vorname: "{{schueler.vorname2}} {{random}}"
           nachname: "{{schueler.nachname}} {{random}}"

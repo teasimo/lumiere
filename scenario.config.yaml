@@ -19,19 +19,19 @@ scenario:
       channels:
         purpose:
           enabled: true
-          prefix: "Einleitung:"
+          prefix: ""
         explanation:
           enabled: true
-          prefix: "Erläuterung:"
+          prefix: ""
         warning:
           enabled: true
-          prefix: "Hinweis:"
+          prefix: ""
         consequence:
-          enabled: false
-          prefix: "Auswirkung:"
+          enabled: true
+          prefix: ""
         business_context:
           enabled: false
-          prefix: "Fachlicher Hintergrund:"
+          prefix: ""
 
       timing:
         before_step:

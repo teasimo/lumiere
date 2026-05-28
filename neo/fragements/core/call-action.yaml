@@ -1,0 +1,19 @@
+fragment:
+  id: call-action
+  
+  parameters:
+    - action-label
+  flow:
+    - id: controlBtn/actions
+
+      interaction:
+        type: click
+
+        target:
+          data-id: controlBtn/actions
+
+    - id: menuitem-aufforderung-nur-verknuepfungscode
+      interaction:
+        type: click
+        target:
+          text: "{{action-label}}"

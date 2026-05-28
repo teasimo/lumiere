@@ -1,0 +1,9 @@
+fragment:
+  id: neo-hauptmenue-personal-personalverwaltung
+  
+  flow:
+    - id: neo-hauptmenue-sus-schuelerinnen
+      fragment: neo-untermenue
+      with:
+        hauptmenue-data-id: "menu/item/personal/"
+        untermenue-data-id: "menu/link/personal/personal/"

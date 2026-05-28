@@ -1,0 +1,20 @@
+{
+  "neo-login": "neo/fragements/auth/neo-login.yaml",
+  "pin": "neo/fragements/auth/pin.yaml",
+  "sps-login": "neo/fragements/auth/sps-login.yaml",
+  "call-action": "neo/fragements/core/call-action.yaml",
+  "list-filter-reset": "neo/fragements/list/filter-reset.yaml",
+  "list-show-all": "neo/fragements/list/show-all.yaml",
+  "neo-hauptmenue-home": "neo/fragements/navigation/hauptmenue-home.yaml",
+  "neo-hauptmenue-mein-profil": "neo/fragements/navigation/hauptmenue-mein-profil.yaml",
+  "neo-hauptmenue-sus-meldedaten": "neo/fragements/navigation/hauptmenue-sus-meldedaten.yaml",
+  "neo-hauptmenue-sus-schuelerinnen": "neo/fragements/navigation/hauptmenue-sus-schuelerinnen.yaml",
+  "neo-hauptmenue": "neo/fragements/navigation/hauptmenue.yaml",
+  "neo-untermenue": "neo/fragements/navigation/untermenue.yaml",
+  "meldedaten-aufforderungsschreiben-create": "neo/fragements/sus/meldedaten-aufforderungsschreiben-create.yaml",
+  "meldedaten-create": "neo/fragements/sus/meldedaten-create.yaml",
+  "meldedaten-filter-vorname-nachname": "neo/fragements/sus/meldedaten-filter-vorname-nachname.yaml",
+  "meldedaten-verknuepfungscode-create": "neo/fragements/sus/meldedaten-verknuepfungscode-create.yaml",
+  "aufforderungsschreiben-create": "neo/fragements/sus/sps/verknuepfen.yaml",
+  "sus-filter-vorname-nachname": "neo/fragements/sus/sus-filter-vorname-nachname.yaml"
+}

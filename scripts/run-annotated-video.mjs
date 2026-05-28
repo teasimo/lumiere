@@ -16,6 +16,7 @@ const DEMO_TITLE_INTRO_DURATION_SEC = 2
 const DEMO_TITLE_FONT = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
 const DEMO_INTRO_FADE_DURATION_SEC = 0.4
 const DEMO_STEP_TITLE_DURATION_MS = 2000
+const DEMO_STEP_TITLE_FONT_SIZE = 54
 const DEMO_TTS_CACHE_DIR = join(OUTPUT_ROOT, '_tts-cache')
 const DEMO_TTS_INDEX_PATH = join(DEMO_TTS_CACHE_DIR, 'index.json')
 const VIDEO_HOLD_FRAME_SLICE_SEC = 0.04
@@ -23,6 +24,11 @@ const VIDEO_HOLD_FRAME_LEAD_SEC = 0.08
 const DEFAULT_SLOWMO_MS = 1000
 
 let googleTtsModulePromise
+
+function resolveChapterFadeInDurationMs(chapterDurationMs) {
+  const durationSec = Math.max(1, Number(chapterDurationMs || 0) / 1000)
+  return Math.max(0, Math.round(Math.min(DEMO_INTRO_FADE_DURATION_SEC, durationSec / 3) * 1000))
+}
 
 function printUsage() {
   console.log(`Verwendung:
@@ -535,14 +541,28 @@ function resolveDidacticText(stepEntry, channelName) {
   return text || null
 }
 
+function synthAnonChapterId(idPrefix, index) {
+  return `__anon-chapter-${idPrefix ? `${idPrefix}:` : ''}${index}`
+}
+
 function flattenFlowSteps(flowEntries, out = [], idPrefix = '') {
-  for (const step of flowEntries || []) {
+  for (let index = 0; index < (flowEntries || []).length; index += 1) {
+    const step = flowEntries[index]
     if (!step || typeof step !== 'object') {
       continue
     }
 
     const stepId = String(step.id || '').trim()
     if (!stepId) {
+      if (step.chapter) {
+        // Chapter-only marker without id: include with synthetic id for position tracking
+        out.push({
+          id: synthAnonChapterId(idPrefix, index),
+          step,
+          isIncludeContainer: false,
+          isSyntheticId: true,
+        })
+      }
       continue
     }
 
@@ -608,11 +628,15 @@ function timelineStepMatchesScenarioStepId(timelineStepId, scenarioStepId) {
   )
 }
 
-function collectPresentationVideoDirectivesFromFlow(flowEntries, out = []) {
-  for (const step of flowEntries || []) {
+function collectPresentationVideoDirectivesFromFlow(flowEntries, out = [], idPrefix = '') {
+  for (let index = 0; index < (flowEntries || []).length; index += 1) {
+    const step = flowEntries[index]
     if (!step || typeof step !== 'object') {
       continue
     }
+
+    const stepId = String(step.id || '').trim()
+    const effectiveStepId = stepId || (step.chapter ? synthAnonChapterId(idPrefix, index) : '')
 
     const presentationVideo = step?.presentation?.video
     if (presentationVideo && typeof presentationVideo === 'object') {
@@ -620,7 +644,7 @@ function collectPresentationVideoDirectivesFromFlow(flowEntries, out = []) {
       const stop = presentationVideo.stop != null ? String(presentationVideo.stop).trim().toLowerCase() : null
       if (start || stop) {
         out.push({
-          stepId: String(step.id || '').trim(),
+          stepId: effectiveStepId,
           start,
           stop,
         })
@@ -628,7 +652,8 @@ function collectPresentationVideoDirectivesFromFlow(flowEntries, out = []) {
     }
 
     if (Array.isArray(step.flow) && step.flow.length > 0) {
-      collectPresentationVideoDirectivesFromFlow(step.flow, out)
+      const childPrefix = stepId ? (idPrefix ? `${idPrefix}-${stepId}` : stepId) : idPrefix
+      collectPresentationVideoDirectivesFromFlow(step.flow, out, childPrefix)
     }
   }
 
@@ -670,6 +695,25 @@ function resolvePresentationStepWindowMs(stepId, timelineSteps) {
   }
 }
 
+function resolveNeighborWindowForAnonStep(stepId, flattenedFlowStepEntries, sortedTimelineSteps) {
+  const entryIndex = flattenedFlowStepEntries.findIndex((e) => e.id === stepId)
+  if (entryIndex < 0) return null
+
+  for (let i = entryIndex + 1; i < flattenedFlowStepEntries.length; i += 1) {
+    if (flattenedFlowStepEntries[i].isSyntheticId) continue
+    const w = resolvePresentationStepWindowMs(flattenedFlowStepEntries[i].id, sortedTimelineSteps)
+    if (w) return w
+  }
+
+  for (let i = entryIndex - 1; i >= 0; i -= 1) {
+    if (flattenedFlowStepEntries[i].isSyntheticId) continue
+    const w = resolvePresentationStepWindowMs(flattenedFlowStepEntries[i].id, sortedTimelineSteps)
+    if (w) return w
+  }
+
+  return null
+}
+
 function resolveScenarioPresentationVideoRangeFromTimeline({ scenarioRoot, timelineReport }) {
   const flow = Array.isArray(scenarioRoot?.flow) ? scenarioRoot.flow : []
   const timelineSteps = Array.isArray(timelineReport?.steps) ? timelineReport.steps : []
@@ -682,6 +726,7 @@ function resolveScenarioPresentationVideoRangeFromTimeline({ scenarioRoot, timel
     return null
   }
 
+  const flattenedFlowStepEntries = flattenFlowSteps(flow)
   const sortedTimelineSteps = [...timelineSteps].sort((left, right) => Number(left.startedAtMs || 0) - Number(right.startedAtMs || 0))
   const originMs = Number(sortedTimelineSteps[0]?.startedAtMs || 0)
   if (!Number.isFinite(originMs)) {
@@ -693,9 +738,12 @@ function resolveScenarioPresentationVideoRangeFromTimeline({ scenarioRoot, timel
   let startDirectiveStepId = null
 
   for (const directive of directives) {
-    const window = resolvePresentationStepWindowMs(directive.stepId, sortedTimelineSteps)
+    let window = resolvePresentationStepWindowMs(directive.stepId, sortedTimelineSteps)
     if (!window) {
-      console.warn(`[scenario-tts] presentation.video for step "${directive.stepId}" ignored: step not found in timeline.`)
+      window = resolveNeighborWindowForAnonStep(directive.stepId, flattenedFlowStepEntries, sortedTimelineSteps)
+    }
+    if (!window) {
+      console.warn(`[scenario-tts] presentation.video for step "${directive.stepId}" ignored: step not found in timeline and no neighbor found.`)
       continue
     }
 
@@ -916,6 +964,138 @@ function buildNarrationsFromScenarioTimeline({ scenarioRoot, timelineReport, pro
   return narrations
 }
 
+function buildChapterNarrationsFromScenario({ scenarioRoot, chapterTitles, profile, voiceOverride = null }) {
+  const flow = Array.isArray(scenarioRoot?.flow) ? scenarioRoot.flow : []
+  const flattenedFlowStepEntries = flattenFlowSteps(flow)
+  const stepById = new Map(flattenedFlowStepEntries.map((entry) => [String(entry?.id || '').trim(), entry?.step || null]))
+
+  const channelsConfig = profile?.channels && typeof profile.channels === 'object' ? profile.channels : {}
+  const timing = profile?.timing && typeof profile.timing === 'object' ? profile.timing : {}
+  const beforeChannels = Array.isArray(timing.before_step) ? timing.before_step.map(String) : []
+  const duringChannels = Array.isArray(timing.during_step) ? timing.during_step.map(String) : []
+  const afterChannels = Array.isArray(timing.after_step) ? timing.after_step.map(String) : []
+  const pauses = profile?.pauses && typeof profile.pauses === 'object' ? profile.pauses : {}
+  const betweenChannelsMs = Math.max(0, Number(pauses.between_channels_ms) || 0)
+  const beforeActionMs = Math.max(0, Number(pauses.before_action_ms) || 0)
+  const afterActionMs = Math.max(0, Number(pauses.after_action_ms) || 0)
+  const minWindowMs = Math.max(1, betweenChannelsMs || 1)
+  const profileVoice = typeof profile?.voice === 'string' && profile.voice.trim() ? profile.voice.trim() : null
+
+  const narrations = []
+
+  function appendSequence({ stepId, scenarioStepId, stepEntry, anchor, channelList, baseMs, maxEndMs = null, explanationDelayMs = 0, chapterStartMs = null }) {
+    let cursor = Math.max(0, Math.floor(baseMs))
+
+    for (const channelNameRaw of channelList) {
+      const channelName = String(channelNameRaw || '').trim()
+      if (!channelName) continue
+
+      const channelConfig = channelsConfig[channelName]
+      if (!channelConfig || channelConfig.enabled !== true) {
+        continue
+      }
+
+      const didacticText = resolveDidacticText(stepEntry, channelName)
+      if (!didacticText) {
+        continue
+      }
+
+      const prefix = typeof channelConfig.prefix === 'string' ? channelConfig.prefix.trim() : ''
+      const spokenText = prefix ? `${prefix} ${didacticText}` : didacticText
+
+      const effectiveStartMs = (anchor === 'during' && channelName === 'explanation')
+        ? cursor + Math.max(0, Math.floor(explanationDelayMs || 0))
+        : cursor
+      const startMs = Math.max(0, Math.floor(effectiveStartMs))
+      const unclampedEndMs = Math.max(startMs + 1, Math.floor(cursor + minWindowMs))
+      let endMs = Number.isFinite(maxEndMs)
+        ? Math.max(startMs + 1, Math.min(unclampedEndMs, Math.floor(maxEndMs)))
+        : unclampedEndMs
+
+      // For chapter overlays, keep during-narration inside the full chapter window
+      // so muxing does not create artificial overflow holds.
+      if (anchor === 'during' && Number.isFinite(maxEndMs)) {
+        endMs = Math.max(startMs + 1, Math.floor(maxEndMs))
+      }
+
+      narrations.push({
+        id: `${stepId}-chapter-${anchor}-${channelName}`,
+        startMs,
+        endMs,
+        text: spokenText,
+        sourceTimelineStepId: stepId,
+        sourceScenarioStepId: scenarioStepId,
+        sourceAnchor: `chapter-${anchor}`,
+        sourceKind: 'chapter',
+        sourceChannel: channelName,
+        sourceChapterStartMs: Number.isFinite(chapterStartMs) ? Math.max(0, chapterStartMs) : undefined,
+        voice: voiceOverride || profileVoice || undefined,
+      })
+
+      cursor = endMs + betweenChannelsMs
+    }
+  }
+
+  const sortedChapterTitles = [...(chapterTitles || [])]
+    .sort((left, right) => Number(left?.atMs || 0) - Number(right?.atMs || 0))
+
+  let chapterTimelineCursorMs = 0
+  for (const chapterTitle of sortedChapterTitles) {
+    const scenarioStepId = String(chapterTitle?.sourceScenarioStepId || '').trim()
+    if (!scenarioStepId) {
+      continue
+    }
+
+    const stepEntry = stepById.get(scenarioStepId)
+    if (!stepEntry || typeof stepEntry !== 'object') {
+      continue
+    }
+
+    const chapterAnchorMs = Math.max(0, Math.floor(Number(chapterTitle?.atMs) || 0))
+    const chapterDurationMs = Math.max(1, Math.floor(Number(chapterTitle?.durationMs) || DEMO_STEP_TITLE_DURATION_MS))
+    const chapterStartMs = Math.max(chapterAnchorMs, chapterTimelineCursorMs)
+    const chapterEndMs = chapterStartMs + chapterDurationMs
+    const chapterFadeInMs = resolveChapterFadeInDurationMs(chapterDurationMs)
+    const stepId = String(chapterTitle?.id || scenarioStepId).trim() || scenarioStepId
+    chapterTimelineCursorMs = chapterEndMs
+
+    appendSequence({
+      stepId,
+      scenarioStepId,
+      stepEntry,
+      anchor: 'before',
+      channelList: beforeChannels,
+      baseMs: Math.max(0, chapterStartMs - beforeActionMs),
+      chapterStartMs,
+    })
+
+    appendSequence({
+      stepId,
+      scenarioStepId,
+      stepEntry,
+      anchor: 'during',
+      channelList: duringChannels,
+      baseMs: chapterStartMs,
+      maxEndMs: chapterEndMs,
+      explanationDelayMs: chapterFadeInMs,
+      chapterStartMs,
+    })
+
+    appendSequence({
+      stepId,
+      scenarioStepId,
+      stepEntry,
+      anchor: 'after',
+      channelList: afterChannels,
+      baseMs: chapterEndMs + afterActionMs,
+      chapterStartMs,
+    })
+  }
+
+  narrations.sort((left, right) => left.startMs - right.startMs)
+  return narrations
+}
+
 function resolveScenarioChapterCard(stepEntry) {
   const chapter = stepEntry?.chapter
   if (!chapter || typeof chapter !== 'object' || Array.isArray(chapter)) {
@@ -927,15 +1107,33 @@ function resolveScenarioChapterCard(stepEntry) {
     return null
   }
 
+  const hasExplicitDuration = chapter.duration_ms != null || chapter.durationMs != null
   const rawDuration = Number(chapter.duration_ms ?? chapter.durationMs)
   const durationMs = Math.max(
     1000,
     Number.isFinite(rawDuration) ? Math.floor(rawDuration) : DEMO_STEP_TITLE_DURATION_MS,
   )
+  const rawFontSize = Number(chapter.font_size ?? chapter.fontSize)
+  const fontSize = Math.max(
+    1,
+    Number.isFinite(rawFontSize) ? Math.floor(rawFontSize) : DEMO_STEP_TITLE_FONT_SIZE,
+  )
+  const rawTextYStart = Number(chapter.text_y_start ?? chapter.textYStart)
+  const textYStart = Number.isFinite(rawTextYStart)
+    ? Math.max(0, Math.floor(rawTextYStart))
+    : null
+  const rawLineSpacing = Number(chapter.line_spacing ?? chapter.lineSpacing)
+  const lineSpacing = Number.isFinite(rawLineSpacing)
+    ? Math.max(0, Math.floor(rawLineSpacing))
+    : null
 
   return {
     text,
     durationMs,
+    fontSize,
+    textYStart,
+    lineSpacing,
+    hasExplicitDuration,
   }
 }
 
@@ -1013,6 +1211,10 @@ function buildScenarioChapterTitlesFromTimeline({ scenarioRoot, timelineReport, 
         title: chapterCard.text,
         atMs: 0,
         durationMs: chapterCard.durationMs,
+        fontSize: chapterCard.fontSize,
+        textYStart: chapterCard.textYStart,
+        lineSpacing: chapterCard.lineSpacing,
+        hasExplicitDuration: chapterCard.hasExplicitDuration,
         sourceTimelineStepId: chapterStepId,
         sourceScenarioStepId: chapterStepId,
       })
@@ -1027,6 +1229,10 @@ function buildScenarioChapterTitlesFromTimeline({ scenarioRoot, timelineReport, 
       title: chapterCard.text,
       atMs: Math.max(0, absoluteAtMs - clipStartMs),
       durationMs: chapterCard.durationMs,
+      fontSize: chapterCard.fontSize,
+      textYStart: chapterCard.textYStart,
+      lineSpacing: chapterCard.lineSpacing,
+      hasExplicitDuration: chapterCard.hasExplicitDuration,
       sourceTimelineStepId: chapterStepId,
       sourceScenarioStepId: chapterStepId,
     })
@@ -1102,6 +1308,95 @@ function applyClickHoldShift(timeMs, clickHolds) {
   return timeMs + shiftMs
 }
 
+function applyNarrationTimingToAudioFiles(audioFiles, narrations) {
+  const timingById = new Map(
+    (Array.isArray(narrations) ? narrations : []).map((entry) => [String(entry?.id || ''), entry])
+  )
+
+  return (Array.isArray(audioFiles) ? audioFiles : []).map((entry) => {
+    const timing = timingById.get(String(entry?.id || ''))
+    if (!timing) {
+      return entry
+    }
+
+    return {
+      ...entry,
+      startMs: Number(timing.startMs),
+      endMs: Number(timing.endMs),
+      sourceAnchor: timing.sourceAnchor,
+      sourceScenarioStepId: timing.sourceScenarioStepId,
+      sourceTimelineStepId: timing.sourceTimelineStepId,
+      sourceKind: timing.sourceKind,
+      sourceChannel: timing.sourceChannel,
+    }
+  })
+}
+
+function resolveChapterDurationsFromSynthesizedAudio({ chapterTitles, chapterNarrations, audioFiles }) {
+  const chapterByScenarioStepId = new Map(
+    (Array.isArray(chapterTitles) ? chapterTitles : []).map((entry) => [String(entry?.sourceScenarioStepId || '').trim(), entry])
+  )
+  const chapterNarrationById = new Map(
+    (Array.isArray(chapterNarrations) ? chapterNarrations : []).map((entry) => [String(entry?.id || ''), entry])
+  )
+
+  const chapterExplanationDurations = new Map()
+  const chapterFallbackDurations = new Map()
+
+  for (const audioFile of Array.isArray(audioFiles) ? audioFiles : []) {
+    const narrationId = String(audioFile?.id || '')
+    const narration = chapterNarrationById.get(narrationId)
+    if (!narration) {
+      continue
+    }
+
+    const scenarioStepId = String(narration?.sourceScenarioStepId || '').trim()
+    if (!scenarioStepId || !chapterByScenarioStepId.has(scenarioStepId)) {
+      continue
+    }
+
+    const audioDurationMs = Math.max(1, Math.round(getMediaDurationSeconds(audioFile.file) * 1000))
+    const chapterStartFromNarration = Number(narration?.sourceChapterStartMs)
+    const chapterStartMs = Number.isFinite(chapterStartFromNarration)
+      ? Math.max(0, chapterStartFromNarration)
+      : Math.max(0, Number(chapterByScenarioStepId.get(scenarioStepId)?.atMs) || 0)
+    const narrationStartMs = Math.max(chapterStartMs, Number(narration?.startMs) || chapterStartMs)
+    const relativeEndMs = Math.max(1, Math.round((narrationStartMs - chapterStartMs) + audioDurationMs))
+
+    const existingFallback = Math.max(0, Number(chapterFallbackDurations.get(scenarioStepId) || 0))
+    chapterFallbackDurations.set(scenarioStepId, Math.max(existingFallback, relativeEndMs))
+
+    if (String(narration?.sourceChannel || '').trim() === 'explanation') {
+      const existingExplanation = Math.max(0, Number(chapterExplanationDurations.get(scenarioStepId) || 0))
+      chapterExplanationDurations.set(scenarioStepId, Math.max(existingExplanation, relativeEndMs))
+    }
+  }
+
+  return (Array.isArray(chapterTitles) ? chapterTitles : []).map((chapterTitle) => {
+    const scenarioStepId = String(chapterTitle?.sourceScenarioStepId || '').trim()
+    if (!scenarioStepId) {
+      return chapterTitle
+    }
+
+    if (chapterTitle.hasExplicitDuration) {
+      return chapterTitle
+    }
+
+    const autoDurationMs = Math.max(
+      0,
+      Number(chapterExplanationDurations.get(scenarioStepId) || chapterFallbackDurations.get(scenarioStepId) || 0),
+    )
+    if (!Number.isFinite(autoDurationMs) || autoDurationMs <= 0) {
+      return chapterTitle
+    }
+
+    return {
+      ...chapterTitle,
+      durationMs: Math.max(1, Math.floor(autoDurationMs)),
+    }
+  })
+}
+
 async function resolveVideoTitleFromDemoDir(demoDir) {
   const titleData = (await readJsonIfExists(join(demoDir, 'timeline.title.json'))) || {}
   const title = typeof titleData.title === 'string' ? titleData.title.trim() : ''
@@ -1168,6 +1463,18 @@ async function resolveStepTitlesFromDemoDir(demoDir) {
       throw new Error(`Step-Title ${entry.id || 'unknown'}: title darf nicht leer sein.`)
     }
     const durationMs = Math.max(1000, Number(entry.durationMs) || DEMO_STEP_TITLE_DURATION_MS)
+    const fontSize = Math.max(
+      1,
+      Number(entry.fontSize ?? entry.font_size) || DEMO_STEP_TITLE_FONT_SIZE,
+    )
+    const rawTextYStart = Number(entry.textYStart ?? entry.text_y_start)
+    const textYStart = Number.isFinite(rawTextYStart)
+      ? Math.max(0, Math.floor(rawTextYStart))
+      : null
+    const rawLineSpacing = Number(entry.lineSpacing ?? entry.line_spacing)
+    const lineSpacing = Number.isFinite(rawLineSpacing)
+      ? Math.max(0, Math.floor(rawLineSpacing))
+      : null
     const clipRelativeAtMs = atMs - clip.startMs
     if (clip.endMs !== null && atMs >= clip.endMs) return null
     return {
@@ -1175,6 +1482,9 @@ async function resolveStepTitlesFromDemoDir(demoDir) {
       title,
       atMs: clipRelativeAtMs,
       durationMs,
+      fontSize,
+      textYStart,
+      lineSpacing,
     }
   }).filter(Boolean)
 
@@ -1476,6 +1786,17 @@ function insertStepTitleCardsIntoVideo({ inputVideo, outputVideo, stepTitles }) 
   for (const stepTitle of sortedStepTitles) {
     const atSec = Math.min(videoDurationSec, Math.max(previousSec, stepTitle.atMs / 1000))
     const durationSec = Math.max(1, stepTitle.durationMs / 1000)
+    const fontSize = Math.max(1, Number(stepTitle.fontSize) || DEMO_STEP_TITLE_FONT_SIZE)
+    const customTextYStart = Number(stepTitle.textYStart ?? stepTitle.text_y_start)
+    const hasCustomTextYStart = Number.isFinite(customTextYStart)
+    const textYStart = hasCustomTextYStart ? Math.max(0, Math.floor(customTextYStart)) : 0
+    const customLineSpacing = Number(stepTitle.lineSpacing ?? stepTitle.line_spacing)
+    const lineSpacing = Number.isFinite(customLineSpacing) ? Math.max(0, Math.floor(customLineSpacing)) : 8
+    const titleLines = String(stepTitle.title || '')
+      .split(/\r?\n/g)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+    const renderLines = titleLines.length > 0 ? titleLines : [String(stepTitle.title || '').trim() || ' ']
     const fadeDurationSec = Math.min(DEMO_INTRO_FADE_DURATION_SEC, durationSec / 3)
     const endFadeSec = durationSec - fadeDurationSec
 
@@ -1498,12 +1819,19 @@ function insertStepTitleCardsIntoVideo({ inputVideo, outputVideo, stepTitles }) 
     }
 
     const titleLabel = `vtitle${segmentIndex++}`
+    const titleDrawtextFilters = renderLines.map((line, lineIndex) => {
+      const yExpr = hasCustomTextYStart
+        ? `${textYStart}+${lineIndex}*(${fontSize + lineSpacing})`
+        : `(h-text_h)/2+(${(lineIndex - ((renderLines.length - 1) / 2)).toFixed(3)})*(${fontSize + lineSpacing})`
+      return `drawtext=text='${escapeFfmpegDrawtext(line)}':fontfile=${DEMO_TITLE_FONT}:fontsize=${fontSize}:fontcolor=black:x=(w-text_w)/2:y=${yExpr}`
+    }).join(',')
+
     filterParts.push(
       `[0:v]trim=start=${frameSrc.toFixed(3)}:end=${frameEnd.toFixed(3)},` +
       `setpts=PTS-STARTPTS,` +
       `tpad=stop_mode=clone:stop_duration=${durationSec.toFixed(3)},` +
       `drawbox=x=0:y=0:w=iw:h=ih:color=white:t=fill,` +
-      `drawtext=text='${escapeFfmpegDrawtext(stepTitle.title)}':fontfile=${DEMO_TITLE_FONT}:fontsize=54:fontcolor=black:x=(w-text_w)/2:y=(h-text_h)/2,` +
+      `${titleDrawtextFilters},` +
       `fade=t=in:st=0:d=${fadeDurationSec.toFixed(3)}:color=white,` +
       `fade=t=out:st=${endFadeSec.toFixed(3)}:d=${fadeDurationSec.toFixed(3)}:color=white` +
       `[${titleLabel}]`
@@ -2359,10 +2687,59 @@ async function runScenarioTtsMode({ scenarioPath, profileName, outputVideo, ttsV
       .filter(Boolean)
   }
 
-  const chapterTitlesForInsertion = rawChapterTitles.map((entry) => ({
+  let chapterTitlesForInsertion = rawChapterTitles.map((entry) => ({
     ...entry,
     atMs: applyClickHoldShift(entry.atMs, clickHolds),
   }))
+
+  let chapterNarrations = buildChapterNarrationsFromScenario({
+    scenarioRoot,
+    chapterTitles: chapterTitlesForInsertion,
+    profile,
+    voiceOverride: ttsVoice,
+  })
+  if (chapterNarrations.length > 0) {
+    effectiveNarrations = [...effectiveNarrations, ...chapterNarrations]
+    effectiveNarrations.sort((left, right) => Number(left?.startMs || 0) - Number(right?.startMs || 0))
+  }
+
+  let synthesizedNarrations = null
+  async function ensureSynthesizedNarrations() {
+    if (synthesizedNarrations || !effectiveNarrations.length) {
+      return synthesizedNarrations
+    }
+
+    synthesizedNarrations = await synthesizeNarrations(artifacts.dir, effectiveNarrations, ttsVoice)
+    console.log(`TTS-Engine: ${synthesizedNarrations.engine}. Narrationsdateien: ${synthesizedNarrations.audioFiles.length}. Cache: ${synthesizedNarrations.cacheHits} Treffer, ${synthesizedNarrations.cacheMisses} neu erzeugt (${synthesizedNarrations.cacheDir})`)
+    return synthesizedNarrations
+  }
+
+  const hasAutoDurationChapter = chapterTitlesForInsertion.some((entry) => !entry.hasExplicitDuration)
+  if (hasAutoDurationChapter && chapterNarrations.length > 0 && effectiveNarrations.length > 0) {
+    const synthesized = await ensureSynthesizedNarrations()
+    chapterTitlesForInsertion = resolveChapterDurationsFromSynthesizedAudio({
+      chapterTitles: chapterTitlesForInsertion,
+      chapterNarrations,
+      audioFiles: synthesized?.audioFiles || [],
+    })
+
+    // Chapter windows changed; rebuild chapter narrations and replace old chapter entries.
+    chapterNarrations = buildChapterNarrationsFromScenario({
+      scenarioRoot,
+      chapterTitles: chapterTitlesForInsertion,
+      profile,
+      voiceOverride: ttsVoice,
+    })
+    effectiveNarrations = [
+      ...effectiveNarrations.filter((entry) => String(entry?.sourceKind || '').trim() !== 'chapter'),
+      ...chapterNarrations,
+    ]
+    effectiveNarrations.sort((left, right) => Number(left?.startMs || 0) - Number(right?.startMs || 0))
+
+    // Drop precomputed synth cache so final mux uses audio files aligned with refreshed timing.
+    synthesizedNarrations = null
+  }
+
   const chapterHoldsForInsertion = chapterTitlesForInsertion.map((entry) => ({
     atMs: entry.atMs,
     durationMs: entry.durationMs,
@@ -2371,6 +2748,10 @@ async function runScenarioTtsMode({ scenarioPath, profileName, outputVideo, ttsV
   if (chapterHoldsForInsertion.length > 0) {
     effectiveNarrations = effectiveNarrations
       .map((entry) => {
+        if (String(entry?.sourceKind || '').trim() === 'chapter') {
+          return entry
+        }
+
         const startMs = Number(entry?.startMs)
         const endMs = Number(entry?.endMs)
         if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs) {
@@ -2385,6 +2766,14 @@ async function runScenarioTtsMode({ scenarioPath, profileName, outputVideo, ttsV
       })
       .filter(Boolean)
   }
+
+  // Keep timeline strictly ordered before synthesis/mux. Otherwise overflow
+  // handling may shift early chapter narrations behind later normal steps.
+  effectiveNarrations.sort((left, right) => {
+    const startDiff = Number(left?.startMs || 0) - Number(right?.startMs || 0)
+    if (startDiff !== 0) return startDiff
+    return Number(left?.endMs || 0) - Number(right?.endMs || 0)
+  })
 
   let clickHoldsForMux = clickHolds
   if (clickHolds.length > 0 && chapterHoldsForInsertion.length > 0) {
@@ -2415,8 +2804,8 @@ async function runScenarioTtsMode({ scenarioPath, profileName, outputVideo, ttsV
     return
   }
 
-  const { audioFiles, engine, cacheHits, cacheMisses, cacheDir } = await synthesizeNarrations(artifacts.dir, effectiveNarrations, ttsVoice)
-  console.log(`TTS-Engine: ${engine}. Narrationsdateien: ${audioFiles.length}. Cache: ${cacheHits} Treffer, ${cacheMisses} neu erzeugt (${cacheDir})`)
+  const synthesized = await ensureSynthesizedNarrations()
+  const audioFiles = applyNarrationTimingToAudioFiles(synthesized.audioFiles, effectiveNarrations)
 
   console.log(`Mische Profil-Voiceover in Video: ${sourceVideoForTts}`)
   const muxMeta = muxNarrationAudioIntoVideo({

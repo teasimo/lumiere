@@ -159,7 +159,7 @@ export class DemoRun {
     let { id = null, text = null, ssml = null, voice = null, useLastMark = false } = opts
 
     if(!voice){
-      voice = 'de-DE-Neural2-B'
+      voice = 'de-DE-Chirp3-HD-Laomedeia'
     }
 
     if (!id) {

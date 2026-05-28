@@ -1,5 +1,5 @@
 fragment:
-  id: aufforderungsschreiben-create
+  id: meldedaten-aufforderungsschreiben-create
   
   parameters:
   - schueler.nachname

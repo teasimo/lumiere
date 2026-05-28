@@ -1,0 +1,8 @@
+fragment:
+  id: element-open
+  parameters:
+  # Im Fall des ersten Elements muss das leer sein. Darüber hinaus eine Zahl >= 1
+  - elementNumber
+  flow:
+  - id: datensatz öffnen
+    click: "controlBtn{{elementNumber}}/action-detaillink"

@@ -1,34 +1,18 @@
 fragment:
-  id: untermenue-navigiere
+  id: neo-hauptmenue
 
   parameters:
     - hauptmenue-data-id
-    - untermenue-data-id
   flow:
 
     - id: button/menu-toggle
-
-      interaction:
-        type: click
-
-        target:
-          data-id: button/menu-toggle
+      click: button/menu-toggle
 
     - id: Hauptmenüpunkt
-
       interaction:
         type: click
-
         target:
           data-id: "{{hauptmenue-data-id}}"
-
-    - id: Untermenüpunkt
-
-      interaction:
-        type: click
-
-        target:
-          data-id: "{{untermenue-data-id}}"
 
     - id: pin
       include: /auth/pin.yaml
@@ -39,7 +23,7 @@ fragment:
     - id: button/menu-toggle2
       if:
         target:
-          data-id: button/menu-toggle
+          data-id: "button/menu-toggle"
         state:
           aria-expanded: true
 
@@ -47,4 +31,4 @@ fragment:
         type: click
 
         target:
-          data-id: button/menu-toggle
+          data-id: "button/menu-toggle"

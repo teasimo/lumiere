@@ -354,6 +354,24 @@ function resolveTemplatesDeep(value, context, dataFunctions = {}) {
   return value
 }
 
+function resolveDataSection(data, dataFunctions = {}) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return {}
+  }
+
+  const resolved = {}
+  const context = { ...data }
+
+  // Resolve keys in declaration order so later keys can reuse already resolved values.
+  for (const [key, value] of Object.entries(data)) {
+    const resolvedValue = resolveTemplatesDeep(value, context, dataFunctions)
+    resolved[key] = resolvedValue
+    context[key] = resolvedValue
+  }
+
+  return resolved
+}
+
 async function fileExists(filePath) {
   try {
     const fileStat = await stat(filePath)
@@ -442,7 +460,81 @@ function createIncludeOutputSteps(outputs, { idPrefix = '', includeStepId = '' }
   })
 }
 
-async function expandFlowIncludes(flowEntries, { baseDir, includeRootDir, context, dataFunctions, includeStack = [], idPrefix = '' }) {
+async function loadFragmentLibrary(scenarioPath) {
+  let currentDir = dirname(resolve(scenarioPath))
+
+  while (true) {
+    const candidatePaths = [
+      join(currentDir, 'fragements', 'fragment-library.json'),
+      join(currentDir, 'fragments', 'fragment-library.json'),
+    ]
+
+    for (const libraryPath of candidatePaths) {
+      try {
+        const source = await readFile(libraryPath, 'utf8')
+        return { library: JSON.parse(source), libraryPath }
+      } catch {
+        // keep searching parent directories
+      }
+    }
+
+    const parentDir = dirname(currentDir)
+    if (parentDir === currentDir) {
+      break
+    }
+    currentDir = parentDir
+  }
+
+  return null
+}
+
+function mergePresentationMetadata(basePresentation, inheritedPresentation) {
+  if (!inheritedPresentation || typeof inheritedPresentation !== 'object' || Array.isArray(inheritedPresentation)) {
+    return basePresentation
+  }
+
+  if (!basePresentation || typeof basePresentation !== 'object' || Array.isArray(basePresentation)) {
+    return inheritedPresentation
+  }
+
+  return {
+    ...basePresentation,
+    ...inheritedPresentation,
+    didactics: {
+      ...(basePresentation.didactics || {}),
+      ...(inheritedPresentation.didactics || {}),
+    },
+    video: {
+      ...(basePresentation.video || {}),
+      ...(inheritedPresentation.video || {}),
+    },
+  }
+}
+
+function applyEntryPresentationToExpandedFlow(expandedFlow, entry, context, dataFunctions) {
+  if (!Array.isArray(expandedFlow) || expandedFlow.length === 0) {
+    return expandedFlow
+  }
+
+  if (!entry || typeof entry !== 'object' || !entry.presentation) {
+    return expandedFlow
+  }
+
+  const resolvedPresentation = resolveTemplatesDeep(entry.presentation, context, dataFunctions)
+  if (!resolvedPresentation || typeof resolvedPresentation !== 'object' || Array.isArray(resolvedPresentation)) {
+    return expandedFlow
+  }
+
+  const [firstStep, ...restSteps] = expandedFlow
+  const nextFirstStep = {
+    ...firstStep,
+    presentation: mergePresentationMetadata(firstStep.presentation, resolvedPresentation),
+  }
+
+  return [nextFirstStep, ...restSteps]
+}
+
+async function expandFlowIncludes(flowEntries, { baseDir, includeRootDir, fragmentLibrary = null, context, dataFunctions, includeStack = [], idPrefix = '' }) {
   const expanded = []
 
   for (const entry of flowEntries || []) {
@@ -452,6 +544,7 @@ async function expandFlowIncludes(flowEntries, { baseDir, includeRootDir, contex
       const resolvedNestedFlow = await expandFlowIncludes(entry.flow, {
         baseDir,
         includeRootDir,
+        fragmentLibrary,
         context,
         dataFunctions,
         includeStack,
@@ -465,6 +558,64 @@ async function expandFlowIncludes(flowEntries, { baseDir, includeRootDir, contex
         ...prefixedEntry,
         flow: resolvedNestedFlow,
       })
+      continue
+    }
+
+    if (entry && typeof entry === 'object' && (entry.fragement || entry.fragment)) {
+      const fragmentId = String(entry.fragement ?? entry.fragment ?? '').trim()
+      if (!fragmentLibrary) {
+        throw new Error(`Cannot resolve fragment "${fragmentId}": no fragment library found. Run "npm run build:fragment-library" first.`)
+      }
+      const relPath = fragmentLibrary.library[fragmentId]
+      if (!relPath) {
+        throw new Error(`Fragment id "${fragmentId}" not found in library (${fragmentLibrary.libraryPath}). Run "npm run build:fragment-library" to update it.`)
+      }
+      const fragmentPath = resolve(workspaceRoot, relPath)
+      const fragmentPrefix = String(entry.id || '').trim() || String(entry.fragmentId || '').trim() || ''
+      const nextPrefix = idPrefix && fragmentPrefix ? `${idPrefix}-${fragmentPrefix}` : (fragmentPrefix || idPrefix)
+
+      if (includeStack.includes(fragmentPath)) {
+        throw new Error(`Circular include detected: ${[...includeStack, fragmentPath].join(' -> ')}`)
+      }
+
+      const fragmentDocument = await loadYamlDocument(fragmentPath)
+      const fragment = fragmentDocument?.fragment
+      if (!fragment || typeof fragment !== 'object') {
+        throw new Error(`Fragment file "${fragmentPath}" must have a top-level "fragment" object.`)
+      }
+
+      const fragmentParameters = Array.isArray(fragment.parameters) ? fragment.parameters : []
+      const providedWith = resolveTemplatesDeep(entry.with || {}, context, dataFunctions)
+      const includeOverrides = buildIncludeOverrideContext(providedWith)
+      const fragmentContext = {
+        ...context,
+        ...includeOverrides,
+      }
+
+      for (const parameterName of fragmentParameters) {
+        if (!hasContextParameter(fragmentContext, parameterName)) {
+          throw new Error(`Missing fragment parameter "${parameterName}" for fragment "${fragmentId}" in ${fragmentPath}`)
+        }
+      }
+
+      const fragmentFlow = Array.isArray(fragment.flow) ? fragment.flow : []
+      const fragementsRoot = dirname(fragmentLibrary.libraryPath)
+      let resolvedFragmentFlow = await expandFlowIncludes(fragmentFlow, {
+        baseDir: dirname(fragmentPath),
+        includeRootDir: fragementsRoot,
+        fragmentLibrary,
+        context: fragmentContext,
+        dataFunctions,
+        includeStack: [...includeStack, fragmentPath],
+        idPrefix: nextPrefix,
+      })
+      resolvedFragmentFlow = applyEntryPresentationToExpandedFlow(resolvedFragmentFlow, entry, context, dataFunctions)
+
+      expanded.push(...resolvedFragmentFlow)
+      expanded.push(...createIncludeOutputSteps(resolveTemplatesDeep(entry.outputs || {}, context, dataFunctions), {
+        idPrefix,
+        includeStepId: fragmentPrefix,
+      }))
       continue
     }
 
@@ -500,14 +651,16 @@ async function expandFlowIncludes(flowEntries, { baseDir, includeRootDir, contex
       }
 
       const fragmentFlow = Array.isArray(fragment.flow) ? fragment.flow : []
-      const resolvedFragmentFlow = await expandFlowIncludes(fragmentFlow, {
+      let resolvedFragmentFlow = await expandFlowIncludes(fragmentFlow, {
         baseDir: dirname(fragmentPath),
         includeRootDir,
+        fragmentLibrary,
         context: fragmentContext,
         dataFunctions,
         includeStack: [...includeStack, fragmentPath],
         idPrefix: nextPrefix,
       })
+      resolvedFragmentFlow = applyEntryPresentationToExpandedFlow(resolvedFragmentFlow, entry, context, dataFunctions)
 
       expanded.push(...resolvedFragmentFlow)
       expanded.push(...createIncludeOutputSteps(resolveTemplatesDeep(entry.outputs || {}, context, dataFunctions), {
@@ -624,16 +777,16 @@ async function scenarioToSpecSource(scenario, scenarioPath, centralConfig, gener
   const dataFunctions = await loadDataFunctions(scenarioPath)
 
   // First, resolve data section with functions (which may reference other data values)
-  const resolvedData = resolveTemplatesDeep(
-    rootWithDefaults.data || {},
-    rootWithDefaults.data || {},
-    dataFunctions,
-  )
+  const resolvedData = resolveDataSection(rootWithDefaults.data || {}, dataFunctions)
+
+  // Load fragment library (built by scripts/build-fragment-library.mjs)
+  const fragmentLibrary = await loadFragmentLibrary(scenarioPath)
 
   // Expand flow includes before the general template resolution so fragments become part of one complete scenario.
   const expandedFlow = await expandFlowIncludes(rootWithDefaults.flow || [], {
     baseDir: dirname(resolve(scenarioPath)),
     includeRootDir: dirname(resolve(scenarioPath)),
+    fragmentLibrary,
     context: {
       ...resolvedData,
     },

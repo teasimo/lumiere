@@ -1,5 +1,5 @@
 interaction:
-  id: berechtigungen-delegieren
+  id: fr2-berechtigungen-delegieren
   version: 1.0
 
   
@@ -29,15 +29,24 @@ interaction:
       nachname: "Miles"    
   flow:
     - id: neo-login
-      include: /auth/neo-login.yaml
+      fragment: neo-login
       with:
         username: "{{actor.username}}"
         password: "{{actor.password}}"
 
+    - id: vorbereitung
+      flow:
+        - id: personal-oeffnen
+          fragment: neo-hauptmenue-personal-personalverwaltung
+        - id: personal-suchen
+          fragment: meldedaten-filter-vorname-nachname
+          with:
+            vorname: "{{personal.vorname}}"
+            nachname: "{{personal.nachname}}"
+
     - id: navigate-mein-profil
-      include: /navigation/hauptmenue-navigiere.yaml
-      with:
-        hauptmenue-data-id: "menu/link/mein-profil/"
+      fragment: neo-hauptmenue-mein-profil
+      
       presentation:
         video:
           start: before

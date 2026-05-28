@@ -332,6 +332,36 @@
           "type": "integer",
           "minimum": 1000,
           "description": "Einblenddauer der Kapitelkarte in Millisekunden (Standard: 2000)"
+        },
+        "font_size": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Schriftgroesse der Kapitelkarte in Pixeln (Standard: 54)"
+        },
+        "fontSize": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Alias fuer font_size"
+        },
+        "text_y_start": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Vertikaler Startpunkt (Pixel von oben) fuer die erste Textzeile; wenn gesetzt, keine vertikale Zentrierung"
+        },
+        "textYStart": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Alias fuer text_y_start"
+        },
+        "line_spacing": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Zeilenabstand in Pixeln fuer mehrzeiligen Kapiteltext"
+        },
+        "lineSpacing": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Alias fuer line_spacing"
         }
       }
     },

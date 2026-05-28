@@ -7,6 +7,7 @@
     "node": ">=20"
   },
   "scripts": {
+    "build:fragment-library": "node scripts/build-fragment-library.mjs",
     "generate:testfile": "node scripts/generate-tests-from-scenario.mjs",
     "generate:testfiles:all": "node scripts/generate-tests-from-scenario.mjs --all",
     "clean:testfiles": "node scripts/generate-tests-from-scenario.mjs --clean",
