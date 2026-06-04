@@ -1,4 +1,6 @@
-import { writeFile } from 'node:fs/promises'
+import {
+  writeFile
+} from 'node:fs/promises'
 
 export function createScenarioTimelineRuntime({
   test,
@@ -10,7 +12,7 @@ export function createScenarioTimelineRuntime({
   const timeline = []
 
   return {
-    async runStep(stepId, execute) {
+    async runStep(stepId, stepDescription, execute) {
       const startedAtMs = Date.now()
       const startedAtIso = new Date(startedAtMs).toISOString()
 
@@ -19,32 +21,33 @@ export function createScenarioTimelineRuntime({
       })
 
       const skipped = Boolean(
-        executeResult
-        && typeof executeResult === 'object'
-        && executeResult.__scenarioStepStatus === 'skipped'
+        executeResult &&
+        typeof executeResult === 'object' &&
+        executeResult.__scenarioStepStatus === 'skipped'
       )
       const status = skipped ? 'skipped' : 'executed'
-      const skipReason = skipped
-        ? String(executeResult.reason || 'step guard condition was not met')
-        : null
+      const skipReason = skipped ?
+        String(executeResult.reason || 'step guard condition was not met') :
+        null
 
       const endedAtMs = Date.now()
       const endedAtIso = new Date(endedAtMs).toISOString()
 
       timeline.push({
         stepId,
+        stepDescription,
         status,
         skipped,
         skipReason,
         startedAtMs,
         endedAtMs,
         startedAtIso,
-        endedAtIso,
+        endedAtIso,        
         durationMs: endedAtMs - startedAtMs,
       })
 
       const statusText = skipped ? `SKIPPED (${skipReason})` : 'EXECUTED'
-      console.log(`[scenario-step] ${stepId} | ${statusText} | ${startedAtIso} -> ${endedAtIso} (${endedAtMs - startedAtMs}ms)`)
+      console.log(`[scenario-step] ${stepId} | ${stepDescription} | ${statusText} | ${startedAtIso} -> ${endedAtIso} (${endedAtMs - startedAtMs}ms)`)
     },
 
     async flush() {
@@ -56,7 +59,7 @@ export function createScenarioTimelineRuntime({
         steps: timeline,
       }
 
-      const timelinePath = testInfo.outputPath('yaml-step-timeline.json')
+      const timelinePath = testInfo.outputPath('scenario-step-timeline.json')
       await writeFile(timelinePath, JSON.stringify(timelineReport, null, 2), 'utf8')
       console.log(`[scenario-step] timeline report: ${timelinePath}`)
     },

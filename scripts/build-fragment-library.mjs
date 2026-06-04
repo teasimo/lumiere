@@ -11,18 +11,17 @@
 
 import { readdir, readFile, writeFile } from 'fs/promises'
 import { extname, join, relative, resolve } from 'path'
-import { parse as parseYaml } from 'yaml'
 
 const workspaceRoot = process.cwd()
 const LIBRARY_FILE = 'fragment-library.json'
 
-async function walkYamlFiles(dir, files = []) {
+async function walkXmlFiles(dir, files = []) {
   const entries = await readdir(dir, { withFileTypes: true })
   for (const entry of entries) {
     const abs = join(dir, entry.name)
     if (entry.isDirectory()) {
-      await walkYamlFiles(abs, files)
-    } else if (entry.isFile() && ['.yaml', '.yml'].includes(extname(entry.name).toLowerCase())) {
+      await walkXmlFiles(abs, files)
+    } else if (entry.isFile() && extname(entry.name).toLowerCase() === '.xml') {
       files.push(abs)
     }
   }
@@ -57,19 +56,19 @@ async function findFragementsRoots(startDir) {
 }
 
 async function buildLibraryForDir(fragementsDir) {
-  const yamlFiles = await walkYamlFiles(fragementsDir)
+  const xmlFiles = await walkXmlFiles(fragementsDir)
   const library = {}
 
-  for (const filePath of yamlFiles) {
-    let doc
+  for (const filePath of xmlFiles) {
+    let source
     try {
-      const source = await readFile(filePath, 'utf8')
-      doc = parseYaml(source)
+      source = await readFile(filePath, 'utf8')
     } catch {
       continue
     }
 
-    const fragmentId = doc?.fragment?.id
+    const fragmentIdMatch = source.match(/<SzenarioScript\b[^>]*\bid\s*=\s*"([^"]+)"/i)
+    const fragmentId = fragmentIdMatch?.[1]
     if (fragmentId && typeof fragmentId === 'string') {
       const relPath = relative(workspaceRoot, filePath).replace(/\\/g, '/')
       if (library[fragmentId]) {

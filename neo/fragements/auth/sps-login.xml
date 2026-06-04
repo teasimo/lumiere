@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<SzenarioScript
+    id="sps-login"
+    szenario-version="1.0"
+    status="Entwurf"
+    neo-version-min="6.0"
+    titel="Fragment: SPS Login"
+    fragment="true">
+
+    <Variablen>
+        <Variable name="baseurl"/>
+        <Variable name="username"/>
+        <Variable name="password"/>
+    </Variablen>
+
+    <Gruppe id="sps_login">
+
+        <Oeffnen
+            id="open_browser"
+            url="{{baseurl}}/portal"/>
+
+        <Wenn
+            id="button_user_menu_toggle"
+            data-id="button/user-menu-toggle"
+            status="sichtbar"
+            timeout-ms="3000">
+
+            <Click
+                id="button_user_menu_toggle_click"
+                data-id="button/user-menu-toggle"/>
+
+            <Warten
+                id="button_user_menu_toggle_erwartung"
+                data-id="login/input/user"
+                status="sichtbar"/>
+
+        </Wenn>
+
+        <Eingabe
+            id="fill_username"
+            data-id="login/input/user"
+            text="{{username}}"/>
+
+        <Warten
+            id="fill_username_erwartung"
+            data-id="login/input/user"
+            attribut="value-present"
+            attribut-wert="true"/>
+
+        <Eingabe
+            id="fill_password"
+            data-id="login/input/pass"
+            text="{{password}}"/>
+
+        <Warten
+            id="fill_password_erwartung"
+            data-id="login/input/pass"
+            attribut="value-present"
+            attribut-wert="true"/>
+
+        <Click
+            id="submit_login"
+            data-id="login/button/submit"/>
+
+        <Warten
+            id="submit_login_erwartung"
+            attribut="url-match"
+            attribut-wert="{{runtime.base_url}}/ssvn/portal/#/"/>
+
+    </Gruppe>
+
+</SzenarioScript>

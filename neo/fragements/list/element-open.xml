@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<SzenarioScript
+    id="element-open"
+    szenario-version="1.0"
+    status="Entwurf"
+    neo-version-min="6.0"
+    titel="Fragment: Element öffnen"
+    fragment="true">
+
+    <Variablen>
+        <Variable name="elementNumber"/>
+    </Variablen>
+
+    <Gruppe id="element_open">
+
+        <Click
+            id="datensatz_oeffnen"
+            data-id="controlBtn{{elementNumber}}/action-detaillink"/>
+
+    </Gruppe>
+
+</SzenarioScript>

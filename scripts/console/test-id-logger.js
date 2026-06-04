@@ -93,12 +93,6 @@
     return target
   }
 
-  function formatTargetYaml(target, indent = '      ') {
-    return Object.entries(target || {})
-      .map(([key, value]) => `${indent}${key}: ${JSON.stringify(String(value))}`)
-      .join('\n')
-  }
-
   function getElementValue(element) {
     if (!element) {
       return ''
@@ -125,25 +119,23 @@
       .replace(/^-|-$/g, '')
   }
 
-  function logYamlSnippet(entry) {
+  function logJsonSnippet(entry) {
     const target = entry.interaction.target || {}
     const interactionType = entry.interaction.type
-    const valueLine = entry.interaction.value != null
-      ? `\n    value: ${JSON.stringify(String(entry.interaction.value))}`
-      : ''
-    const firstTargetValue = Object.values(target)[0]
+    const firstTargetValue = String(Object.values(target)[0] || '')
+    const snippet = {
+      id: entry.id || firstTargetValue,
+      interaction: {
+        type: interactionType,
+        target,
+      },
+    }
 
-    console.log(
-      `
-- id: ${entry.id || firstTargetValue}
+    if (entry.interaction.value != null) {
+      snippet.interaction.value = String(entry.interaction.value)
+    }
 
-  interaction:
-    type: ${interactionType}
-
-    target:
-${formatTargetYaml(target)}${valueLine}
-`
-    )
+    console.log(JSON.stringify(snippet, null, 2))
   }
 
   function recordInteraction(eventName, eventTarget, interactionType, options = {}) {
@@ -195,7 +187,7 @@ ${formatTargetYaml(target)}${valueLine}
 
     console.log(`--- ${interactionType.toUpperCase()} RECORDED (${eventName}) ---`)
     console.log(interaction)
-    logYamlSnippet(interaction)
+    logJsonSnippet(interaction)
   }
 
   document.addEventListener(
@@ -271,31 +263,10 @@ ${formatTargetYaml(target)}${valueLine}
       console.log('Interaction recorder geleert.')
     },
 
-    exportYaml() {
-      const yaml = interactions
-        .map((entry) => {
-          const target = entry.interaction.target || {}
-          const interactionType = String(entry.interaction.type || 'click')
-          const valueLine = entry.interaction.value != null
-            ? `\n    value: ${JSON.stringify(String(entry.interaction.value))}`
-            : ''
-          const firstTargetValue = Object.values(target)[0]
-
-          return `
-- id: ${entry.id || firstTargetValue}
-
-  interaction:
-    type: ${interactionType}
-
-    target:
-${formatTargetYaml(target)}${valueLine}
-`
-        })
-        .join('\n')
-
-      console.log(yaml)
-
-      return yaml
+    exportJson() {
+      const jsonText = JSON.stringify(interactions, null, 2)
+      console.log(jsonText)
+      return jsonText
     }
   }
 
@@ -304,6 +275,6 @@ Verfügbare Befehle:
 
 __interactionRecorder.getAll()
 __interactionRecorder.clear()
-__interactionRecorder.exportYaml()
+__interactionRecorder.exportJson()
 `)
 })()

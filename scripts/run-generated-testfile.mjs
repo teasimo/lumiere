@@ -1,27 +1,33 @@
 #!/usr/bin/env node
 
-import { cp, mkdir, readdir, readFile, writeFile } from 'fs/promises'
+import { cp, mkdir, writeFile } from 'fs/promises'
 import { existsSync, readFileSync, statSync } from 'fs'
-import { basename, extname, join, relative, resolve } from 'path'
+import { basename, dirname, extname, join, relative, resolve } from 'path'
 import { spawnSync } from 'child_process'
-import { parse as parseYaml } from 'yaml'
+import { XMLParser } from 'fast-xml-parser'
 import { loadCentralConfig } from './shared/central-config.mjs'
 
 const workspaceRoot = process.cwd()
-const fallbackScenarioPath = 'lunettes/tests/login.yaml'
+const fallbackScenarioPath = 'neo/interactions/dubletten-aufloesen/FR1-case-sus-dubletten-zusammenfuehren.xml'
 const fallbackOutputDir = 'temp/testfiles'
+const xmlParser = new XMLParser({
+  ignoreAttributes: false,
+  attributeNamePrefix: '@_',
+  parseTagValue: false,
+  trimValues: true,
+})
 
 function printUsage() {
   console.log([
     'Usage:',
-    '  npm run check:testfile -- [<scenario-yaml>] [--force] [--out-dir <path>] [-- <playwright-args>]',
-    '  npm run run:testfile:video -- [<scenario-yaml>] [--force] [--out-dir <path>] [-- <playwright-args>]',
+    '  npm run check:testfile -- [<scenario-xml>] [--force] [--out-dir <path>] [-- <playwright-args>]',
+    '  npm run generate:video -- [<scenario-xml>] [--force] [--out-dir <path>] [-- <playwright-args>]',
     '',
     'Examples:',
-    '  npm run check:testfile -- lunettes/tests/login.yaml',
-    '  npm run check:testfile:force -- lunettes/tests/login.yaml',
-    '  npm run run:testfile:video -- lunettes/tests/login.yaml',
-    '  npm run run:testfile:video -- lunettes/tests/login.yaml -- --project=chromium',
+    '  npm run check:testfile -- neo/interactions/dubletten-aufloesen/FR1-case-sus-dubletten-zusammenfuehren.xml',
+    '  npm run check:testfile:force -- neo/interactions/dubletten-aufloesen/FR1-case-sus-dubletten-zusammenfuehren.xml',
+    '  npm run generate:video -- neo/interactions/dubletten-aufloesen/FR1-case-sus-dubletten-zusammenfuehren.xml',
+    '  npm run generate:video -- neo/interactions/dubletten-aufloesen/FR1-case-sus-dubletten-zusammenfuehren.xml -- --project=chromium',
   ].join('\n'))
 }
 
@@ -84,7 +90,7 @@ function parseArgs(argv) {
     }
 
     if (options.scenarioPath) {
-      throw new Error('Only one scenario yaml path is supported.')
+      throw new Error('Only one scenario xml path is supported.')
     }
     options.scenarioPath = token
   }
@@ -97,7 +103,7 @@ function applyConfigDefaults(options, centralConfig) {
 
   return {
     ...options,
-    scenarioPath: options.scenarioPath || defaults.scenario_path || fallbackScenarioPath,
+    scenarioPath: options.scenarioPath || defaults.scenario_path_xml || defaults.scenario_path || fallbackScenarioPath,
     outDir: options.outDir || defaults.output_dir || fallbackOutputDir,
   }
 }
@@ -150,162 +156,109 @@ function buildScenarioOutputFolderName({ scenarioId, scenarioVersion }) {
   return `${normalizedId}_v${normalizedVersion}`
 }
 
-async function collectArtifactDirs(rootDir) {
-  const entries = await readdir(rootDir, { withFileTypes: true })
-  const dirs = []
-
-  for (const entry of entries) {
-    const fullPath = join(rootDir, entry.name)
-    if (entry.isDirectory()) {
-      dirs.push(fullPath)
-      dirs.push(...await collectArtifactDirs(fullPath))
-    }
-  }
-
-  return dirs
-}
-
-async function readJsonIfExists(filePath) {
-  if (!existsSync(filePath)) {
-    return null
-  }
-
-  try {
-    const raw = await readFile(filePath, 'utf8')
-    return JSON.parse(raw)
-  } catch {
-    return null
-  }
-}
-
 function readScenarioIdentity(scenarioAbsolutePath) {
   const fallbackId = sanitizeFileToken(basename(scenarioAbsolutePath, extname(scenarioAbsolutePath)), 'scenario')
 
   try {
     const raw = readFileSync(scenarioAbsolutePath, 'utf8')
-    const parsed = parseYaml(raw) || {}
-    const root = parsed.interaction || parsed || {}
-    const scenarioId = sanitizeFileToken(root.id || fallbackId, fallbackId)
-    const scenarioVersion = root.version ?? 'unknown'
+    const parsed = xmlParser.parse(raw) || {}
+    const root = parsed?.SzenarioScript || {}
+    const scenarioId = sanitizeFileToken(root['@_id'] || fallbackId, fallbackId)
+    const scenarioVersion = root['@_szenario-version'] ?? 'unknown'
     return { scenarioId, scenarioVersion }
   } catch {
     return { scenarioId: fallbackId, scenarioVersion: 'unknown' }
   }
 }
 
-function getResolvedYamlOutputPathFromSpec(specAbsolutePath) {
+function getGeneratedSiblingPathsFromSpec(specAbsolutePath) {
   if (specAbsolutePath.endsWith('.spec.js')) {
-    return specAbsolutePath.slice(0, -'.spec.js'.length) + '.resolved.yaml'
+    const stem = specAbsolutePath.slice(0, -'.spec.js'.length)
+    return {
+      specPath: specAbsolutePath,
+      specMetaPath: `${specAbsolutePath}.meta.json`,
+      resolvedXmlPath: `${stem}.resolved.xml`,
+      resolvedJsonPath: `${stem}.resolved.json`,
+    }
   }
-  return `${specAbsolutePath}.resolved.yaml`
+
+  return {
+    specPath: specAbsolutePath,
+    specMetaPath: `${specAbsolutePath}.meta.json`,
+    resolvedXmlPath: `${specAbsolutePath}.resolved.xml`,
+    resolvedJsonPath: `${specAbsolutePath}.resolved.json`,
+  }
 }
 
-async function findLatestScenarioVideoArtifacts({ artifactsRoot, scenarioPathRelative }) {
-  if (!existsSync(artifactsRoot)) {
-    return null
-  }
-
-  const normalizedScenarioPath = normalizeWorkspaceRelativePath(scenarioPathRelative)
-  const dirs = [artifactsRoot, ...await collectArtifactDirs(artifactsRoot)]
-  const candidates = []
-
-  for (const dir of dirs) {
-    const timelinePath = join(dir, 'yaml-step-timeline.json')
-    const videoPath = join(dir, 'video.webm')
-    const tracePath = join(dir, 'trace.zip')
-    if (!existsSync(videoPath) || !existsSync(timelinePath)) {
-      continue
-    }
-
-    const timeline = await readJsonIfExists(timelinePath)
-    const sourcePath = normalizeWorkspaceRelativePath(timeline?.scenarioSource)
-    if (sourcePath !== normalizedScenarioPath) {
-      continue
-    }
-
-    const timelineStat = statSync(timelinePath)
-    candidates.push({
-      dir,
-      timelinePath,
-      videoPath,
-      tracePath: existsSync(tracePath) ? tracePath : null,
-      mtimeMs: timelineStat.mtimeMs,
-    })
-  }
-
-  candidates.sort((left, right) => right.mtimeMs - left.mtimeMs)
-  return candidates[0] || null
-}
-
-async function persistVideoRunArtifacts({ scenarioPath, specPath, mode }) {
-  if (mode !== 'video') {
-    return null
-  }
-
+async function persistScenarioRunArtifacts({
+  scenarioPath,
+  specPath,
+  runRoot,
+  artifactsDir,
+  mode,
+  status,
+  scenarioRunId,
+  playwrightExitCode,
+}) {
   const scenarioAbsolutePath = resolve(workspaceRoot, scenarioPath)
   const scenarioPathRelative = relative(workspaceRoot, scenarioAbsolutePath)
   const specAbsolutePath = resolve(specPath)
-  const specMetaPath = `${specAbsolutePath}.meta.json`
-  const resolvedYamlPath = getResolvedYamlOutputPathFromSpec(specAbsolutePath)
-  const artifactsRoot = resolve(workspaceRoot, 'temp', 'test-results')
-  const latestArtifacts = await findLatestScenarioVideoArtifacts({
-    artifactsRoot,
-    scenarioPathRelative,
-  })
-
-  if (!latestArtifacts) {
-    console.warn('[scenario-runner] No matching video artifacts found in temp/test-results for persistent output export.')
-    return null
-  }
-
-  const { scenarioId, scenarioVersion } = readScenarioIdentity(scenarioAbsolutePath)
-  const scenarioFolderName = buildScenarioOutputFolderName({ scenarioId, scenarioVersion })
-  const targetRoot = resolve(workspaceRoot, 'output', scenarioFolderName)
-  const targetArtifactsDir = join(targetRoot, 'artifacts')
+  const generatedSiblingPaths = getGeneratedSiblingPathsFromSpec(specAbsolutePath)
+  const specMetaPath = generatedSiblingPaths.specMetaPath
+  const resolvedXmlPath = generatedSiblingPaths.resolvedXmlPath
+  const resolvedJsonPath = generatedSiblingPaths.resolvedJsonPath
+  const targetRoot = runRoot
+  const targetArtifactsDir = artifactsDir
   const targetSpecsDir = join(targetRoot, 'generated')
 
   await mkdir(targetRoot, { recursive: true })
   await mkdir(targetArtifactsDir, { recursive: true })
   await mkdir(targetSpecsDir, { recursive: true })
 
-  await cp(latestArtifacts.dir, targetArtifactsDir, { recursive: true, force: true })
   await cp(specAbsolutePath, join(targetSpecsDir, basename(specAbsolutePath)), { force: true })
   if (existsSync(specMetaPath)) {
     await cp(specMetaPath, join(targetSpecsDir, basename(specMetaPath)), { force: true })
   }
   await cp(scenarioAbsolutePath, join(targetRoot, basename(scenarioAbsolutePath)), { force: true })
-  if (existsSync(resolvedYamlPath)) {
-    await cp(resolvedYamlPath, join(targetRoot, basename(resolvedYamlPath)), { force: true })
+  if (existsSync(resolvedXmlPath)) {
+    await cp(resolvedXmlPath, join(targetRoot, basename(resolvedXmlPath)), { force: true })
   } else {
-    console.warn(`[scenario-runner] Resolved YAML not found for export: ${relative(workspaceRoot, resolvedYamlPath)}`)
+    console.warn(`[scenario-runner] Resolved XML not found for export: ${relative(workspaceRoot, resolvedXmlPath)}`)
+  }
+  if (existsSync(resolvedJsonPath)) {
+    await cp(resolvedJsonPath, join(targetRoot, basename(resolvedJsonPath)), { force: true })
+  } else {
+    console.warn(`[scenario-runner] Resolved JSON not found for export: ${relative(workspaceRoot, resolvedJsonPath)}`)
   }
 
   const runMetaPath = join(targetRoot, 'run-meta.json')
   await writeFile(runMetaPath, JSON.stringify({
     createdAtIso: new Date().toISOString(),
+    mode,
+    status,
+    scenarioRunId,
+    playwrightExitCode,
     scenario: {
-      id: scenarioId,
-      version: scenarioVersion,
-      outputFolder: scenarioFolderName,
       sourcePathRelative: scenarioPathRelative,
+      outputFolder: relative(workspaceRoot, dirname(targetRoot)),
+      runRootRelative: relative(workspaceRoot, targetRoot),
+      artifactsDirRelative: relative(workspaceRoot, targetArtifactsDir),
+      sourcePathNormalized: normalizeWorkspaceRelativePath(scenarioPathRelative),
     },
     generatedSpec: {
       sourcePathRelative: relative(workspaceRoot, specAbsolutePath),
       metaPathRelative: existsSync(specMetaPath) ? relative(workspaceRoot, specMetaPath) : null,
-      resolvedYamlPathRelative: existsSync(resolvedYamlPath) ? relative(workspaceRoot, resolvedYamlPath) : null,
+      resolvedXmlPathRelative: existsSync(resolvedXmlPath) ? relative(workspaceRoot, resolvedXmlPath) : null,
+      resolvedJsonPathRelative: existsSync(resolvedJsonPath) ? relative(workspaceRoot, resolvedJsonPath) : null,
     },
     exportedTo: {
       rootRelative: relative(workspaceRoot, targetRoot),
       artifactsRelative: relative(workspaceRoot, targetArtifactsDir),
       generatedRelative: relative(workspaceRoot, targetSpecsDir),
     },
-    sourceArtifactsDirRelative: relative(workspaceRoot, latestArtifacts.dir),
   }, null, 2), 'utf8')
 
   return {
-    scenarioId,
-    scenarioVersion,
-    scenarioFolderName,
     outputRoot: targetRoot,
   }
 }
@@ -321,12 +274,12 @@ function warnIfGeneratedSpecIsStale({ scenarioAbsolute, outputSpecAbsolute }) {
   if (existsSync(metaPath)) {
     try {
       const meta = JSON.parse(readFileSync(metaPath, 'utf8'))
-      const builtFromYamlMtimeMs = Number(meta.sourceYamlMtimeMs || 0)
+      const builtFromXmlMtimeMs = Number(meta.sourceXmlMtimeMs || 0)
 
-      if (Number.isFinite(builtFromYamlMtimeMs) && scenarioMtimeMs > builtFromYamlMtimeMs) {
-        console.warn(`[scenario-runner] WARNING: YAML is newer than generated temp spec.`)
-        console.warn(`[scenario-runner] YAML mtime : ${formatIso(scenarioMtimeMs)}`)
-        console.warn(`[scenario-runner] Built mtime: ${formatIso(builtFromYamlMtimeMs)}`)
+      if (Number.isFinite(builtFromXmlMtimeMs) && scenarioMtimeMs > builtFromXmlMtimeMs) {
+        console.warn('[scenario-runner] WARNING: XML is newer than generated temp spec.')
+        console.warn(`[scenario-runner] XML mtime : ${formatIso(scenarioMtimeMs)}`)
+        console.warn(`[scenario-runner] Built mtime: ${formatIso(builtFromXmlMtimeMs)}`)
         console.warn('[scenario-runner] Run with --force to regenerate before execution.')
       }
       return
@@ -337,8 +290,8 @@ function warnIfGeneratedSpecIsStale({ scenarioAbsolute, outputSpecAbsolute }) {
 
   const specMtimeMs = statSync(outputSpecAbsolute).mtimeMs
   if (scenarioMtimeMs > specMtimeMs) {
-    console.warn('[scenario-runner] WARNING: YAML appears newer than generated temp spec (fallback mtime check).')
-    console.warn(`[scenario-runner] YAML mtime: ${formatIso(scenarioMtimeMs)}`)
+    console.warn('[scenario-runner] WARNING: XML appears newer than generated temp spec (fallback mtime check).')
+    console.warn(`[scenario-runner] XML mtime: ${formatIso(scenarioMtimeMs)}`)
     console.warn(`[scenario-runner] Spec mtime: ${formatIso(specMtimeMs)}`)
     console.warn('[scenario-runner] Run with --force to regenerate before execution.')
   }
@@ -359,7 +312,7 @@ function ensureGeneratedSpec({ scenarioPath, outDir, force }) {
     console.log(`Generating temp spec from ${relative(workspaceRoot, scenarioAbsolute)} ...`)
     runCommand(
       'node',
-      ['scripts/generate-tests-from-scenario.mjs', relative(workspaceRoot, scenarioAbsolute), '--out-dir', relative(workspaceRoot, outputDirAbsolute)],
+      ['scripts/generate-tests-from-scenario-xml.mjs', relative(workspaceRoot, scenarioAbsolute), '--out-dir', relative(workspaceRoot, outputDirAbsolute)],
       'Failed to generate temp spec file.'
     )
   } else {
@@ -405,9 +358,35 @@ function readVideoConfigFromScenario(scenarioAbsolutePath, centralConfig) {
 
   try {
     const raw = readFileSync(scenarioAbsolutePath, 'utf8')
-    const parsed = parseYaml(raw) || {}
-    const root = parsed.interaction || parsed
-    const scenarioResolution = normalizeResolution(root?.video?.resolution)
+    const parsed = xmlParser.parse(raw) || {}
+    const root = parsed?.SzenarioScript || {}
+
+    const settingsEntries = root?.Einstellungen
+      ? (Array.isArray(root.Einstellungen) ? root.Einstellungen : [root.Einstellungen])
+      : []
+
+    const findGroupByName = (groupCandidate, groupName) => {
+      if (!groupCandidate) return null
+      const groups = groupCandidate.Gruppe
+      const list = Array.isArray(groups) ? groups : (groups ? [groups] : [])
+      return list.find((entry) => String(entry?.['@_name'] || '').trim() === groupName) || null
+    }
+
+    let videoGroup = null
+    for (const settings of settingsEntries) {
+      videoGroup = findGroupByName(settings, 'video')
+      if (videoGroup) break
+    }
+
+    const resolutionGroup = findGroupByName(videoGroup, 'resolution')
+    const resolutionEntries = resolutionGroup?.Einstellung
+    const resolutionList = Array.isArray(resolutionEntries) ? resolutionEntries : (resolutionEntries ? [resolutionEntries] : [])
+    const widthSetting = resolutionList.find((entry) => String(entry?.['@_name'] || '').trim() === 'width')
+    const heightSetting = resolutionList.find((entry) => String(entry?.['@_name'] || '').trim() === 'height')
+    const scenarioResolution = normalizeResolution({
+      width: widthSetting?.['@_value'],
+      height: heightSetting?.['@_value'],
+    })
 
     if (scenarioResolution) {
       return {
@@ -435,7 +414,7 @@ function readVideoConfigFromScenario(scenarioAbsolutePath, centralConfig) {
   }
 }
 
-function runPlaywright(specAbsolutePath, playwrightArgs, mode, scenarioPath, centralConfig, verbose = false) {
+function runPlaywright(specAbsolutePath, playwrightArgs, mode, scenarioPath, centralConfig, verbose = false, runContext = null) {
   const specRelative = relative(workspaceRoot, specAbsolutePath)
   const configFile = mode === 'video'
     ? 'playwright.generated.video.config.mjs'
@@ -447,26 +426,33 @@ function runPlaywright(specAbsolutePath, playwrightArgs, mode, scenarioPath, cen
   const videoSizeEnv = videoConfig.resolution
     ? `${videoConfig.resolution.width}x${videoConfig.resolution.height}`
     : ''
-  const scenarioRunId = buildScenarioRunId()
+  const scenarioRunId = runContext?.scenarioRunId || buildScenarioRunId()
 
   if (mode === 'video' && videoConfig.resolution) {
-    const sourceLabel = videoConfig.source === 'scenario' ? 'YAML' : 'central config'
+    const sourceLabel = videoConfig.source === 'scenario' ? 'XML' : 'central config'
     console.log(`Video resolution from ${sourceLabel}: ${videoConfig.resolution.width}x${videoConfig.resolution.height}`)
   }
 
   console.log(`Running Playwright test: ${specRelative}`)
 
-  runCommand(
-    'npx',
-    ['playwright', 'test', '--config', configFile, specRelative, ...playwrightArgs],
-    'Playwright test execution failed.',
-    {
+  const result = spawnSync('npx', ['playwright', 'test', '--config', configFile, specRelative, ...playwrightArgs], {
+    cwd: workspaceRoot,
+    stdio: 'inherit',
+    shell: process.platform === 'win32',
+    env: {
       ...process.env,
       SCENARIO_VIDEO_MODE: mode === 'video' ? '1' : '0',
       SCENARIO_VIDEO_SIZE: videoSizeEnv,
       SCENARIO_RUN_ID: scenarioRunId,
-    }
-  )
+      SCENARIO_ARTIFACTS_DIR: runContext?.artifactsDir || '',
+      SCENARIO_REPORT_DIR: runContext?.reportDir || '',
+    },
+  })
+
+  return {
+    exitCode: result.status ?? 1,
+    scenarioRunId,
+  }
 }
 
 async function main() {
@@ -484,18 +470,52 @@ async function main() {
     force: options.force || options.verbose,
   })
 
+  const scenarioAbsolutePath = resolve(workspaceRoot, options.scenarioPath)
+  const { scenarioId, scenarioVersion } = readScenarioIdentity(scenarioAbsolutePath)
+  const scenarioFolderName = buildScenarioOutputFolderName({ scenarioId, scenarioVersion })
+  const scenarioRunId = buildScenarioRunId()
+  const scenarioRoot = resolve(workspaceRoot, 'output', scenarioFolderName)
+  const runRoot = join(scenarioRoot, 'runs', scenarioRunId)
+  const artifactsDir = join(runRoot, 'artifacts')
+  const reportDir = join(runRoot, 'report')
+
+  await mkdir(artifactsDir, { recursive: true })
+  await mkdir(reportDir, { recursive: true })
+
   const playwrightArgs = options.playwrightArgs
 
-  runPlaywright(specPath, playwrightArgs, options.mode, options.scenarioPath, central.config, options.verbose)
+  const runResult = runPlaywright(
+    specPath,
+    playwrightArgs,
+    options.mode,
+    options.scenarioPath,
+    central.config,
+    options.verbose,
+    {
+      scenarioRunId,
+      artifactsDir,
+      reportDir,
+    }
+  )
 
-  const persistedArtifacts = await persistVideoRunArtifacts({
+  const runStatus = runResult.exitCode === 0 ? 'passed' : 'failed'
+  const persistedArtifacts = await persistScenarioRunArtifacts({
     scenarioPath: options.scenarioPath,
     specPath,
+    runRoot,
+    artifactsDir,
     mode: options.mode,
+    status: runStatus,
+    scenarioRunId,
+    playwrightExitCode: runResult.exitCode,
   })
 
   if (persistedArtifacts) {
-    console.log(`[scenario-runner] Exported run artifacts to ${relative(workspaceRoot, persistedArtifacts.outputRoot)}`)
+    console.log(`[scenario-runner] Run artifacts written to ${relative(workspaceRoot, persistedArtifacts.outputRoot)}`)
+  }
+
+  if (runResult.exitCode !== 0) {
+    throw new Error('Playwright test execution failed.')
   }
 }
 

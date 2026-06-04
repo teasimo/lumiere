@@ -159,5 +159,5 @@ export const fillStrategies = [
 
 - [spec-template.mjs](../../scripts/generator/templates/spec-template.mjs) — Generator-Logik für Strategie-Laden
 - [fill-strategies.mjs](../../lunettes/env/fill-strategies.mjs) — Beispiel App-spezifische Strategien
-- [generate-tests-from-scenario.mjs](../../scripts/generate-tests-from-scenario.mjs) — Strategie-Pfad-Auflösung
+- [generate-tests-from-scenario-xml.mjs](../../scripts/generate-tests-from-scenario-xml.mjs) — Strategie-Pfad-Auflösung
 

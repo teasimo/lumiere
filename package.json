@@ -8,9 +8,12 @@
   },
   "scripts": {
     "build:fragment-library": "node scripts/build-fragment-library.mjs",
-    "generate:testfile": "node scripts/generate-tests-from-scenario.mjs",
-    "generate:testfiles:all": "node scripts/generate-tests-from-scenario.mjs --all",
-    "clean:testfiles": "node scripts/generate-tests-from-scenario.mjs --clean",
+    "generate:testfile": "node scripts/generate-tests-from-scenario-xml.mjs",
+    "generate:testfiles:all": "node scripts/generate-tests-from-scenario-xml.mjs --all",
+    "clean:testfiles": "node scripts/generate-tests-from-scenario-xml.mjs --clean",
+    "generate:testfile:xml": "node scripts/generate-tests-from-scenario-xml.mjs",
+    "generate:testfiles:xml:all": "node scripts/generate-tests-from-scenario-xml.mjs --all",
+    "clean:testfiles:xml": "node scripts/generate-tests-from-scenario-xml.mjs --clean",
     "check:testfile": "node scripts/run-generated-testfile.mjs --mode check",
     "check:testfile:verbose": "node scripts/run-generated-testfile.mjs --mode check --verbose",
     "check:testfile:force": "node scripts/run-generated-testfile.mjs --mode check --force",
@@ -19,12 +22,20 @@
     "generate:tts": "node scripts/run-annotated-video.mjs --scenario-tts",
     "generate:tts:force": "node scripts/run-annotated-video.mjs --scenario-tts --force-video",
     "generate:tts:full:force": "node scripts/run-annotated-video.mjs --scenario-tts --force-video --profile=all-channels",
-    "generate:tts:full": "node scripts/run-annotated-video.mjs --scenario-tts --profile=all-channels"
+    "generate:tts:full": "node scripts/run-annotated-video.mjs --scenario-tts --profile=all-channels",
+    "remotion:script": "node scripts/run-annotated-video.mjs --scenario-tts --profile=all-channels --remotion-plan-only",
+    "remotion:render": "node scripts/remotion-render.mjs",
+    "remotion:render:debug": "node scripts/remotion-render.mjs --keep-temp-project"
   },
   "dependencies": {
     "@google-cloud/text-to-speech": "^6.4.1",
+    "@remotion/bundler": "^4.0.0",
+    "@remotion/renderer": "^4.0.0",
+    "fast-xml-parser": "^4.5.6",
     "pdfjs-dist": "^5.6.205",
-    "yaml": "^2.8.1"
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remotion": "^4.0.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0"

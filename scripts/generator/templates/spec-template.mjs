@@ -20,6 +20,9 @@ function countRenderedSteps(flowEntries) {
     if (Array.isArray(step?.flow) && step.flow.length > 0) {
       count += countRenderedSteps(step.flow)
     }
+    if (Array.isArray(step?.elseFlow) && step.elseFlow.length > 0) {
+      count += countRenderedSteps(step.elseFlow)
+    }
   }
 
   return count
@@ -67,10 +70,20 @@ function injectAutoScrollSteps(flowEntries, options = {}, path = []) {
     }
 
     const nestedFlow = Array.isArray(step?.flow) ? step.flow : null
+    const nestedElseFlow = Array.isArray(step?.elseFlow) ? step.elseFlow : null
     if (nestedFlow && nestedFlow.length > 0) {
-      injected.push({
+      const nextStep = {
         ...step,
         flow: injectAutoScrollSteps(nestedFlow, options, currentPath),
+      }
+      if (nestedElseFlow && nestedElseFlow.length > 0) {
+        nextStep.elseFlow = injectAutoScrollSteps(nestedElseFlow, options, currentPath)
+      }
+      injected.push(nextStep)
+    } else if (nestedElseFlow && nestedElseFlow.length > 0) {
+      injected.push({
+        ...step,
+        elseFlow: injectAutoScrollSteps(nestedElseFlow, options, currentPath),
       })
     } else {
       injected.push(step)
@@ -539,17 +552,50 @@ export function renderScenarioSpecTemplate({ resolvedRoot, scenarioPathRelative,
       const purposeText = typeof stepDidactics?.purpose?.text === 'string'
         ? String(stepDidactics.purpose.text).replace(/\s+/g, ' ').trim()
         : ''
-      const stepId = String(step.id || slugify(purposeText || 'step'))
-      const stepTitle = purposeText ? `${stepId}: ${purposeText}` : stepId
+      
+
+      const stepId = typeof step?.resolvedId === 'string' ? step.resolvedId.trim() : '';
+      const stepTitle = typeof step?.resolvedTitle === 'string' ? step.resolvedTitle.trim() : ''
+      
+      
+
+      const conditionalCondition = step?.condition && typeof step.condition === 'object' ? step.condition : null
+      const conditionalThenFlow = Array.isArray(step?.flow) ? step.flow : []
+      const conditionalElseFlow = Array.isArray(step?.elseFlow) ? step.elseFlow : []
+      const isConditionalBranchStep = Boolean(
+        conditionalCondition
+        && (conditionalThenFlow.length > 0 || conditionalElseFlow.length > 0)
+      )
 
       const ifConditions = toConditionList(step.if, 'if', stepId)
       const ifNotConditions = toConditionList(step.ifnot, 'ifnot', stepId)
 
-      parts.push(`${indent}__scenarioStepResult = await timelineRuntime.runStep(${toLiteral(stepId)}, async () => {`)
+      parts.push(`${indent}__scenarioStepResult = await timelineRuntime.runStep(${toLiteral(stepId)},${toLiteral(stepTitle)} ,async () => {`)
+      if (stepId || stepTitle) {
+        parts.push(`${indent}  // ${[stepId, stepTitle].filter(Boolean).join(' | ')}`)
+      }
       parts.push(`${indent}  // ${stepTitle}`)
       parts.push(`${indent}  await stepIdentifierLogger.capture(${toLiteral(stepId)}, "before")`)
 
-      if (ifConditions.length > 0 || ifNotConditions.length > 0) {
+      if (isConditionalBranchStep) {
+        parts.push(`${indent}  const __scenarioConditionMet = await shouldRunStepFromGuards(page, ${toLiteral({ if: [conditionalCondition], ifnot: [] })})`)
+        parts.push(`${indent}  if (__scenarioConditionMet) {`)
+        if (conditionalThenFlow.length > 0) {
+          emitFlowSteps(conditionalThenFlow, `${indent}    `)
+        } else {
+          parts.push(`${indent}    await stepIdentifierLogger.capture(${toLiteral(stepId)}, "skipped", { reason: "conditional then-branch empty" })`)
+          parts.push(`${indent}    return { __scenarioStepStatus: 'skipped', reason: 'conditional then-branch empty' }`)
+        }
+        parts.push(`${indent}  } else {`)
+        if (conditionalElseFlow.length > 0) {
+          emitFlowSteps(conditionalElseFlow, `${indent}    `)
+        } else {
+          parts.push(`${indent}    await stepIdentifierLogger.capture(${toLiteral(stepId)}, "skipped", { reason: "condition not met and no else branch" })`)
+          parts.push(`${indent}    return { __scenarioStepStatus: 'skipped', reason: 'condition not met and no else branch' }`)
+        }
+        parts.push(`${indent}  }`)
+        parts.push('')
+      } else if (ifConditions.length > 0 || ifNotConditions.length > 0) {
         parts.push(`${indent}  const shouldRunStep = await shouldRunStepFromGuards(page, ${toLiteral({ if: ifConditions, ifnot: ifNotConditions })})`)
         parts.push(`${indent}  if (!shouldRunStep) {`)
         parts.push(`${indent}    await stepIdentifierLogger.capture(${toLiteral(stepId)}, "skipped", { reason: "if/ifnot guard condition not met" })`)
@@ -559,7 +605,9 @@ export function renderScenarioSpecTemplate({ resolvedRoot, scenarioPathRelative,
       }
 
       const nestedFlow = Array.isArray(step.flow) ? step.flow : []
-      if (nestedFlow.length > 0) {
+      if (isConditionalBranchStep) {
+        // Branch flow is emitted above.
+      } else if (nestedFlow.length > 0) {
         emitFlowSteps(nestedFlow, `${indent}  `)
       } else {
         const interactionLines = buildInteractionLines(step, { scrollDelayRef: 'scrollDelayMs' })

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<SzenarioScript id="neo-hauptmenue" szenario-version="1.0" status="Entwurf" neo-version-min="6.0" titel="Fragment: Hauptmenü öffnen" fragment="true">
+
+	<Variablen>
+		<Variable name="hauptmenue-data-id"/>
+	</Variablen>
+
+	<Gruppe >
+
+		<Click data-id="button/menu-toggle"/>
+
+		<Click data-id="{{hauptmenue-data-id}}"/>
+
+		<Fragment name="auth-pin">
+			<Parameter name="pin" value="2308"/>
+		</Fragment>
+
+		<Wenn data-id="button/menu-toggle" attribut="aria-expanded" attribut-wert="true">
+
+			<Click data-id="button/menu-toggle"/>
+
+		</Wenn>
+
+	</Gruppe>
+
+</SzenarioScript>

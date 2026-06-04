@@ -163,7 +163,7 @@ interaction:
 
     - chapter:
           text:  |-
-            Zweck: Ein Datensatz pro Schüler*in
+            **Zweck:** Ein Datensatz pro Schüler*in
           font_size: 36
           text_y_start: 160
           line_spacing: 14
@@ -174,8 +174,8 @@ interaction:
 
     - chapter:        
           text: |-
-            Zweck: Ein Datensatz pro Schüler*in
-            Auslöser: Immer nutzbar
+            **Zweck:** Ein Datensatz pro Schüler*in
+            **Auslöser:** Immer nutzbar
           font_size: 36
           text_y_start: 160
           line_spacing: 14
@@ -186,9 +186,9 @@ interaction:
 
     - chapter:
           text: |-
-            Zweck: Ein Datensatz pro Schüler*in
-            Auslöser: Immer nutzbar
-            Berechtigung: Datenpflege der Funktion Schulleitung
+            **Zweck:** Ein Datensatz pro Schüler*in
+            **Auslöser:** Immer nutzbar
+            **Berechtigung:** Datenpflege der Funktion Schulleitung
           font_size: 36
           text_y_start: 160
           line_spacing: 14
@@ -199,10 +199,10 @@ interaction:
       
     - chapter:
           text: |-
-            Zweck: Ein Datensatz pro Schüler*in
-            Auslöser: Immer nutzbar
-            Berechtigung: Datenpflege der Funktion Schulleitung
-            Wirkung: Datenübernahme und Vormerkung zur Löschung
+            **Zweck:** Ein Datensatz pro Schüler*in
+            **Auslöser:** Immer nutzbar
+            **Berechtigung:** Datenpflege der Funktion Schulleitung
+            **Wirkung:** Datenübernahme und Vormerkung zur Löschung
           font_size: 36
           text_y_start: 160
           line_spacing: 14

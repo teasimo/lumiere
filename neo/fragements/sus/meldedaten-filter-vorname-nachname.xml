@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<SzenarioScript
+    id="meldedaten-filter-vorname-nachname"
+    szenario-version="1.0"
+    status="Entwurf"
+    neo-version-min="6.0"
+    titel="Fragment: Meldedaten nach Vorname und Nachname filtern"
+    fragment="true">
+
+    <Variablen>
+        <Variable name="vorname"/>
+        <Variable name="nachname"/>
+    </Variablen>
+
+    <Gruppe id="meldedaten_filter_vorname_nachname">
+
+        <Click
+            id="filters"
+            data-id="filters"/>
+
+        <Auswahl
+            id="filters_basic_choose_vornamen"
+            data-id="filters/basic/choose"
+            text="Vornamen"/>
+
+        <Eingabe
+            id="filters_basic_0"
+            data-id="filters/basic/0"
+            text="{{vorname}}"/>
+
+        <Auswahl
+            id="filters_basic_choose_familienname"
+            data-id="filters/basic/choose"
+            text="Familienname"/>
+
+        <Eingabe
+            id="filters_basic_1"
+            data-id="filters/basic/1"
+            text="{{nachname}}"/>
+
+        <Click
+            id="filters_apply"
+            data-id="filters/apply"/>
+
+    </Gruppe>
+
+</SzenarioScript>

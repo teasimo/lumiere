@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<SzenarioScript
+    id="neo-hauptmenue-personal-personalverwaltung"
+    szenario-version="1.0"
+    status="Entwurf"
+    neo-version-min="6.0"
+    titel="Fragment: Hauptmenü Personal → Personalverwaltung"
+    fragment="true">
+
+    <Gruppe id="neo_hauptmenue_personal_personalverwaltung">
+
+        <Fragment name="neo-untermenue">
+            <Parameter
+                name="hauptmenue-data-id"
+                value="menu/item/personal/"/>
+
+            <Parameter
+                name="untermenue-data-id"
+                value="menu/link/personal/personal/"/>
+        </Fragment>
+
+    </Gruppe>
+
+</SzenarioScript>

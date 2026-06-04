@@ -1,0 +1,78 @@
+<SzenarioScript id="meldedaten-create" szenario-version="1.0" status="Freigegeben" neo-version-min="6.0" titel="Fragment: Meldedaten anlegen" fragment="true">
+
+	<Variablen>
+		<Variable name="schueler.nachname"/>
+		<Variable name="schueler.vorname"/>
+		<Variable name="schueler.geburtsdatum"/>
+		<Variable name="schueler.geburtsort"/>
+		<Variable name="schueler.adresseSuche"/>
+
+		<Variable name="schueler.ez1.nachname"/>
+		<Variable name="schueler.ez1.vorname"/>
+		<Variable name="schueler.ez1.anrede"/>
+		<Variable name="schueler.ez1.adresseSuche"/>
+
+		<Variable name="schueler.ez2.nachname"/>
+		<Variable name="schueler.ez2.vorname"/>
+		<Variable name="schueler.ez2.anrede"/>
+		<Variable name="schueler.ez2.adresseSuche"/>
+	</Variablen>
+
+	<Gruppe >
+
+		<!-- Navigiere zu den Meldedaten -->
+		<Click data-id="button/menu-toggle"/>
+		<Click data-id="menu/item/schueler/"/>
+		<Click data-id="menu/link/schueler/meldedaten/"/>
+
+		<!-- Ggf. Pin -->
+		<Fragment name="auth-pin">
+			<Parameter name="pin" value="2308"/>
+		</Fragment>
+
+		
+
+		<Warten text="Lade Daten..." status="nicht-sichtbar" timeout-ms="10000"/>
+
+		<Click data-id="btn/create"/>
+
+		<Wenn data-id="g_adr_standard/g_adresse/adresseingabe" status="nicht-sichtbar">
+			<Click data-id="btn/action-expandcollapseall"/>
+		</Wenn>
+
+		<Eingabe data-id="g_person_angaben/g_person_angaben~2/familienname" text="{{schueler.nachname}}"/>
+		<Eingabe data-id="g_person_angaben/g_person_angaben~2/vornamen" text="{{schueler.vorname}}"/>
+		<Eingabe data-id="g_person_angaben/g_person_angaben~2/geburtsdatum" text="{{schueler.geburtsdatum}}"/>
+		<Eingabe data-id="g_person_angaben/g_person_angaben~2/geburtsort" text="{{schueler.geburtsort}}"/>
+
+		<SucheAuswahl data-id="g_adr_standard/g_adresse/adresseingabe" suchwert="{{schueler.adresseSuche}}" treffer-index="0"/>
+
+		<Click data-id="tabs_gesver/btn/action-createGesver"/>
+
+		<Eingabe data-id="g_gesver_person/tabs_gesver/familienname" text="{{schueler.ez1.nachname}}"/>
+
+		<Eingabe data-id="g_gesver_person/tabs_gesver/vornamen" text="{{schueler.ez1.vorname}}"/>
+
+		<Auswahl data-id="g_gesver_person/tabs_gesver/anrede" text="{{schueler.ez1.anrede}}"/>
+
+
+		<SucheAuswahl data-id="g_adresse/g_gesver_adr/adresseingabe" suchwert="{{schueler.ez1.adresseSuche}}" treffer-index="0"/>
+
+
+		<Click data-id="tabs_gesver/btn/action-createGesver"/>
+
+		<Eingabe data-id="g_gesver_person/tabs_gesver/familienname" text="{{schueler.ez2.nachname}}"/>
+
+		<Eingabe data-id="g_gesver_person/tabs_gesver/vornamen" text="{{schueler.ez2.vorname}}"/>
+
+		<Click data-id="g_gesver_person"/>
+
+		<Auswahl data-id="g_gesver_person/tabs_gesver/anrede" text="{{schueler.ez2.anrede}}"/>
+
+		<SucheAuswahl data-id="g_adresse/g_gesver_adr/adresseingabe" suchwert="{{schueler.ez2.adresseSuche}}" treffer-index="0"/>
+
+		<Click data-id="btn/action-save"/>
+
+	</Gruppe>
+
+</SzenarioScript>

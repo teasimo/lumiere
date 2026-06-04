@@ -4,9 +4,26 @@ export async function searchAndSelect(page, { target, value, resultSelector, res
   await locator.scrollIntoViewIfNeeded();
   await locator.fill(value);
   await locator.press('Enter');
-  const results = page.locator(resultSelector);
-  await results.nth(resultIndex).scrollIntoViewIfNeeded();
-  await results.nth(resultIndex).click();
+
+  // Dropdown/result lists can re-render while opening; always resolve a fresh
+  // locator and retry a few times to avoid detached-element races.
+  await page.waitForSelector(resultSelector, { state: 'visible', timeout: 5000 });
+
+  let lastError = null;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const result = page.locator(resultSelector).nth(resultIndex);
+    try {
+      await result.waitFor({ state: 'visible', timeout: 2000 });
+      await result.scrollIntoViewIfNeeded();
+      await result.click();
+      return;
+    } catch (error) {
+      lastError = error;
+      await page.waitForTimeout(120);
+    }
+  }
+
+  throw lastError || new Error(`search-and-select failed for selector: ${resultSelector}`);
 }
 // Base template parts for generated Playwright specs
 // Organized into sections for better maintainability

@@ -122,3 +122,19 @@ fragment:
 ## Schema aktualisieren
 
 Das Schema liegt in [`schemas/lumiere-test.schema.json`](lumiere-test.schema.json). Neue Interaktionstypen, Selektoren oder Eigenschaften können dort direkt ergänzt werden. VS Code liest das Schema beim nächsten Öffnen einer YAML-Datei neu ein.
+
+---
+
+## Semantischer Video-Plan
+
+Zusätzlich liegt unter [`schemas/lumiere-semantic-video-plan.schema.json`](lumiere-semantic-video-plan.schema.json) ein JSON-Schema fuer das neue semantische Video-Planformat.
+
+Zweck:
+
+- fachliche Struktur von Kapiteln und Schritten abbilden
+- Source-Time und Plan-Time sauber trennen
+- generierte Remotion-Skripte semantisch statt timeline-zentriert modellieren
+
+Das Schema ist fuer generatorinterne JSON-Artefakte gedacht, nicht fuer die YAML-Testszenarien selbst.
+
+Weiterfuehrende Beschreibung und ein Beispielskript stehen in [`documentation/requirements/semantic-remotion-architecture.md`](../documentation/requirements/semantic-remotion-architecture.md).

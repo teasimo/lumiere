@@ -1,0 +1,298 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified" attributeFormDefault="unqualified">
+    <!-- ========================================================= -->
+    <!-- Root -->
+    <!-- ========================================================= -->
+    <xs:element name="SzenarioScript" type="SzenarioScriptType"/>
+    <xs:complexType name="SzenarioScriptType">
+        <xs:sequence>
+            <xs:element name="Notizen" type="TextBlockType" minOccurs="0"/>
+            <xs:element name="Einstellungen" type="EinstellungenType" minOccurs="0"/>
+            <xs:element name="Daten" type="DatenType" minOccurs="0"/>
+            <xs:element name="Variablen" type="VariablenType" minOccurs="0"/>
+            <xs:element name="Gruppe" type="GruppeType" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+        <xs:attribute name="id" type="xs:ID" use="required"/>
+        <xs:attribute name="szenario-version" type="xs:string" use="required"/>
+        <xs:attribute name="status" type="StatusType" use="required"/>
+        <xs:attribute name="neo-version-min" type="xs:string" use="required"/>
+        <xs:attribute name="neo-version-max" type="xs:string" use="optional"/>
+        <xs:attribute name="titel" type="xs:string" use="required"/>
+        <xs:attribute name="fragment" type="xs:boolean" use="optional" default="false"/>
+    </xs:complexType>
+
+    <!-- DATEN -->
+    <xs:complexType name="DatenType">
+        <xs:choice minOccurs="0" maxOccurs="unbounded">
+            <xs:element name="Wert" type="WertType"/>
+            <xs:element name="Datensatz" type="DatensatzType"/>
+        </xs:choice>
+    </xs:complexType>
+
+    <xs:complexType name="DatensatzType">
+        <xs:sequence>
+            <xs:element name="Wert" type="WertType" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+        <xs:attribute name="name" type="xs:string" use="required"/>
+    </xs:complexType>
+
+    <xs:complexType name="WertType">
+        <xs:attribute name="name" type="xs:string" use="required"/>
+        <xs:attribute name="value" type="xs:string" use="required"/>
+    </xs:complexType>
+
+    <xs:complexType name="VariablenType">
+        <xs:sequence>
+            <xs:element name="Variable" type="VariableType" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+    <xs:complexType name="VariableType">
+        <xs:attribute name="name" type="xs:string" use="required"/>
+        <xs:attribute name="value" type="xs:string" use="optional"/>
+    </xs:complexType>
+    <!-- ========================================================= -->
+    <!-- Enums -->
+    <!-- ========================================================= -->
+    <xs:simpleType name="StatusType">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Entwurf"/>
+            <xs:enumeration value="Freigegeben"/>
+            <xs:enumeration value="Archiviert"/>
+        </xs:restriction>
+    </xs:simpleType>
+    <xs:simpleType name="InfoTypType">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="Erklärung"/>
+            <xs:enumeration value="Zweck"/>
+            <xs:enumeration value="Konsequenz"/>
+            <xs:enumeration value="Hinweis"/>
+            <xs:enumeration value="Bedingung"/>
+            <xs:enumeration value="Warnung"/>
+        </xs:restriction>
+    </xs:simpleType>
+    <xs:simpleType name="AusgabeType">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="sofort"/>
+            <xs:enumeration value="gruppe"/>
+            <xs:enumeration value="overlay"/>
+            <xs:enumeration value="audio"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <!-- ========================================================= -->
+    <!-- Gruppe -->
+    <!-- ========================================================= -->
+    <xs:complexType name="GruppeType">
+        <xs:choice minOccurs="0" maxOccurs="unbounded">
+            <xs:element name="Folie" type="TextBlockType"/>
+            <xs:element name="Banner" type="TextBlockType"/>
+            <xs:element name="VideoStop" type="VideoStopType"/>
+            <xs:element name="VideoStart" type="VideoStartType"/>
+            <xs:element name="Info" type="InfoType"/>
+            <xs:element name="Fragment" type="FragmentType"/>
+            <xs:element name="Click" type="ClickType"/>
+            <xs:element name="Eingabe" type="KomponentInputType"/>
+            <xs:element name="Auswahl" type="KomponentInputType"/>
+            <xs:element name="Anzeige" type="InteractionType"/>
+            <xs:element name="Auslesen" type="AuslesenType"/>
+            <xs:element name="Gruppe" type="GruppeType"/>
+            <xs:element name="Warten" type="WartenType"/>
+            <xs:element name="Oeffnen" type="OeffnenType"/>
+            <xs:element name="SucheAuswahl" type="SucheAuswahlType"/>
+            <!-- In GruppeType ergänzen -->
+            <xs:element name="Wenn" type="WennType"/>
+        </xs:choice>
+        <xs:attribute name="id" type="xs:ID"/>
+    </xs:complexType>
+
+    <!-- WENN -->
+    <xs:group name="WennInhaltGroup">
+        <xs:choice >
+            <xs:element name="Click" type="ClickType"/>
+            <xs:element name="Eingabe" type="KomponentInputType"/>
+            <xs:element name="Auswahl" type="KomponentInputType"/>
+            <xs:element name="Anzeige" type="InteractionType"/>
+            <xs:element name="Auslesen" type="AuslesenType"/>
+            <xs:element name="Warten" type="WartenType"/>
+            <xs:element name="Oeffnen" type="OeffnenType"/>
+            <xs:element name="SucheAuswahl" type="SucheAuswahlType"/>
+            <xs:element name="Gruppe" type="GruppeType"/>
+            <xs:element name="Wenn" type="WennType"/>
+        </xs:choice>
+    </xs:group>
+    <xs:complexType name="SonstType">
+        <xs:sequence>
+            <xs:group ref="WennInhaltGroup" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+    <xs:complexType name="WennType">
+        <xs:complexContent>
+            <xs:extension base="InteractionType">
+
+                <xs:sequence>
+
+                    <xs:group ref="WennInhaltGroup" minOccurs="0" maxOccurs="unbounded"/>
+
+                    <xs:element name="Sonst" type="SonstType" minOccurs="0"/>
+
+                </xs:sequence>
+
+                <xs:attribute name="attribut" type="xs:string" use="optional"/>
+
+                <xs:attribute name="attribut-wert" type="xs:string" use="optional"/>
+
+                <xs:attribute name="status" type="WartenStatusType" use="optional"/>
+
+                <xs:attribute name="timeout-ms" type="xs:positiveInteger" use="optional"/>
+
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+    <!-- ========================================================= -->
+    <!-- Textblöcke -->
+    <!-- ========================================================= -->
+    <xs:complexType name="TextBlockType" mixed="true" />
+    <xs:complexType name="InfoType" mixed="true">
+        <xs:sequence/>
+        <xs:attribute name="typ" type="InfoTypType" use="required"/>
+        <xs:attribute name="ausgabe" type="AusgabeType" use="optional"/>
+    </xs:complexType>
+    <!-- ========================================================= -->
+    <!-- Fragmente -->
+    <!-- ========================================================= -->
+    <xs:complexType name="FragmentType">
+        <xs:sequence>
+            <xs:element name="Parameter" type="ParameterType" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+        <xs:attribute name="name" type="xs:string" use="required"/>
+    </xs:complexType>
+
+    <xs:complexType name="ParameterType">
+        <xs:attribute name="name" type="xs:string" use="required"/>
+        <xs:attribute name="value" type="xs:string" use="required"/>
+    </xs:complexType>
+
+    <!-- ========================================================= -->
+    <!-- Interaktionen -->
+    <!-- ========================================================= -->
+    <xs:complexType name="InteractionType" abstract="false">
+        <xs:attribute name="id" type="xs:ID"/>
+        <xs:attribute name="number" type="xs:string" use="optional"/>
+        <xs:attribute name="text" type="xs:string" use="optional"/>
+        <xs:attribute name="label" type="xs:string" use="optional"/>
+        <xs:attribute name="aria-label" type="xs:string" use="optional"/>
+        <xs:attribute name="data-id" type="xs:string" use="optional"/>
+    </xs:complexType>
+
+    <xs:complexType name="AuslesenType">
+        <xs:complexContent>
+            <xs:extension base="InteractionType">
+                <xs:attribute name="variable" type="xs:string" use="required"/>
+                <xs:attribute name="quelle" type="AuslesenQuelleType" use="optional"/>
+                <xs:attribute name="regex" type="xs:string" use="optional"/>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:simpleType name="AuslesenQuelleType">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="text"/>
+            <xs:enumeration value="value"/>
+            <xs:enumeration value="attribute"/>
+            <xs:enumeration value="url"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:complexType name="ClickType">
+        <xs:complexContent>
+            <xs:extension base="InteractionType">
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="KomponentInputType" mixed="true">
+        <xs:complexContent mixed="true">
+            <xs:extension base="InteractionType"/>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="WartenType">
+        <xs:complexContent>
+            <xs:extension base="InteractionType">
+
+                <xs:attribute name="status" type="WartenStatusType" use="optional"/>
+
+                <xs:attribute name="timeout-ms" type="xs:positiveInteger" use="optional"/>
+
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:simpleType name="WartenStatusType">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="sichtbar"/>
+            <xs:enumeration value="nicht-sichtbar"/>
+            <xs:enumeration value="aktiviert"/>
+            <xs:enumeration value="deaktiviert"/>
+            <xs:enumeration value="vorhanden"/>
+            <xs:enumeration value="nicht-vorhanden"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:complexType name="OeffnenType">
+        <xs:complexContent>
+            <xs:extension base="InteractionType">
+
+                <xs:attribute name="url" type="xs:string" use="optional"/>
+
+                <xs:attribute name="neu" type="xs:boolean" use="optional"/>
+
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+
+    <xs:complexType name="SucheAuswahlType">
+        <xs:complexContent>
+            <xs:extension base="InteractionType">
+
+                <xs:attribute name="suchwert" type="xs:string" use="required"/>
+
+                <xs:attribute name="treffer-index" type="xs:nonNegativeInteger" use="optional" default="0"/>
+
+                <xs:attribute name="wartezeit-ms" type="xs:positiveInteger" use="optional"/>
+
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <!-- ========================================================= -->
+    <!-- Video -->
+    <!-- ========================================================= -->
+    <xs:complexType name="VideoStartType">
+    </xs:complexType>
+    <xs:complexType name="VideoStopType">
+    </xs:complexType>
+
+    <!-- Einstellungen -->
+    <xs:complexType name="EinstellungenType">
+        <xs:choice minOccurs="0" maxOccurs="unbounded">
+            <xs:element name="Einstellung" type="EinstellungType"/>
+            <xs:element name="Gruppe" type="EinstellungsGruppeType"/>
+        </xs:choice>
+    </xs:complexType>
+
+    <xs:complexType name="EinstellungsGruppeType">
+        <xs:choice minOccurs="0" maxOccurs="unbounded">
+            <xs:element name="Einstellung" type="EinstellungType"/>
+            <xs:element name="Gruppe" type="EinstellungsGruppeType"/>
+        </xs:choice>
+        <xs:attribute name="name" type="xs:string" use="required"/>
+    </xs:complexType>
+
+    <xs:complexType name="EinstellungType">
+        <xs:attribute name="name" type="xs:string" use="required"/>
+        <xs:attribute name="value" type="xs:string" use="required"/>
+        <xs:attribute name="typ" type="xs:string" use="optional"/>
+    </xs:complexType>
+</xs:schema>

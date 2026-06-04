@@ -326,7 +326,7 @@
       "properties": {
         "text": {
           "type": "string",
-          "description": "Titeltext der Kapitelkarte"
+          "description": "Titeltext der Kapitelkarte; einfache Markdown-ähnliche Syntax wird für das Overlay normalisiert (Zeilenumbrüche, Listen, Fett/Kursiv-Markierungen)"
         },
         "duration_ms": {
           "type": "integer",

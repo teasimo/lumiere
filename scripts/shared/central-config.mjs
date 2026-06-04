@@ -1,11 +1,10 @@
 import { existsSync, readFileSync } from 'fs'
 import { relative, resolve } from 'path'
-import { parse as parseYaml } from 'yaml'
 
 const DEFAULTS = {
   defaults: {
-    scenario_path: 'lunettes/tests/login.yaml',
-    scenario_dir: 'lunettes/tests',
+    scenario_path: 'neo/interactions/dubletten-aufloesen/FR1-case-sus-dubletten-zusammenfuehren.xml',
+    scenario_dir: 'neo/interactions',
     output_dir: 'temp/testfiles',
   },
   video: {
@@ -45,7 +44,7 @@ function deepMerge(base, override) {
 }
 
 export function loadCentralConfig(workspaceRoot) {
-  const configAbsolutePath = resolve(workspaceRoot, 'scenario.config.yaml')
+  const configAbsolutePath = resolve(workspaceRoot, 'scenario.config.json')
   if (!existsSync(configAbsolutePath)) {
     return {
       config: DEFAULTS,
@@ -56,7 +55,7 @@ export function loadCentralConfig(workspaceRoot) {
 
   try {
     const raw = readFileSync(configAbsolutePath, 'utf8')
-    const parsed = parseYaml(raw) || {}
+    const parsed = JSON.parse(raw)
     const payload = isPlainObject(parsed.scenario) ? parsed.scenario : parsed
     const merged = deepMerge(DEFAULTS, payload)
     return {
@@ -65,6 +64,6 @@ export function loadCentralConfig(workspaceRoot) {
       exists: true,
     }
   } catch (error) {
-    throw new Error(`Failed to parse central config at ${relative(workspaceRoot, configAbsolutePath)}: ${error.message}`)
+    throw new Error(`Failed to parse central config JSON at ${relative(workspaceRoot, configAbsolutePath)}: ${error.message}`)
   }
 }

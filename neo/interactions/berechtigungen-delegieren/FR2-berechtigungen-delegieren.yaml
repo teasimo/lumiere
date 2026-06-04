@@ -20,13 +20,13 @@ interaction:
   
   data:
     runtime:
-      base_url: https://neo-integration.de
+      base_url: https://neo-test.de
     actor:
-      username: schule_05423_schulleitung
+      username: schule_05320_schulleitung
       password: "!Neo-2405Neo!"
     personal:
-      vorname: "Erin"
-      nachname: "Miles"    
+      vorname: "Cheryl"
+      nachname: "Edwards"    
   flow:
     - id: neo-login
       fragment: neo-login
@@ -43,6 +43,13 @@ interaction:
           with:
             vorname: "{{personal.vorname}}"
             nachname: "{{personal.nachname}}"
+        - id: oeffnen
+          fragment: element-open-first
+        - id: Einstellungen-oeffnen
+          click: 
+            text: "Einstellungen"
+          
+        
 
     - id: navigate-mein-profil
       fragment: neo-hauptmenue-mein-profil
@@ -62,7 +69,7 @@ interaction:
     - id: btn/action-expandcollapseall
       if:
         target:
-          data-id: g_adr_standard/g_adresse/adresseingabe
+          data-id: g_prp_org_delegate/btn/action-insert-scope
         state:
           visible: false
       interaction:
@@ -70,30 +77,49 @@ interaction:
         target:
           data-id: btn/action-expandcollapseall
 
+    - id: Einstellungen-oeffnen2
+      click: 
+        text: "Einstellungen"
+
     # Neuer Eintrag
     - id: g_prp_org_delegate/btn/action-insert-scope
       click: g_prp_org_delegate/btn/action-insert-scope
 
-    - id: g_prp_org_delegate/$data1/funktion_anzeige
-      select: g_prp_org_delegate/$data1/funktion_anzeige
+    - id: g_prp_org_delegate/$data0/funktion_anzeige
+      select: g_prp_org_delegate/$data0/funktion_anzeige
       value: "Schulleitung"
 
-    - id: g_prp_org_delegate/$data1/prp_name
-      select: g_prp_org_delegate/$data1/prp_name
+    - id: g_prp_org_delegate/$data0/prp_name
+      select: g_prp_org_delegate/$data0/prp_name
       value: "Meldedatenimport"
 
-    - id: g_prp_org_delegate/$data1/prp_name
-      select: g_prp_org_delegate/$data1/empfaenger_display_name
+    - id: g_prp_org_delegate/$data0/empfaenger_display_name
+      select: g_prp_org_delegate/$data0/empfaenger_display_name
       value: "{{personal.nachname}}, {{personal.vorname}}"
 
-    - id: g_prp_org_delegate/$data1/bbo_wirksam_ab
-      fill: g_prp_org_delegate/$data1/bbo_wirksam_ab
+    - id: g_prp_org_delegate/$data0/bbo_wirksam_ab
+      fill: g_prp_org_delegate/$data0/bbo_wirksam_ab
       value: "07.06.2026"
     
-    - id: g_prp_org_delegate/$data1/bbo_wirksam_ab
-      fill: g_prp_org_delegate/$data1/bbo_wirksam_bis
+    - id: g_prp_org_delegate/$data0/bbo_wirksam_bis
+      fill: g_prp_org_delegate/$data0/bbo_wirksam_bis
       value: "15.06.2026"
 
     - id: btn/action-save
       click: btn/action-save
 
+    - id: ja-delegieren
+      click:
+        text: Ja
+
+#  g_prp_org_delegate/$data0/prp_name <- der button hat eine falsche ID die doppelt verwendet wird
+    - id: loeschen
+      interaction: 
+        type: click
+        target:
+          data-id: g_prp_org_delegate/$data0/prp_name        
+        resultIndex: 1
+    
+    - id: ja-loeschen
+      click:
+        text: Ja
