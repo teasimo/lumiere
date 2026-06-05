@@ -8,6 +8,9 @@ export function createScenarioTimelineRuntime({
   scenarioId,
   scenarioVersion,
   scenarioSource,
+  page,
+  videoModeEnabled = false,
+  waitBetweenStepsMs = 0,
 }) {
   const timeline = []
 
@@ -25,6 +28,11 @@ export function createScenarioTimelineRuntime({
         typeof executeResult === 'object' &&
         executeResult.__scenarioStepStatus === 'skipped'
       )
+      const noop = Boolean(
+        executeResult &&
+        typeof executeResult === 'object' &&
+        executeResult.__scenarioStepStatus === 'noop'
+      )
       const status = skipped ? 'skipped' : 'executed'
       const skipReason = skipped ?
         String(executeResult.reason || 'step guard condition was not met') :
@@ -32,6 +40,14 @@ export function createScenarioTimelineRuntime({
 
       const endedAtMs = Date.now()
       const endedAtIso = new Date(endedAtMs).toISOString()
+
+      const statusText = skipped ? `SKIPPED (${skipReason})` : 'EXECUTED'
+      console.log(`[scenario-step] ${stepId} | ${stepDescription} | ${statusText} | ${startedAtIso} -> ${endedAtIso} (${endedAtMs - startedAtMs}ms)`)
+
+      const shouldWaitAfterStep = !skipped && !noop
+      if (videoModeEnabled && waitBetweenStepsMs > 0 && shouldWaitAfterStep && page) {
+        await page.waitForTimeout(waitBetweenStepsMs)
+      }
 
       timeline.push({
         stepId,
@@ -42,12 +58,11 @@ export function createScenarioTimelineRuntime({
         startedAtMs,
         endedAtMs,
         startedAtIso,
-        endedAtIso,        
+        endedAtIso,
         durationMs: endedAtMs - startedAtMs,
       })
 
-      const statusText = skipped ? `SKIPPED (${skipReason})` : 'EXECUTED'
-      console.log(`[scenario-step] ${stepId} | ${stepDescription} | ${statusText} | ${startedAtIso} -> ${endedAtIso} (${endedAtMs - startedAtMs}ms)`)
+      return executeResult
     },
 
     async flush() {

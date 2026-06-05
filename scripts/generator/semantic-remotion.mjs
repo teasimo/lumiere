@@ -1,5 +1,10 @@
 import { dirname, relative, resolve } from 'path'
 
+// Toggle click marker behavior in generated Remotion plans.
+// true: click steps are represented via freeze/pause windows.
+// false: click steps use visual marker overlays without injected freezes.
+const CLICKMARKER_FREEZE = true
+
 function toPosixPath(value) {
   return String(value || '').replace(/\\/g, '/')
 }
@@ -22,7 +27,9 @@ function flattenFlowSteps(flowEntries, out = [], idPrefix = '') {
       continue
     }
 
-    const stepId = String(step.id || '').trim()
+    const resolvedId = String(step.resolvedId || '').trim()
+    const rawStepId = String(step.id || '').trim()
+    const stepId = resolvedId || rawStepId
     if (!stepId) {
       if (step.chapter) {
         out.push({
@@ -35,7 +42,9 @@ function flattenFlowSteps(flowEntries, out = [], idPrefix = '') {
       continue
     }
 
-    const fullId = idPrefix ? `${idPrefix}-${stepId}` : stepId
+    const fullId = resolvedId
+      ? stepId
+      : (idPrefix ? `${idPrefix}-${stepId}` : stepId)
     out.push({
       id: fullId,
       step,
@@ -110,8 +119,21 @@ function buildStepWindowMap({ scenarioRoot, timelineReport, presentationRange = 
   const timelineSteps = Array.isArray(timelineReport?.steps) ? timelineReport.steps : []
   const flattenedFlowStepEntries = flattenFlowSteps(flow)
   const sortedTimelineSteps = [...timelineSteps].sort((left, right) => Number(left?.startedAtMs || 0) - Number(right?.startedAtMs || 0))
-  const clipStartMs = presentationRange ? Math.max(0, Number(presentationRange.startMs) || 0) : 0
-  const clipEndMs = presentationRange?.endMs == null ? null : Math.max(0, Number(presentationRange.endMs) || 0)
+  let timelineOriginMs = 0
+  for (const timelineStep of sortedTimelineSteps) {
+    const startedAtMs = Number(timelineStep?.startedAtMs)
+    if (Number.isFinite(startedAtMs) && startedAtMs >= 0) {
+      timelineOriginMs = startedAtMs
+      break
+    }
+  }
+
+  const clipStartMs = presentationRange
+    ? Math.max(0, Number(presentationRange.startMs) || 0)
+    : 0
+  const clipEndMs = presentationRange?.endMs == null
+    ? null
+    : Math.max(clipStartMs, Number(presentationRange.endMs) || clipStartMs)
   const stepWindowById = new Map()
 
   for (const flowEntry of flattenedFlowStepEntries) {
@@ -123,16 +145,25 @@ function buildStepWindowMap({ scenarioRoot, timelineReport, presentationRange = 
       continue
     }
 
-    const clipRelativeStartMs = Math.max(0, Math.floor(window.startedAtMs - clipStartMs))
-    const unclampedEndMs = Math.max(window.startedAtMs, window.endedAtMs)
-    const absoluteEndMs = clipEndMs == null ? unclampedEndMs : Math.min(unclampedEndMs, clipEndMs)
-    const clipRelativeEndMs = Math.max(clipRelativeStartMs + 1, Math.floor(absoluteEndMs - clipStartMs))
+    // Das sind die Parameter, die bestimmen, welche Zeit vor und nach einem Interaktion aus dem Video übernommen wird
+    const timeToShowBeforeInteraction = 500;
+    const timeToShowAfterInteraction = 500;
+
+    const timelineRelativeStartMs = Math.max(0, Math.floor(window.startedAtMs - timelineOriginMs))
+    const timelineRelativeEndMs = Math.max(timelineRelativeStartMs, Math.floor(window.endedAtMs - timelineOriginMs+ timeToShowAfterInteraction))
+
+    const clipRelativeStartMs = Math.max(0, timelineRelativeStartMs - clipStartMs - timeToShowBeforeInteraction)
+    const unclampedRelativeEndMs = Math.max(timelineRelativeStartMs, timelineRelativeEndMs)
+    const clampedRelativeEndMs = clipEndMs == null
+      ? unclampedRelativeEndMs
+      : Math.min(unclampedRelativeEndMs, clipEndMs)
+    const clipRelativeEndMs = Math.max(clipRelativeStartMs + 1, clampedRelativeEndMs - clipStartMs )
 
     stepWindowById.set(flowEntry.id, {
       sourceStartMs: clipRelativeStartMs,
       sourceEndMs: clipRelativeEndMs,
       originalStartMs: Math.max(0, Math.floor(window.startedAtMs)),
-      originalEndMs: Math.max(0, Math.floor(absoluteEndMs)),
+      originalEndMs: Math.max(0, Math.floor(window.endedAtMs)),
     })
   }
 
@@ -236,12 +267,472 @@ function toChapterCardCallout(chapterCard) {
   }].filter((entry) => entry.text)
 }
 
+
+function mapInteractionKind(interactionType) {
+  const normalized = String(interactionType || '').trim().toLowerCase()
+  if (!normalized) return 'unknown'
+  if (normalized === 'search-and-select') return 'search-select'
+  return normalized
+}
+
+function estimateTtsDurationMs(text, explicitDurationMs = null) {
+  const explicit = Number(explicitDurationMs)
+  if (Number.isFinite(explicit) && explicit > 0) {
+    return Math.max(300, Math.floor(explicit))
+  }
+
+  const wordCount = String(text || '').trim().split(/\s+/).filter(Boolean).length
+  const wordsPerMinute = 180
+  const msPerWord = 60000 / wordsPerMinute
+  return Math.max(1200, Math.round(wordCount * msPerWord))
+}
+
+function buildTimelineIndex(timelineReport) {
+  const steps = Array.isArray(timelineReport?.steps) ? timelineReport.steps : []
+  const byStepId = new Map()
+  let minStartMs = Number.POSITIVE_INFINITY
+  let maxEndMs = Number.NEGATIVE_INFINITY
+
+  for (const step of steps) {
+    const stepId = String(step?.stepId || '').trim()
+    const startedAtMs = Math.max(0, Math.floor(Number(step?.startedAtMs || 0)))
+    const endedAtMs = Math.max(startedAtMs, Math.floor(Number(step?.endedAtMs || startedAtMs)))
+    const durationMs = Math.max(0, Math.floor(Number(step?.durationMs || (endedAtMs - startedAtMs))))
+    const status = String(step?.status || '').trim() || 'unknown'
+    const skipped = step?.skipped === true || status.toLowerCase() === 'skipped'
+
+    minStartMs = Math.min(minStartMs, startedAtMs)
+    maxEndMs = Math.max(maxEndMs, endedAtMs)
+
+    if (!stepId) {
+      continue
+    }
+
+    const existing = byStepId.get(stepId)
+    if (!existing) {
+      byStepId.set(stepId, {
+        stepId,
+        startedAtMs,
+        endedAtMs,
+        durationMs,
+        status,
+        skipped,
+      })
+      continue
+    }
+
+    const mergedStartMs = Math.min(existing.startedAtMs, startedAtMs)
+    const mergedEndMs = Math.max(existing.endedAtMs, endedAtMs)
+    byStepId.set(stepId, {
+      stepId,
+      startedAtMs: mergedStartMs,
+      endedAtMs: mergedEndMs,
+      durationMs: Math.max(0, mergedEndMs - mergedStartMs),
+      status: existing.status,
+      skipped: existing.skipped && skipped,
+    })
+  }
+
+  const originalDurationMs = Number.isFinite(minStartMs) && Number.isFinite(maxEndMs)
+    ? Math.max(0, maxEndMs - minStartMs)
+    : 0
+
+  return {
+    byStepId,
+    originalDurationMs,
+  }
+}
+
+function buildChapterSwitchMap({ chapterCards, flattenedFlowStepEntries }) {
+  const byStepId = new Map()
+  const chapters = []
+  let sequence = 0
+
+  for (const card of Array.isArray(chapterCards) ? chapterCards : []) {
+    const anchorStepId = String(card?.sourceScenarioStepId || '').trim()
+    const title = String(card?.title || card?.text || '').trim()
+    if (!anchorStepId || !title) {
+      continue
+    }
+
+    sequence += 1
+    const chapterId = `chapter-${sequence}`
+    byStepId.set(anchorStepId, {
+      id: chapterId,
+      title,
+    })
+    chapters.push({ id: chapterId, title })
+  }
+
+  if (chapters.length === 0) {
+    for (const entry of flattenedFlowStepEntries) {
+      const chapterText = String(entry?.step?.chapter?.text || '').trim()
+      if (!chapterText) {
+        continue
+      }
+
+      sequence += 1
+      const chapterId = `chapter-${sequence}`
+      byStepId.set(String(entry?.id || '').trim(), {
+        id: chapterId,
+        title: chapterText,
+      })
+      chapters.push({ id: chapterId, title: chapterText })
+    }
+  }
+
+  if (chapters.length === 0) {
+    chapters.push({ id: 'chapter-1', title: 'Kapitel 1' })
+  }
+
+  return {
+    byStepId,
+    chapters,
+  }
+}
+
+function buildTtsByStepId(adjustedAudioFiles) {
+  const byStepId = new Map()
+
+  for (const entry of Array.isArray(adjustedAudioFiles) ? adjustedAudioFiles : []) {
+    const stepId = String(entry?.sourceScenarioStepId || entry?.sourceTimelineStepId || '').trim()
+    if (!stepId) {
+      continue
+    }
+
+    if (!byStepId.has(stepId)) {
+      byStepId.set(stepId, [])
+    }
+
+    const text = String(entry?.text || entry?.plainText || entry?.id || '').trim()
+    const audioDurationMs = Math.max(0, Math.floor(Number(entry?.audioDurationMs || 0)))
+    const startMs = Math.max(0, Math.floor(Number(entry?.finalOutputStartMs != null ? entry.finalOutputStartMs : entry?.startMs || 0)))
+    const endMs = Math.max(startMs, Math.floor(Number(entry?.finalOutputEndMs != null ? entry.finalOutputEndMs : entry?.endMs || startMs)))
+    const explicitDurationMs = endMs > startMs ? (endMs - startMs) : audioDurationMs
+
+    byStepId.get(stepId).push({
+      id: String(entry?.id || `${stepId}-tts`),
+      text,
+      voice: String(entry?.voice || 'de-DE'),
+      mode: String(entry?.mode || 'freeze').trim().toLowerCase() === 'parallel-group' ? 'parallel-group' : 'freeze',
+      durationMs: estimateTtsDurationMs(text, explicitDurationMs),
+    })
+  }
+
+  return byStepId
+}
+
+export function buildCanonicalVideoCompositionModel({
+  scenarioRoot,
+  timelineReport,
+  chapterCards = [],
+  adjustedAudioFiles = [],
+  clickMarkers = [],
+  inputVideo,
+  width,
+  height,
+  fps,
+  clickIndicator = null,
+}) {
+  const flow = Array.isArray(scenarioRoot?.flow) ? scenarioRoot.flow : []
+  const { flattenedFlowStepEntries, stepWindowById } = buildStepWindowMap({
+    scenarioRoot,
+    timelineReport,
+    presentationRange: null,
+  })
+  const timelineIndex = buildTimelineIndex(timelineReport)
+  const ttsByStepId = buildTtsByStepId(adjustedAudioFiles)
+  const chapterSwitchMap = buildChapterSwitchMap({
+    chapterCards,
+    flattenedFlowStepEntries,
+  })
+  const clickMarkersByStepId = groupClickMarkersByStep(stepWindowById, clickMarkers)
+  const clickPresentation = {
+    freezeBeforeMs: Math.max(0, Math.floor(Number(clickIndicator?.beforeMs || 800))),
+    highlightDurationMs: Math.max(0, Math.floor(Number(clickIndicator?.highlightDurationMs || 300))),
+    afterMs: Math.max(0, Math.floor(Number(clickIndicator?.afterMs || 100))),
+    fadeMs: Math.max(0, Math.floor(Number(clickIndicator?.fadeMs || 50))),
+  }
+
+  const timeline = []
+  const chapters = [...chapterSwitchMap.chapters]
+  let currentChapterId = chapters[0]?.id || 'chapter-1'
+  let compositionCursorMs = 0
+  let videoSegments = 0
+  let slides = 0
+  let ttsBlocks = 0
+  let audioBlocks = 0
+  let imageBlocks = 0
+  let missingSteps = 0
+
+  if (!flow.length) {
+    return {
+      schemaVersion: '1.0',
+      video: {
+        width: Number(width) || 1280,
+        height: Number(height) || 720,
+        fps: Number(fps) || 30,
+      },
+      assets: {
+        sourceVideo: resolve(String(inputVideo || 'recording.mp4')),
+      },
+      chapters,
+      timeline,
+      summary: {
+        originalDurationMs: timelineIndex.originalDurationMs,
+        compositionDurationMs: compositionCursorMs,
+        videoSegments,
+        slides,
+        ttsBlocks,
+        audioBlocks,
+        imageBlocks,
+        missingSteps,
+      },
+    }
+  }
+
+  for (const flowEntry of flattenedFlowStepEntries) {
+    const flowStepId = String(flowEntry?.id || '').trim()
+    if (!flowStepId) {
+      continue
+    }
+
+    const chapterSwitch = chapterSwitchMap.byStepId.get(flowStepId)
+    if (chapterSwitch) {
+      currentChapterId = chapterSwitch.id
+    }
+
+    const step = flowEntry?.step || {}
+    if (flowEntry.isSyntheticId || step.chapter) {
+      continue
+    }
+
+    const stepId = String(step?.resolvedId || flowStepId).trim()
+    if (!stepId) {
+      continue
+    }
+
+    const timelineStep = timelineIndex.byStepId.get(stepId)
+    if (!timelineStep) {
+      timeline.push({
+        type: 'missing-step',
+        stepId,
+        chapterId: currentChapterId,
+      })
+      missingSteps += 1
+      continue
+    }
+
+    if (timelineStep.skipped) {
+      timeline.push({
+        type: 'skipped-step',
+        chapterId: currentChapterId,
+        stepId,
+        reason: timelineStep.status || 'skipped',
+      })
+      continue
+    }
+
+    const interaction = step?.interaction || {}
+    const kind = mapInteractionKind(interaction.type)
+    const title = String(step?.resolvedTitle || humanizeStepTitle(step?.title || stepId) || stepId)
+
+    const sourceDurationMs = Math.max(0, Number(timelineStep.durationMs || (timelineStep.endedAtMs - timelineStep.startedAtMs)))
+    let compositionDurationMs = Math.max(1, Math.floor(sourceDurationMs))
+
+    const segment = {
+      type: 'video-segment',
+      stepId,
+      title,
+      kind,
+      chapterId: currentChapterId,
+      source: {
+        startMs: Math.max(0, Math.floor(timelineStep.startedAtMs)),
+        endMs: Math.max(0, Math.floor(timelineStep.endedAtMs)),
+        durationMs: Math.max(0, Math.floor(sourceDurationMs)),
+      },
+      composition: {
+        startMs: compositionCursorMs,
+        endMs: compositionCursorMs + compositionDurationMs,
+        durationMs: compositionDurationMs,
+      },
+    }
+
+    let segmentClickMarkers = [...(clickMarkersByStepId.get(stepId) || [])]
+    if (kind === 'click') {
+      const extensionMs = clickPresentation.freezeBeforeMs + clickPresentation.highlightDurationMs + clickPresentation.afterMs
+      if (extensionMs > 0 && CLICKMARKER_FREEZE) {
+        compositionDurationMs += extensionMs
+        segment.composition = {
+          startMs: compositionCursorMs,
+          endMs: compositionCursorMs + compositionDurationMs,
+          durationMs: compositionDurationMs,
+        }
+        segment.interactionPresentation = {
+          mode: 'freeze-highlight-click',
+          freezeBeforeMs: clickPresentation.freezeBeforeMs,
+          highlightDurationMs: clickPresentation.highlightDurationMs,
+          afterMs: clickPresentation.afterMs,
+          fadeMs: clickPresentation.fadeMs,
+        }
+
+        const primaryMarker = segmentClickMarkers[0] || null
+        if (primaryMarker) {
+          const clickAtSourceMs = Math.max(0, Number(primaryMarker.atSourceMs || 0))
+          const holdAtSourceMs = Math.max(
+            Math.max(0, Number(segment.source.startMs || 0)),
+            clickAtSourceMs - clickPresentation.freezeBeforeMs,
+          )
+          segmentClickMarkers[0] = {
+            ...primaryMarker,
+            atSourceMs: holdAtSourceMs,
+            durationMs: Math.max(1, clickPresentation.highlightDurationMs + clickPresentation.afterMs),
+          }
+        }
+      }
+    }
+
+    if (segmentClickMarkers.length > 0) {
+      const sourceStartMs = Math.max(0, Number(segment.source.startMs || 0))
+      segment.clickMarkers = segmentClickMarkers.map((marker) => {
+        const atSourceMs = Math.max(0, Number(marker?.atSourceMs || 0))
+        const relativeSourceMs = Math.max(0, atSourceMs - sourceStartMs)
+        return {
+          ...marker,
+          atSourceMs,
+          atCompositionMs: Math.max(0, segment.composition.startMs + relativeSourceMs),
+        }
+      })
+    }
+
+    timeline.push(segment)
+    compositionCursorMs += compositionDurationMs
+    videoSegments += 1
+
+    const stepTtsEntries = ttsByStepId.get(stepId) || []
+    for (const ttsEntry of stepTtsEntries) {
+      const ttsDurationMs = Math.max(300, Math.floor(Number(ttsEntry.durationMs || 0)))
+      const ttsBlock = {
+        type: 'tts',
+        chapterId: currentChapterId,
+        mode: ttsEntry.mode,
+        afterStepId: stepId,
+        text: ttsEntry.text,
+        voice: ttsEntry.voice || 'de-DE',
+      }
+
+      if (ttsEntry.mode === 'parallel-group') {
+        ttsBlock.composition = {
+          startMs: segment.composition.startMs,
+          endMs: segment.composition.endMs,
+          durationMs: segment.composition.durationMs,
+        }
+      } else {
+        ttsBlock.composition = {
+          startMs: compositionCursorMs,
+          endMs: compositionCursorMs + ttsDurationMs,
+          durationMs: ttsDurationMs,
+        }
+        compositionCursorMs += ttsDurationMs
+      }
+
+      timeline.push(ttsBlock)
+      ttsBlocks += 1
+    }
+
+    const inlineSlide = step?.slide && typeof step.slide === 'object' ? step.slide : null
+    if (inlineSlide) {
+      const slideDurationMs = Math.max(1, Math.floor(Number(inlineSlide.durationMs || 3000)))
+      timeline.push({
+        type: 'slide',
+        chapterId: currentChapterId,
+        title: String(inlineSlide.title || 'Folie'),
+        durationMs: slideDurationMs,
+        composition: {
+          startMs: compositionCursorMs,
+          endMs: compositionCursorMs + slideDurationMs,
+          durationMs: slideDurationMs,
+        },
+      })
+      compositionCursorMs += slideDurationMs
+      slides += 1
+    }
+
+    const inlineAudio = step?.audio && typeof step.audio === 'object' ? step.audio : null
+    if (inlineAudio) {
+      const durationMs = Math.max(0, Math.floor(Number(inlineAudio.durationMs || 0)))
+      const startMode = String(inlineAudio.startMode || 'parallel').trim() || 'parallel'
+      const startMs = startMode === 'parallel'
+        ? Math.max(0, segment.composition.startMs)
+        : compositionCursorMs
+      timeline.push({
+        type: 'audio',
+        chapterId: currentChapterId,
+        src: String(inlineAudio.src || '').trim(),
+        startMode,
+        composition: {
+          startMs,
+          endMs: startMs + durationMs,
+          durationMs,
+        },
+      })
+      if (startMode !== 'parallel') {
+        compositionCursorMs += durationMs
+      }
+      audioBlocks += 1
+    }
+
+    const inlineImage = step?.image && typeof step.image === 'object' ? step.image : null
+    if (inlineImage) {
+      const durationMs = Math.max(1, Math.floor(Number(inlineImage.durationMs || 5000)))
+      timeline.push({
+        type: 'image',
+        chapterId: currentChapterId,
+        src: String(inlineImage.src || '').trim(),
+        durationMs,
+        composition: {
+          startMs: compositionCursorMs,
+          endMs: compositionCursorMs + durationMs,
+          durationMs,
+        },
+      })
+      compositionCursorMs += durationMs
+      imageBlocks += 1
+    }
+  }
+
+  return {
+    schemaVersion: '1.0',
+    video: {
+      width: Number(width) || 1280,
+      height: Number(height) || 720,
+      fps: Number(fps) || 30,
+    },
+    assets: {
+      sourceVideo: resolve(String(inputVideo || 'recording.mp4')),
+    },
+    chapters,
+    timeline,
+    summary: {
+      originalDurationMs: timelineIndex.originalDurationMs,
+      compositionDurationMs: compositionCursorMs,
+      videoSegments,
+      slides,
+      ttsBlocks,
+      audioBlocks,
+      imageBlocks,
+      missingSteps,
+    },
+  }
+}
+
 export function buildSemanticVideoPlan({
   scenarioRoot,
   timelineReport,
   presentationRange = null,
   chapterCards = [],
   clickMarkers = [],
+  clickIndicator = null,
   stepSegments = [],
   adjustedAudioFiles = [],
   inputVideo,
@@ -259,6 +750,12 @@ export function buildSemanticVideoPlan({
   const clickMarkersByStepId = groupClickMarkersByStep(stepWindowById, clickMarkers)
   const tagMap = buildStepTagMap(stepWindowById, stepSegments)
   const chapterCardById = new Map((Array.isArray(chapterCards) ? chapterCards : []).map((entry) => [String(entry?.sourceScenarioStepId || '').trim(), entry]))
+  const clickPresentation = {
+    freezeBeforeMs: Math.max(0, Math.floor(Number(clickIndicator?.beforeMs || 800))),
+    highlightDurationMs: Math.max(0, Math.floor(Number(clickIndicator?.highlightDurationMs || 300))),
+    afterMs: Math.max(0, Math.floor(Number(clickIndicator?.afterMs || 100))),
+    fadeMs: Math.max(0, Math.floor(Number(clickIndicator?.fadeMs || 50))),
+  }
 
   const defaultChapterTitle = String(scenarioRoot?.title || scenarioRoot?.id || 'Video').trim() || 'Video'
   const chapters = []
@@ -324,6 +821,43 @@ export function buildSemanticVideoPlan({
     }
 
     ensureCurrentChapter()
+    const interactionType = String(flowEntry?.step?.interaction?.type || '').trim().toLowerCase()
+    const basePauses = [...(pausesByStepId.get(stepId) || [])]
+    const baseMarkers = [...(clickMarkersByStepId.get(stepId) || [])]
+
+    // if (interactionType === 'click') {
+      const holdDurationMs = clickPresentation.freezeBeforeMs + clickPresentation.highlightDurationMs + clickPresentation.afterMs
+      if (holdDurationMs > 0 && CLICKMARKER_FREEZE) {
+        const primaryMarker = baseMarkers[0] || null
+        const clickAtSourceMs = primaryMarker
+          ? Math.max(0, Number(primaryMarker.atSourceMs || 0))
+          : Math.max(0, Number(window.sourceEndMs || 0))
+        const holdAtSourceMs = Math.max(
+          Math.max(0, Number(window.sourceStartMs || 0)),
+          clickAtSourceMs - clickPresentation.freezeBeforeMs,
+        )
+
+        basePauses.push({
+          atSourceMs: holdAtSourceMs,
+          durationMs: holdDurationMs,
+        })
+
+        if (primaryMarker) {
+          baseMarkers[0] = {
+            ...primaryMarker,
+            atSourceMs: holdAtSourceMs,
+            durationMs: Math.max(1, clickPresentation.highlightDurationMs + clickPresentation.afterMs),
+          }
+        }
+      }
+    // } else if (CLICKMARKER_FREEZE && baseMarkers.length > 0) {
+    //   if (!interactionType) {
+    //     console.warn(`[semantic-remotion] click marker freeze skipped for step "${stepId}": interaction type missing (no guessing).`)
+    //   } else {
+    //     console.warn(`[semantic-remotion] click marker freeze skipped for step "${stepId}": interaction type is "${interactionType}" (expected "click").`)
+    //   }
+    // }
+
     currentChapter.steps.push({
       id: stepId,
       title: humanizeStepTitle(flowEntry?.step?.title || stepId) || stepId,
@@ -333,10 +867,10 @@ export function buildSemanticVideoPlan({
         sourceEndMs: window.sourceEndMs,
       },
       freezes: [],
-      pauses: pausesByStepId.get(stepId) || [],
+      pauses: basePauses,
       narrations: narrationsByStepId.get(stepId) || [],
       callouts: [],
-      clickMarkers: clickMarkersByStepId.get(stepId) || [],
+      clickMarkers: baseMarkers,
     })
   }
 

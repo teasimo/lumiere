@@ -302,6 +302,11 @@ async function createRemotionProjectFromTsx({ workDir, tsxPath, plan }) {
 
 async function main() {
   const { planPath, tsxPath, keepTempProject } = parseArgs(process.argv.slice(2))
+  const formatTimestamp = () => new Date().toISOString().replace(/\.\d{3}Z$/, '')
+  const logWithTimestamp = (message) => {
+    console.log(`[${formatTimestamp()}] ${message}`)
+  }
+
   if (!existsSync(planPath)) {
     throw new Error(`Plan file not found: ${planPath}`)
   }
@@ -329,27 +334,27 @@ async function main() {
   await mkdir(workDir, { recursive: true })
 
   try {
-    console.log(`[mux] Preparing temp project in ${workDir}`)
+    logWithTimestamp(`[render] Preparing temp project in ${workDir}`)
     const { entryPath } = await createRemotionProjectFromTsx({ workDir, tsxPath, plan })
-    console.log('[mux] Temp project prepared')
+    logWithTimestamp('[render] Temp project prepared')
 
     const { bundle } = await import('@remotion/bundler')
     const { renderMedia, selectComposition } = await import('@remotion/renderer')
 
-    console.log('[mux] Bundling Remotion project...')
+    logWithTimestamp('[render] Bundling Remotion project...')
     const serveUrl = await bundle({
       entryPoint: entryPath,
       rootDir: workDir,
       publicDir: join(workDir, 'public'),
     })
-    console.log('[mux] Bundle ready')
+    logWithTimestamp('[render] Bundle ready')
 
-    console.log('[mux] Selecting composition...')
+    logWithTimestamp('[render] Selecting composition...')
     const composition = await selectComposition({
       serveUrl,
       id: 'NarrationMux',
     })
-    console.log('[mux] Composition selected, rendering media...')
+    logWithTimestamp('[render] Composition selected, rendering media...')
 
     await renderMedia({
       composition,
@@ -361,16 +366,16 @@ async function main() {
         gl: 'swangle',
       },
     })
-    console.log('[mux] Render complete')
+    logWithTimestamp('[render] Render complete')
   } finally {
     if (keepTempProject) {
-      console.log(`[mux:debug] Temp project kept at: ${workDir}`)
+      logWithTimestamp(`[render:debug] Temp project kept at: ${workDir}`)
     } else {
       await rm(workDir, { recursive: true, force: true })
     }
   }
 
-  console.log(`Remotion mux created: ${outputVideo}`)
+  logWithTimestamp(`Remotion video created: ${outputVideo}`)
 }
 
 main().catch((error) => {

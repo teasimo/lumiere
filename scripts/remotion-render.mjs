@@ -75,6 +75,29 @@ async function findLatestRemotionMuxMeta(ttsDir) {
   return candidates[0] || null
 }
 
+async function findLatestCompositionModel(ttsDir) {
+  if (!existsSync(ttsDir)) {
+    return null
+  }
+
+  const entries = await readdir(ttsDir)
+  const candidates = []
+  for (const entry of entries) {
+    if (!/\.composition-model\.json$/i.test(entry)) {
+      continue
+    }
+    const filePath = join(ttsDir, entry)
+    const fileStat = await stat(filePath)
+    candidates.push({
+      filePath,
+      mtimeMs: fileStat.mtimeMs,
+    })
+  }
+
+  candidates.sort((left, right) => right.mtimeMs - left.mtimeMs)
+  return candidates[0] || null
+}
+
 async function main() {
   const argv = process.argv.slice(2)
   const keepTempProject = argv.includes('--keep-temp-project')
@@ -105,11 +128,41 @@ async function main() {
   })
 
   const ttsOutputDir = join(OUTPUT_ROOT, scenarioFolderName, 'tts')
-  const latestMeta = await findLatestRemotionMuxMeta(ttsOutputDir)
+  let latestMeta = await findLatestRemotionMuxMeta(ttsOutputDir)
+  let latestCompositionModel = await findLatestCompositionModel(ttsOutputDir)
+
+  const requiresPlanRefresh =
+    !latestMeta ||
+    (latestCompositionModel && latestCompositionModel.mtimeMs > latestMeta.mtimeMs)
+
+  if (requiresPlanRefresh) {
+    console.log('Vorbereitung: Erzeuge aktuellen Remotion-Plan (plan-only) ...')
+    const prepareExitCode = runCommand('node', [
+      'scripts/run-annotated-video.mjs',
+      '--scenario-tts',
+      scenarioPathArg,
+      '--profile=all-channels',
+      '--remotion-plan-only',
+    ])
+    if (prepareExitCode !== 0) {
+      throw new Error(`Remotion-Plan-Vorbereitung fehlgeschlagen (Exit-Code ${prepareExitCode}).`)
+    }
+
+    latestMeta = await findLatestRemotionMuxMeta(ttsOutputDir)
+    latestCompositionModel = await findLatestCompositionModel(ttsOutputDir)
+  }
+
   if (!latestMeta) {
     throw new Error([
       `Keine Remotion-Render-Metadatei unter ${ttsOutputDir} gefunden.`,
-      `Bitte zuerst ausfuehren: npm run remotion:script -- ${scenarioPathArg}`,
+      'Auch nach plan-only Vorbereitung konnten keine Render-Artefakte ermittelt werden.',
+    ].join(' '))
+  }
+
+  if (latestCompositionModel && latestCompositionModel.mtimeMs > latestMeta.mtimeMs) {
+    throw new Error([
+      `Es existiert weiterhin ein neueres Kompositionsmodell ohne passende Render-Metadatei: ${latestCompositionModel.filePath}.`,
+      'Bitte den vorherigen Lauf pruefen (plan-only sollte Render-Plan und Metadatei erzeugen).',
     ].join(' '))
   }
 

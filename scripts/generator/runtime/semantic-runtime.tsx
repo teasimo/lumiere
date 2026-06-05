@@ -109,8 +109,12 @@ export const VideoScript: React.FC<VideoScriptProps> = ({
   return (
     <AbsoluteFill>
       {planned.map((step) => {
-        const from = msToFrameIndex(step.startMs, fps)
-        const durationInFrames = msToDurationFrames(step.durationMs, fps)
+        const from = msToFrameStart(step.startMs, fps)
+        const to = Math.max(
+          from + 1,
+          msToFrameEndExclusive(step.startMs + step.durationMs, fps),
+        )
+        const durationInFrames = Math.max(1, to - from)
         return (
           <Sequence key={`${step.chapterId}:${step.stepId}`} from={from} durationInFrames={durationInFrames}>
             <StepRenderer sourceVideo={sourceVideo} fps={fps} step={step} debug={debug} />
@@ -180,11 +184,11 @@ const StepRenderer: React.FC<StepRendererProps> = ({ sourceVideo, fps, step, deb
   return (
     <AbsoluteFill>
       {sourceSegments.map((segment, index) => {
-        const from = msToFrameIndex(segment.planStartMs, fps)
+        const from = msToFrameStart(segment.planStartMs, fps)
         const segmentDurationMs = segment.endMs - segment.startMs
-        const durationInFrames = msToDurationFrames(segmentDurationMs, fps)
-        const startFromFrame = msToFrameIndex(segment.startMs, fps)
-        const endAtFrame = msToFrameIndex(segment.endMs, fps)
+        const startFromFrame = msToFrameStart(segment.startMs, fps)
+        const endAtFrame = Math.max(startFromFrame + 1, msToFrameEndExclusive(segment.endMs, fps))
+        const durationInFrames = Math.max(1, endAtFrame - startFromFrame)
 
         return (
           <Sequence key={`video-${index}`} from={from} durationInFrames={durationInFrames}>
@@ -194,9 +198,9 @@ const StepRenderer: React.FC<StepRendererProps> = ({ sourceVideo, fps, step, deb
       })}
 
       {holdSegments.map((hold, index) => {
-        const from = msToFrameIndex(hold.planStartMs, fps)
-        const durationInFrames = msToDurationFrames(hold.durationMs, fps)
-        const holdFrame = msToFrameIndex(hold.holdSourceMs, fps)
+        const from = msToFrameStart(hold.planStartMs, fps)
+        const durationInFrames = msToDurationFramesCeil(hold.durationMs, fps)
+        const holdFrame = msToFrameStart(hold.holdSourceMs, fps)
         return (
           <Sequence key={`hold-${index}`} from={from} durationInFrames={durationInFrames}>
             <RemotionFreeze frame={holdFrame}>
@@ -288,8 +292,8 @@ const StepRenderer: React.FC<StepRendererProps> = ({ sourceVideo, fps, step, deb
                   width: 40,
                   height: 40,
                   borderRadius: 999,
-                  border: '4px solid rgba(255,255,255,0.95)',
-                  boxShadow: '0 0 0 8px rgba(0,0,0,0.2)',
+                  border: '4px solid rgba(40, 52, 221, 0.95)',
+                  boxShadow: '0 0 0 8px rgba(153, 158, 230, 0.95)',
                 }}
               />
             </AbsoluteFill>
@@ -438,6 +442,18 @@ function sourceToPlanOffsetMs(sourceMs: number, sourceStartMs: number, holds: Ho
     }
   }
   return offsetMs
+}
+
+function msToFrameStart(ms: number, fps: number): number {
+  return Math.max(0, Math.floor((Math.max(0, Number(ms || 0)) / 1000) * fps))
+}
+
+function msToFrameEndExclusive(ms: number, fps: number): number {
+  return Math.max(1, Math.ceil((Math.max(0, Number(ms || 0)) / 1000) * fps))
+}
+
+function msToDurationFramesCeil(ms: number, fps: number): number {
+  return Math.max(1, Math.ceil((Math.max(0, Number(ms || 0)) / 1000) * fps))
 }
 
 function msToFrameIndex(ms: number, fps: number): number {

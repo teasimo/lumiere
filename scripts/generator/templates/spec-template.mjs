@@ -1,5 +1,709 @@
 import { basename } from 'path'
+import { XMLParser } from 'fast-xml-parser'
 import { getAllTemplateParts } from './spec-template-base.mjs'
+
+const REMOTION_INTERACTION_TAG_KIND = {
+  Click: 'click',
+  Eingabe: 'fill',
+  Auswahl: 'select',
+  Anzeige: 'show',
+  Warten: 'wait',
+  Oeffnen: 'open',
+  SucheAuswahl: 'search-and-select',
+}
+
+const REMOTION_PRESENTATION_TAGS = new Set(['Folie', 'Info', 'Video', 'Ton', 'VideoStart'])
+
+function toXmlAttr(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}
+
+function toXmlText(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}
+
+function parseBoolLike(value, fallback = false) {
+  if (value == null) {
+    return fallback
+  }
+
+  const normalized = String(value).trim().toLowerCase()
+  if (normalized === 'true' || normalized === '1' || normalized === 'yes') {
+    return true
+  }
+  if (normalized === 'false' || normalized === '0' || normalized === 'no') {
+    return false
+  }
+  return fallback
+}
+
+function getNodeTag(node) {
+  if (!node || typeof node !== 'object' || Array.isArray(node)) {
+    return null
+  }
+
+  for (const key of Object.keys(node)) {
+    if (key === ':@' || key === '#text' || key === '#comment' || key === '#cdata') {
+      continue
+    }
+    if (key.startsWith('?')) {
+      continue
+    }
+    return key
+  }
+
+  return null
+}
+
+function normalizeXmlAttributes(rawAttributes) {
+  const attrs = {}
+  for (const [key, value] of Object.entries(rawAttributes || {})) {
+    attrs[String(key || '').replace(/^@_/, '')] = value == null ? '' : String(value)
+  }
+  return attrs
+}
+
+function toElementTreeFromNode(node) {
+  const tag = getNodeTag(node)
+  if (!tag) {
+    return null
+  }
+
+  const payload = node[tag]
+  const attrs = normalizeXmlAttributes(node[':@'])
+  const children = []
+  let text = ''
+
+  for (const child of Array.isArray(payload) ? payload : []) {
+    if (child && typeof child === 'object' && !Array.isArray(child)) {
+      if (Object.prototype.hasOwnProperty.call(child, '#text')) {
+        text += String(child['#text'] || '')
+        continue
+      }
+
+      const childElement = toElementTreeFromNode(child)
+      if (childElement) {
+        children.push(childElement)
+      }
+    }
+  }
+
+  return {
+    tag,
+    attrs,
+    text,
+    children,
+  }
+}
+
+function parseResolvedXmlElementTree(resolvedXmlSource) {
+  const parser = new XMLParser({
+    preserveOrder: true,
+    ignoreAttributes: false,
+    attributeNamePrefix: '@_',
+    parseTagValue: false,
+    trimValues: false,
+  })
+  const parsed = parser.parse(String(resolvedXmlSource || ''))
+  for (const node of Array.isArray(parsed) ? parsed : []) {
+    const element = toElementTreeFromNode(node)
+    if (element) {
+      return element
+    }
+  }
+  throw new Error('resolved.xml could not be parsed into an XML root element.')
+}
+
+function normalizedMs(value, fallback = 0) {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) {
+    return Math.max(0, Math.floor(fallback))
+  }
+  return Math.max(0, Math.floor(numeric))
+}
+
+function firstDefined(attrs, keys, fallback = null) {
+  for (const key of keys) {
+    if (attrs && Object.prototype.hasOwnProperty.call(attrs, key) && attrs[key] != null && String(attrs[key]).trim() !== '') {
+      return attrs[key]
+    }
+  }
+  return fallback
+}
+
+function estimateTtsDurationMs(text, explicitMs = null) {
+  const explicit = Number(explicitMs)
+  if (Number.isFinite(explicit) && explicit > 0) {
+    return Math.max(300, Math.floor(explicit))
+  }
+
+  const words = String(text || '').trim().split(/\s+/).filter(Boolean).length
+  return Math.max(1200, Math.round(words * 380))
+}
+
+function sanitizeSensitiveText(value) {
+  let out = String(value || '')
+  out = out.replace(/(password|passwort|token|secret|api[_-]?key)\s*=\s*"[^"]*"/gi, '$1="***"')
+  out = out.replace(/(password|passwort|token|secret|api[_-]?key)\s*=\s*'[^']*'/gi, "$1='***'")
+  return out
+}
+
+function isSensitiveAttributeName(name) {
+  return /(password|passwort|token|secret|api[_-]?key)/i.test(String(name || ''))
+}
+
+function isSensitiveAttributeValue(value) {
+  return /(password|passwort|token|secret|api[_-]?key)/i.test(String(value || ''))
+}
+
+function isSensitiveStep(node) {
+  for (const [key, value] of Object.entries(node?.attrs || {})) {
+    if (isSensitiveAttributeName(key) || isSensitiveAttributeValue(value)) {
+      return true
+    }
+  }
+  return false
+}
+
+function buildTimelineIndex(timelineInput) {
+  const rawSteps = Array.isArray(timelineInput)
+    ? timelineInput
+    : (Array.isArray(timelineInput?.steps) ? timelineInput.steps : [])
+
+  const byStepId = new Map()
+  const runtimeBlocks = []
+  let minStart = Number.POSITIVE_INFINITY
+  let maxEnd = Number.NEGATIVE_INFINITY
+
+  for (const rawStep of rawSteps) {
+    const startedAtMs = normalizedMs(rawStep?.startedAtMs)
+    const endedAtMs = Math.max(startedAtMs, normalizedMs(rawStep?.endedAtMs, startedAtMs))
+    const durationMs = Math.max(0, normalizedMs(rawStep?.durationMs, endedAtMs - startedAtMs))
+    const status = String(rawStep?.status || '').trim() || 'unknown'
+    const skipped = rawStep?.skipped === true || status.toLowerCase() === 'skipped'
+    const stepId = String(rawStep?.stepId || '').trim()
+
+    minStart = Math.min(minStart, startedAtMs)
+    maxEnd = Math.max(maxEnd, endedAtMs)
+
+    if (!stepId) {
+      runtimeBlocks.push({
+        startedAtMs,
+        endedAtMs,
+        durationMs,
+        status,
+        skipped,
+      })
+      continue
+    }
+
+    const existing = byStepId.get(stepId)
+    if (!existing) {
+      byStepId.set(stepId, {
+        stepId,
+        startedAtMs,
+        endedAtMs,
+        durationMs,
+        status,
+        skipped,
+      })
+      continue
+    }
+
+    const mergedStarted = Math.min(existing.startedAtMs, startedAtMs)
+    const mergedEnded = Math.max(existing.endedAtMs, endedAtMs)
+    byStepId.set(stepId, {
+      stepId,
+      startedAtMs: mergedStarted,
+      endedAtMs: mergedEnded,
+      durationMs: Math.max(0, mergedEnded - mergedStarted),
+      status: existing.status,
+      skipped: existing.skipped && skipped,
+    })
+  }
+
+  return {
+    byStepId,
+    runtimeBlocks,
+    originalDurationMs: Number.isFinite(minStart) && Number.isFinite(maxEnd) ? Math.max(0, maxEnd - minStart) : 0,
+  }
+}
+
+function buildGeneratedStepTitle(node) {
+  const tag = String(node?.tag || 'Step')
+  const attrs = node?.attrs || {}
+  const parts = [tag]
+  const preferredAttrs = ['data-id', 'id', 'testid', 'text', 'aria-label', 'label', 'url']
+  const sensitiveStep = isSensitiveStep(node)
+
+  for (const attrName of preferredAttrs) {
+    if (!Object.prototype.hasOwnProperty.call(attrs, attrName)) {
+      continue
+    }
+
+    const attrValue = String(attrs[attrName] || '').replace(/\s+/g, ' ').trim()
+    if (!attrValue) {
+      continue
+    }
+
+    if (sensitiveStep && (isSensitiveAttributeName(attrName) || isSensitiveAttributeValue(attrValue))) {
+      parts.push(`${attrName}=***`)
+    } else {
+      parts.push(`${attrName}=${sanitizeSensitiveText(attrValue)}`)
+    }
+  }
+
+  const inlineText = String(node?.text || '').replace(/\s+/g, ' ').trim()
+  if (inlineText && !sensitiveStep) {
+    parts.push(`value=${sanitizeSensitiveText(inlineText)}`)
+  }
+
+  return parts.join(' | ')
+}
+
+function renderVideoSegmentXml(entry, indent) {
+  const lines = []
+  lines.push(`${indent}<VideoSegment id="${toXmlAttr(entry.id)}" kind="${toXmlAttr(entry.kind)}" title="${toXmlAttr(entry.title)}" sourceVideo="${toXmlAttr(entry.sourceVideo)}">`)
+  lines.push(`${indent}  <Original startMs="${entry.originalStartMs}" endMs="${entry.originalEndMs}" durationMs="${entry.originalDurationMs}"/>`)
+  lines.push(`${indent}  <Composition startMs="${entry.compositionStartMs}" endMs="${entry.compositionEndMs}" durationMs="${entry.compositionDurationMs}"/>`)
+  lines.push(`${indent}  <SourceStep stepId="${toXmlAttr(entry.stepId)}"/>`)
+  if (entry.overlay) {
+    lines.push(`${indent}  <Overlay type="click-indicator" beforeMs="${entry.overlay.beforeMs}" afterMs="${entry.overlay.afterMs}" fadeMs="${entry.overlay.fadeMs}"/>`)
+  }
+  lines.push(`${indent}</VideoSegment>`)
+  return lines
+}
+
+function renderNarrationSequenceXml(entry, indent) {
+  const lines = []
+  if (entry.mode === 'freeze') {
+    lines.push(`${indent}<NarrationSequence mode="freeze" afterStepId="${toXmlAttr(entry.afterStepId || '')}">`)
+    if (entry.freezeSourceStepId) {
+      lines.push(`${indent}  <FreezeFrame sourceStepId="${toXmlAttr(entry.freezeSourceStepId)}"/>`)
+    }
+    lines.push(`${indent}  <TTSRef id="${toXmlAttr(entry.ttsId)}"/>`)
+    lines.push(`${indent}  <Composition startMs="${entry.compositionStartMs}" endMs="${entry.compositionEndMs}" durationMs="${entry.compositionDurationMs}"/>`)
+    lines.push(`${indent}</NarrationSequence>`)
+    return lines
+  }
+
+  lines.push(`${indent}<NarrationSequence mode="parallel-group" groupId="${toXmlAttr(entry.groupId)}" allowExtendGroup="${entry.allowExtendGroup ? 'true' : 'false'}">`)
+  lines.push(`${indent}  <TTSRef id="${toXmlAttr(entry.ttsId)}"/>`)
+  lines.push(`${indent}  <Composition startMs="${entry.compositionStartMs}" endMs="${entry.compositionEndMs}" durationMs="${entry.compositionDurationMs}"/>`)
+  lines.push(`${indent}</NarrationSequence>`)
+  return lines
+}
+
+function readPresentationDurationMs(node, fallback = 2000) {
+  const attrs = node?.attrs || {}
+  const explicit = firstDefined(attrs, ['duration-ms', 'dauer-ms', 'durationMs', 'dauerMs'], null)
+  return Math.max(300, normalizedMs(explicit, fallback))
+}
+
+function getGroupNarrationMode(groupNode) {
+  const attrs = groupNode?.attrs || {}
+  const value = firstDefined(attrs, ['narration.mode', 'narration-mode', 'narration_mode'], 'freeze')
+  return String(value || 'freeze').trim().toLowerCase() === 'parallel-group' ? 'parallel-group' : 'freeze'
+}
+
+function transformFlowNodeToEntries(node, context) {
+  const tag = node?.tag
+  if (!tag) {
+    return
+  }
+
+  if (tag === 'Gruppe') {
+    const groupId = String(firstDefined(node.attrs, ['id', 'name'], slugify('group')) || slugify('group'))
+    const groupTitle = String(firstDefined(node.attrs, ['title', 'titel', 'name'], groupId) || groupId)
+    const narrationMode = getGroupNarrationMode(node)
+    const allowExtendGroup = parseBoolLike(firstDefined(node.attrs, ['allowExtendGroup', 'allow-extend-group'], false), false)
+
+    const chapter = {
+      type: 'chapter',
+      id: groupId,
+      title: sanitizeSensitiveText(groupTitle),
+      narrationMode,
+      allowExtendGroup,
+      entries: [],
+    }
+    context.sequences.push(chapter)
+
+    const groupState = {
+      id: groupId,
+      narrationMode,
+      allowExtendGroup,
+      firstVideoCompositionStartMs: null,
+      lastVideoCompositionEndMs: null,
+      parallelNarrations: [],
+      chapter,
+    }
+
+    for (const child of node.children || []) {
+      transformFlowNodeToEntries(child, {
+        ...context,
+        activeEntries: chapter.entries,
+        activeGroup: groupState,
+      })
+    }
+
+    if (groupState.narrationMode === 'parallel-group') {
+      const groupStart = groupState.firstVideoCompositionStartMs
+      const groupEnd = groupState.lastVideoCompositionEndMs
+      const groupDurationMs = groupStart == null || groupEnd == null ? 0 : Math.max(0, groupEnd - groupStart)
+
+      for (const narration of groupState.parallelNarrations) {
+        if (groupDurationMs <= 0) {
+          context.validationErrors.push({
+            code: 'PARALLEL_GROUP_WITHOUT_VIDEO',
+            groupId,
+            ttsId: narration.ttsId,
+            message: `Group "${groupId}" defines narration.mode=parallel-group but has no executable video steps.`,
+          })
+          narration.entry.compositionStartMs = context.compositionCursorMs
+          narration.entry.compositionEndMs = context.compositionCursorMs
+          narration.entry.compositionDurationMs = 0
+          continue
+        }
+
+        if (!groupState.allowExtendGroup && narration.durationMs > groupDurationMs) {
+          context.validationErrors.push({
+            code: 'TTS_EXCEEDS_GROUP',
+            groupId,
+            ttsId: narration.ttsId,
+            message: `TTS ${narration.ttsId} exceeds group duration (${narration.durationMs}ms > ${groupDurationMs}ms).`,
+          })
+        }
+
+        narration.entry.compositionStartMs = groupStart
+        narration.entry.compositionEndMs = groupStart + Math.min(narration.durationMs, groupDurationMs)
+        narration.entry.compositionDurationMs = Math.max(0, narration.entry.compositionEndMs - narration.entry.compositionStartMs)
+
+        if (groupState.allowExtendGroup && narration.durationMs > groupDurationMs) {
+          const overflowMs = narration.durationMs - groupDurationMs
+          const freezeEntry = {
+            type: 'freeze-extension',
+            afterGroupId: groupId,
+            ttsId: narration.ttsId,
+            durationMs: overflowMs,
+            compositionStartMs: context.compositionCursorMs,
+            compositionEndMs: context.compositionCursorMs + overflowMs,
+            compositionDurationMs: overflowMs,
+          }
+          chapter.entries.push(freezeEntry)
+          context.compositionCursorMs += overflowMs
+        }
+      }
+    }
+    return
+  }
+
+  if (tag === 'Folie') {
+    const durationMs = readPresentationDurationMs(node, 2200)
+    const slideEntry = {
+      type: 'slide',
+      id: String(firstDefined(node.attrs, ['id'], `slide-${context.slideCounter + 1}`)),
+      title: sanitizeSensitiveText(String(firstDefined(node.attrs, ['title', 'titel', 'text'], node.text || 'Folie'))),
+      compositionStartMs: context.compositionCursorMs,
+      compositionEndMs: context.compositionCursorMs + durationMs,
+      compositionDurationMs: durationMs,
+    }
+    context.slideCounter += 1
+    context.activeEntries.push(slideEntry)
+    context.compositionCursorMs += durationMs
+    return
+  }
+
+  if (tag === 'Info') {
+    const infoText = sanitizeSensitiveText(String(firstDefined(node.attrs, ['text'], node.text || '')).trim())
+    if (!infoText) {
+      return
+    }
+
+    const ttsId = `tts-${String(context.ttsCounter + 1).padStart(3, '0')}`
+    const voice = String(firstDefined(node.attrs, ['voice'], context.options.defaultVoice || 'de-DE'))
+    const durationMs = estimateTtsDurationMs(infoText, firstDefined(node.attrs, ['tts-duration-ms', 'duration-ms'], null))
+    context.ttsCounter += 1
+    context.ttsAssets.push({ id: ttsId, text: infoText, voice })
+
+    if (context.activeGroup?.narrationMode === 'parallel-group') {
+      const narrationEntry = {
+        type: 'narration',
+        mode: 'parallel-group',
+        ttsId,
+        groupId: context.activeGroup.id,
+        allowExtendGroup: context.activeGroup.allowExtendGroup,
+        compositionStartMs: 0,
+        compositionEndMs: 0,
+        compositionDurationMs: 0,
+      }
+      context.activeEntries.push(narrationEntry)
+      context.activeGroup.parallelNarrations.push({
+        ttsId,
+        durationMs,
+        entry: narrationEntry,
+      })
+      return
+    }
+
+    const startMs = context.compositionCursorMs
+    const endMs = startMs + durationMs
+    const narrationEntry = {
+      type: 'narration',
+      mode: 'freeze',
+      ttsId,
+      afterStepId: context.lastVideoStepId || '',
+      freezeSourceStepId: context.lastVideoStepId || '',
+      compositionStartMs: startMs,
+      compositionEndMs: endMs,
+      compositionDurationMs: durationMs,
+    }
+    context.activeEntries.push(narrationEntry)
+    context.compositionCursorMs = endMs
+    return
+  }
+
+  if (REMOTION_PRESENTATION_TAGS.has(tag)) {
+    const durationMs = readPresentationDurationMs(node, 1200)
+    const presentationEntry = {
+      type: 'presentation',
+      kind: String(tag).toLowerCase(),
+      title: sanitizeSensitiveText(String(firstDefined(node.attrs, ['title', 'titel', 'text'], node.text || tag))),
+      compositionStartMs: context.compositionCursorMs,
+      compositionEndMs: context.compositionCursorMs + durationMs,
+      compositionDurationMs: durationMs,
+    }
+    context.activeEntries.push(presentationEntry)
+    context.compositionCursorMs += durationMs
+    return
+  }
+
+  const interactionKind = REMOTION_INTERACTION_TAG_KIND[tag]
+  if (interactionKind) {
+    const attrs = node?.attrs || {}
+    const stepId = String(firstDefined(attrs, ['resolved-id', 'stepId', 'step-id', 'id'], '') || '').trim()
+    if (!stepId) {
+      return
+    }
+
+    const resolvedTitle = String(firstDefined(attrs, ['resolved-title'], '') || '').trim()
+    const title = sanitizeSensitiveText(resolvedTitle || buildGeneratedStepTitle(node))
+    const timelineStep = context.timeline.byStepId.get(stepId)
+
+    if (!timelineStep) {
+      context.activeEntries.push({
+        type: 'missing',
+        resolvedId: stepId,
+        title,
+      })
+      context.missingTimelineStepCount += 1
+      return
+    }
+
+    if (timelineStep.skipped) {
+      context.activeEntries.push({
+        type: 'skipped',
+        stepId,
+        status: timelineStep.status,
+        skipped: true,
+      })
+      return
+    }
+
+    const originalStartMs = timelineStep.startedAtMs
+    const originalEndMs = timelineStep.endedAtMs
+    const originalDurationMs = Math.max(0, timelineStep.durationMs || (originalEndMs - originalStartMs))
+    const compositionStartMs = context.compositionCursorMs
+    const compositionDurationMs = Math.max(1, originalDurationMs)
+    const compositionEndMs = compositionStartMs + compositionDurationMs
+    const segment = {
+      type: 'video',
+      id: stepId,
+      stepId,
+      kind: interactionKind,
+      title,
+      sourceVideo: context.options.sourceVideo,
+      originalStartMs,
+      originalEndMs,
+      originalDurationMs,
+      compositionStartMs,
+      compositionEndMs,
+      compositionDurationMs,
+      overlay: interactionKind === 'click' ? {
+        beforeMs: context.options.clickIndicator.beforeMs,
+        afterMs: context.options.clickIndicator.afterMs,
+        fadeMs: context.options.clickIndicator.fadeMs,
+      } : null,
+    }
+
+    context.activeEntries.push(segment)
+    context.compositionCursorMs = compositionEndMs
+    context.videoSegmentCount += 1
+    context.lastVideoStepId = stepId
+
+    if (context.activeGroup) {
+      if (context.activeGroup.firstVideoCompositionStartMs == null) {
+        context.activeGroup.firstVideoCompositionStartMs = compositionStartMs
+      }
+      context.activeGroup.lastVideoCompositionEndMs = compositionEndMs
+    }
+    return
+  }
+
+  for (const child of node.children || []) {
+    transformFlowNodeToEntries(child, context)
+  }
+}
+
+function renderSequenceEntryXml(entry, indent) {
+  if (entry.type === 'video') {
+    return renderVideoSegmentXml(entry, indent)
+  }
+
+  if (entry.type === 'slide') {
+    return [
+      `${indent}<SlideSequence id="${toXmlAttr(entry.id)}" title="${toXmlAttr(entry.title)}">`,
+      `${indent}  <Composition startMs="${entry.compositionStartMs}" endMs="${entry.compositionEndMs}" durationMs="${entry.compositionDurationMs}"/>`,
+      `${indent}</SlideSequence>`,
+    ]
+  }
+
+  if (entry.type === 'narration') {
+    return renderNarrationSequenceXml(entry, indent)
+  }
+
+  if (entry.type === 'presentation') {
+    return [
+      `${indent}<PresentationSequence kind="${toXmlAttr(entry.kind)}" title="${toXmlAttr(entry.title)}">`,
+      `${indent}  <Composition startMs="${entry.compositionStartMs}" endMs="${entry.compositionEndMs}" durationMs="${entry.compositionDurationMs}"/>`,
+      `${indent}</PresentationSequence>`,
+    ]
+  }
+
+  if (entry.type === 'freeze-extension') {
+    return [
+      `${indent}<FreezeFrameExtension afterGroupId="${toXmlAttr(entry.afterGroupId)}" ttsId="${toXmlAttr(entry.ttsId)}" durationMs="${entry.durationMs}">`,
+      `${indent}  <Composition startMs="${entry.compositionStartMs}" endMs="${entry.compositionEndMs}" durationMs="${entry.compositionDurationMs}"/>`,
+      `${indent}</FreezeFrameExtension>`,
+    ]
+  }
+
+  if (entry.type === 'missing') {
+    return [
+      `${indent}<MissingTimelineStep resolvedId="${toXmlAttr(entry.resolvedId)}" title="${toXmlAttr(entry.title)}"/>`,
+    ]
+  }
+
+  if (entry.type === 'skipped') {
+    return [
+      `${indent}<SkippedTimelineStep stepId="${toXmlAttr(entry.stepId)}" status="${toXmlAttr(entry.status)}" skipped="true"/>`,
+    ]
+  }
+
+  return [`${indent}<!-- Unsupported sequence entry omitted -->`]
+}
+
+export function renderRemotionScenarioXmlTemplate({
+  resolvedXmlSource,
+  stepTimeline,
+  options = {},
+}) {
+  const root = parseResolvedXmlElementTree(resolvedXmlSource)
+  const scenarioId = String(firstDefined(root.attrs, ['id'], 'scenario') || 'scenario')
+  const scenarioTitle = sanitizeSensitiveText(String(firstDefined(root.attrs, ['title', 'titel'], scenarioId) || scenarioId))
+  const fps = Math.max(1, normalizedMs(options.fps, 30))
+  const width = Math.max(1, normalizedMs(options.width, 1280))
+  const height = Math.max(1, normalizedMs(options.height, 720))
+
+  const transformOptions = {
+    sourceVideo: String(options.sourceVideo || 'recording.mp4'),
+    sourceTimeline: String(options.sourceTimeline || 'scenario-step-timeline.json'),
+    defaultVoice: String(options.defaultVoice || 'de-DE'),
+    clickIndicator: {
+      beforeMs: normalizedMs(options?.clickIndicator?.beforeMs, 800),
+      afterMs: normalizedMs(options?.clickIndicator?.afterMs, 100),
+      fadeMs: normalizedMs(options?.clickIndicator?.fadeMs, 50),
+    },
+  }
+
+  const timeline = buildTimelineIndex(stepTimeline)
+
+  const context = {
+    timeline,
+    options: transformOptions,
+    sequences: [],
+    activeEntries: [],
+    activeGroup: null,
+    compositionCursorMs: 0,
+    lastVideoStepId: null,
+    ttsAssets: [],
+    validationErrors: [],
+    videoSegmentCount: 0,
+    missingTimelineStepCount: 0,
+    ttsCounter: 0,
+    slideCounter: 0,
+  }
+  context.activeEntries = context.sequences
+
+  for (const child of root.children || []) {
+    transformFlowNodeToEntries(child, context)
+  }
+
+  const lines = []
+  lines.push(`<RemotionSzenario id="${toXmlAttr(scenarioId)}" title="${toXmlAttr(scenarioTitle)}">`)
+  lines.push('  <Assets>')
+  lines.push(`    <SourceVideo src="${toXmlAttr(transformOptions.sourceVideo)}"/>`)
+  lines.push(`    <SourceTimeline src="${toXmlAttr(transformOptions.sourceTimeline)}"/>`)
+  for (const tts of context.ttsAssets) {
+    lines.push(`    <TTS id="${toXmlAttr(tts.id)}" text="${toXmlAttr(tts.text)}" voice="${toXmlAttr(tts.voice)}"/>`)
+  }
+  lines.push('  </Assets>')
+  lines.push('')
+  lines.push(`  <Composition fps="${fps}" width="${width}" height="${height}">`)
+  lines.push('    <Sequenzen>')
+
+  for (const sequence of context.sequences) {
+    if (sequence.type === 'chapter') {
+      lines.push(`      <Chapter id="${toXmlAttr(sequence.id)}" title="${toXmlAttr(sequence.title)}" narration.mode="${toXmlAttr(sequence.narrationMode)}" allowExtendGroup="${sequence.allowExtendGroup ? 'true' : 'false'}">`)
+      for (const child of sequence.entries || []) {
+        lines.push(...renderSequenceEntryXml(child, '        '))
+      }
+      lines.push('      </Chapter>')
+      continue
+    }
+
+    lines.push(...renderSequenceEntryXml(sequence, '      '))
+  }
+
+  for (const runtimeBlock of timeline.runtimeBlocks) {
+    lines.push(`      <RuntimeBlock startMs="${runtimeBlock.startedAtMs}" endMs="${runtimeBlock.endedAtMs}" durationMs="${runtimeBlock.durationMs}" status="${toXmlAttr(runtimeBlock.status)}"/>`)
+  }
+
+  for (const validationError of context.validationErrors) {
+    lines.push(`      <ValidationError code="${toXmlAttr(validationError.code)}" groupId="${toXmlAttr(validationError.groupId || '')}" ttsId="${toXmlAttr(validationError.ttsId || '')}">${toXmlText(validationError.message || '')}</ValidationError>`)
+  }
+
+  lines.push('    </Sequenzen>')
+  lines.push('  </Composition>')
+  lines.push('')
+  lines.push('  <Summary>')
+  lines.push(`    <OriginalDurationMs>${timeline.originalDurationMs}</OriginalDurationMs>`)
+  lines.push(`    <CompositionDurationMs>${context.compositionCursorMs}</CompositionDurationMs>`)
+  lines.push(`    <VideoSegmentCount>${context.videoSegmentCount}</VideoSegmentCount>`)
+  lines.push(`    <TTSCount>${context.ttsAssets.length}</TTSCount>`)
+  lines.push(`    <MissingTimelineStepCount>${context.missingTimelineStepCount}</MissingTimelineStepCount>`)
+  lines.push('  </Summary>')
+  lines.push('</RemotionSzenario>')
+  lines.push('')
+
+  return lines.join('\n')
+}
 
 function slugify(input) {
   return String(input || 'scenario')
@@ -539,12 +1243,13 @@ export function renderScenarioSpecTemplate({ resolvedRoot, scenarioPathRelative,
   parts.push(`      scenarioId: ${toLiteral(scenarioName)},`)
   parts.push(`      scenarioVersion: ${toLiteral(scenarioVersion)},`)
   parts.push(`      scenarioSource: ${toLiteral(String(scenarioPathRelative))},`)
+  parts.push('      page,')
+  parts.push('      videoModeEnabled,')
+  parts.push('      waitBetweenStepsMs,')
   parts.push('    })')
   parts.push('    const stepIdentifierLogger = createStepDomIdentifierLogger({ page, testInfo, enabled: stepIdentifierLogEnabled })')
   parts.push('')
   parts.push('    try {')
-  parts.push('      let __scenarioStepResult = null')
-  parts.push('      let __scenarioShouldWaitAfterStep = true')
 
   function emitFlowSteps(steps, indent = '    ') {
     for (const step of steps) {
@@ -570,7 +1275,7 @@ export function renderScenarioSpecTemplate({ resolvedRoot, scenarioPathRelative,
       const ifConditions = toConditionList(step.if, 'if', stepId)
       const ifNotConditions = toConditionList(step.ifnot, 'ifnot', stepId)
 
-      parts.push(`${indent}__scenarioStepResult = await timelineRuntime.runStep(${toLiteral(stepId)},${toLiteral(stepTitle)} ,async () => {`)
+      parts.push(`${indent}await timelineRuntime.runStep(${toLiteral(stepId)},${toLiteral(stepTitle)} ,async () => {`)
       if (stepId || stepTitle) {
         parts.push(`${indent}  // ${[stepId, stepTitle].filter(Boolean).join(' | ')}`)
       }
@@ -623,11 +1328,6 @@ export function renderScenarioSpecTemplate({ resolvedRoot, scenarioPathRelative,
 
       parts.push(`${indent}  await stepIdentifierLogger.capture(${toLiteral(stepId)}, "after")`)
       parts.push(`${indent}})`)
-      parts.push('')
-      parts.push(`${indent}__scenarioShouldWaitAfterStep = !(__scenarioStepResult && typeof __scenarioStepResult === 'object' && (__scenarioStepResult.__scenarioStepStatus === 'skipped' || __scenarioStepResult.__scenarioStepStatus === 'noop'))`)
-      parts.push(`${indent}if (videoModeEnabled && waitBetweenStepsMs > 0 && __scenarioShouldWaitAfterStep) {`)
-      parts.push(`${indent}  await page.waitForTimeout(waitBetweenStepsMs)`)
-      parts.push(`${indent}}`)
       parts.push('')
     }
   }

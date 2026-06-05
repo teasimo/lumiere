@@ -5,7 +5,12 @@ import { mkdir, readdir, readFile, stat, writeFile } from 'fs/promises'
 import { basename, dirname, extname, join, resolve } from 'path'
 import { spawnSync } from 'child_process'
 import { createHash } from 'crypto'
-import { buildRemotionRenderPlan, buildSemanticRemotionTsx, buildSemanticVideoPlan } from './generator/semantic-remotion.mjs'
+import {
+  buildCanonicalVideoCompositionModel,
+  buildRemotionRenderPlan,
+  buildSemanticRemotionTsx,
+  buildSemanticVideoPlan,
+} from './generator/semantic-remotion.mjs'
 import { loadCentralConfig } from './shared/central-config.mjs'
 
 const OUTPUT_ROOT = resolve('output')
@@ -578,13 +583,18 @@ function resolveScenarioTtsProfile(centralConfig, profileName) {
 function resolveScenarioClickIndicatorConfig(scenarioRoot) {
   const clickConfig = scenarioRoot?.presentation?.indicators?.click
   if (!clickConfig || typeof clickConfig !== 'object') {
-    return null
+    return {
+      enabled: true,
+      beforeMs: 800,
+      afterMs: 100,
+      fadeMs: 50,
+    }
   }
 
   const enabled = clickConfig.enabled !== false
-  const beforeMs = Math.max(0, Number(clickConfig.before_ms) || 0)
-  const afterMs = Math.max(0, Number(clickConfig.after_ms) || 0)
-  const fadeMs = Math.max(0, Number(clickConfig.fade_ms) || 0)
+  const beforeMs = Math.max(0, Number(clickConfig.before_ms ?? 800) || 800)
+  const afterMs = Math.max(0, Number(clickConfig.after_ms ?? 100) || 100)
+  const fadeMs = Math.max(0, Number(clickConfig.fade_ms ?? 50) || 50)
 
   return {
     enabled,
@@ -2351,11 +2361,32 @@ function resolveArchitectureContextFromVideo(inputVideo) {
 
 function writeSemanticRemotionArtifacts({ inputVideo, outputVideo, adjustedAudioFiles, semanticContext, render = true }) {
   const renderPlanPath = `${outputVideo}.remotion-render-plan.json`
+  const canonicalModelPath = `${outputVideo}.composition-model.json`
   const semanticVideoPlanPath = `${outputVideo}.semantic-video-plan.json`
   const renderScriptTsxPath = `${outputVideo}.semantic.tsx`
   const widthHeight = getVideoDimensions(inputVideo)
   const fps = getVideoFps(inputVideo)
   const semanticRuntimePath = resolve('scripts/generator/runtime/semantic-runtime.tsx')
+
+  const canonicalModel = buildCanonicalVideoCompositionModel({
+    scenarioRoot: semanticContext?.scenarioRoot || null,
+    timelineReport: semanticContext?.timelineReport || null,
+    chapterCards: semanticContext?.chapterCards || [],
+    adjustedAudioFiles,
+    clickMarkers: semanticContext?.clickMarkers || [],
+    inputVideo,
+    width: widthHeight.width,
+    height: widthHeight.height,
+    fps,
+    clickIndicator: semanticContext?.clickIndicator || {
+      beforeMs: 800,
+      highlightDurationMs: 300,
+      afterMs: 100,
+      fadeMs: 50,
+    },
+  })
+
+  writeFileSync(canonicalModelPath, JSON.stringify(canonicalModel, null, 2), 'utf8')
 
   const semanticVideoPlan = buildSemanticVideoPlan({
     scenarioRoot: semanticContext?.scenarioRoot || null,
@@ -2363,6 +2394,7 @@ function writeSemanticRemotionArtifacts({ inputVideo, outputVideo, adjustedAudio
     presentationRange: semanticContext?.presentationRange || null,
     chapterCards: semanticContext?.chapterCards || [],
     clickMarkers: semanticContext?.clickMarkers || [],
+    clickIndicator: semanticContext?.clickIndicator || null,
     stepSegments: semanticContext?.stepSegments || [],
     adjustedAudioFiles,
     inputVideo,
@@ -2399,7 +2431,7 @@ function writeSemanticRemotionArtifacts({ inputVideo, outputVideo, adjustedAudio
 
   return {
     renderPlanPath,
-    semanticVideoPlanPath,
+    semanticVideoPlanPath: canonicalModelPath,
     renderScriptTsxPath,
   }
 }
@@ -2870,10 +2902,7 @@ async function runScenarioTtsMode({ scenarioPath, profileName, outputVideo, ttsV
 
   const clickIndicatorConfig = resolveScenarioClickIndicatorConfig(scenarioRoot)
 
-  let sourceVideoForTts = artifacts.videoPath
-  if (presentationRange && !remotionPlanOnly) {
-    sourceVideoForTts = join(ttsOutputDir, `${scenarioToken}-${profileToken}-clip-${runId}.mp4`)
-  }
+  const sourceVideoForTts = artifacts.videoPath
   let clickAnnotateMeta = { clickHolds: [] }
   let visualRemotionPlan = null
 
@@ -2911,9 +2940,8 @@ async function runScenarioTtsMode({ scenarioPath, profileName, outputVideo, ttsV
       '--skip-remotion-script',
     ]
 
-    if (remotionPlanOnly) {
-      annotateArgs.push('--plan-only')
-    }
+    // Trace pass is data-only here: all visual cutting/overlay is handled by Remotion.
+    annotateArgs.push('--plan-only')
 
     if (presentationRange) {
       annotateArgs.push(`--clip-start-ms=${Math.max(0, Number(presentationRange.startMs) || 0)}`)
@@ -2935,26 +2963,16 @@ async function runScenarioTtsMode({ scenarioPath, profileName, outputVideo, ttsV
 
     clickAnnotateMeta = await readAnnotateMetaIfExists(clickAnnotatedVideo)
     const annotateMetaRaw = await readJsonIfExists(getAnnotateMetaPath(clickAnnotatedVideo))
-    const remotionPlanPath = String(annotateMetaRaw?.remotionPlanPath || '').trim()
+    let remotionPlanPath = String(annotateMetaRaw?.remotionPlanPath || '').trim()
+    if (!remotionPlanPath) {
+      const fallbackRemotionPlanPath = `${clickAnnotatedVideo}.remotion-plan.json`
+      if (existsSync(fallbackRemotionPlanPath)) {
+        remotionPlanPath = fallbackRemotionPlanPath
+      }
+    }
     if (remotionPlanPath) {
       visualRemotionPlan = await readJsonIfExists(remotionPlanPath)
     }
-  } else if (presentationRange && !remotionPlanOnly) {
-    cutVideoToRange({
-      inputVideo: artifacts.videoPath,
-      outputVideo: sourceVideoForTts,
-      startMs: presentationRange.startMs,
-      endMs: presentationRange.endMs,
-    })
-  }
-
-  if (presentationRange && !remotionPlanOnly) {
-    cutVideoToRange({
-      inputVideo: artifacts.videoPath,
-      outputVideo: sourceVideoForTts,
-      startMs: presentationRange.startMs,
-      endMs: presentationRange.endMs,
-    })
   }
 
   if (presentationRange && !remotionPlanOnly) {
@@ -3112,6 +3130,7 @@ async function runScenarioTtsMode({ scenarioPath, profileName, outputVideo, ttsV
       presentationRange,
       chapterCards: resolvedChapterCards,
       clickMarkers: visualOverlays.clickMarkers,
+      clickIndicator: clickIndicatorConfig,
       stepSegments: visualOverlays.stepSegments,
     },
     render: !remotionPlanOnly,
@@ -3173,7 +3192,7 @@ async function runScenarioTtsMode({ scenarioPath, profileName, outputVideo, ttsV
   console.log(`Aufgeloeste Narrations-Timeline: ${resolvedTimelinePath}`)
   console.log(`TTS-Diagnose-Log: ${diagnosticsLogPath}`)
   if (remotionPlanOnly) {
-    console.log(`Remotion-Plan-Modus: Render wurde uebersprungen, Plan/TSX sind erstellt.`)
+    console.log(`Plan-Modus: Render wurde uebersprungen, kanonisches Kompositionsmodell wurde erstellt.`)
     console.log(`Render-Zielvideo (noch nicht erzeugt): ${resolvedOutputVideo}`)
     return
   }
