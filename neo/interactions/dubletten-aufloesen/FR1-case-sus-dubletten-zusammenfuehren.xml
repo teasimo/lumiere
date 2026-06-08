@@ -34,7 +34,7 @@
       <Wert name="nachname" value="Mustermann {{random}}"/>
       <Wert name="geburtsdatum" value="01.01.2020"/>
       <Wert name="geburtsort" value="Musterstadt"/>
-      <Wert name="adresseSuche" value="Osterfeld 2 Emmerke"/>
+      <Wert name="adresseSuche" value="Fuchsbau 3 Emmerke"/>
     </Datensatz>
     <Datensatz name="schueler.ez1">
       <Wert name="anrede" value="Frau"/>
@@ -42,7 +42,7 @@
       <Wert name="nachname" value="Mustermann"/>
       <Wert name="geburtsdatum" value="01.01.1975"/>
       <Wert name="geburtsort" value="Musterstadt"/>
-      <Wert name="adresseSuche" value="Osterfeld 2 Emmerke"/>
+      <Wert name="adresseSuche" value="Fuchsbau 3 Emmerke"/>
     </Datensatz>
     <Datensatz name="schueler.ez2">
       <Wert name="anrede" value="Herr"/>
@@ -50,7 +50,7 @@
       <Wert name="nachname" value="Mustermann"/>
       <Wert name="geburtsdatum" value="01.01.1970"/>
       <Wert name="geburtsort" value="Musterstadt"/>
-      <Wert name="adresseSuche" value="Osterfeld 2 Emmerke"/>
+      <Wert name="adresseSuche" value="Fuchsbau 3 Emmerke"/>
     </Datensatz>
   </Daten>
   <Variablen>

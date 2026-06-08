@@ -760,6 +760,7 @@ function injectAutoScrollSteps(flowEntries, options = {}, path = []) {
     const interactionType = String(interaction.type || '').trim().toLowerCase()
 
     if (enabled && isInteractionTypeNeedingAutoScroll(interactionType) && hasUsableScrollTarget(interaction.target)) {
+      const onlyIfNotVisible = interactionType === 'select' ? false : true
       injected.push({
         id: `${stepId}__autoscroll`,
         if: step?.if,
@@ -768,7 +769,7 @@ function injectAutoScrollSteps(flowEntries, options = {}, path = []) {
           type: 'scroll',
           target: interaction.target,
           focus: false,
-          only_if_not_visible: true,
+          only_if_not_visible: onlyIfNotVisible,
         },
       })
     }

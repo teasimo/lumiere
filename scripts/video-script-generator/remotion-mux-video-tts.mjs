@@ -251,10 +251,22 @@ async function createRemotionProjectFromTsx({ workDir, tsxPath, plan }) {
     transformSource: (tsxRaw) => {
       const withResolver = ensureStaticFileResolver(tsxRaw, resolverBlock)
       return withResolver
+        .split('staticFile(SOURCE_VIDEO)')
+        .join('__stagedAsset(SOURCE_VIDEO)')
+        .split('staticFile(track.file)')
+        .join('__stagedAsset(track.file)')
+        .split('sourceVideo={SOURCE_VIDEO}')
+        .join('sourceVideo={__stagedAsset(SOURCE_VIDEO)}')
+        .split('sourceVideo={semanticVideoPlan.source.videoPath}')
+        .join('sourceVideo={__stagedAsset(semanticVideoPlan.source.videoPath)}')
+        .split('src={semanticVideoPlan.source.videoPath}')
+        .join('src={__stagedAsset(semanticVideoPlan.source.videoPath)}')
         .split('src={unifiedArchitecture.mux.inputVideo}')
         .join('src={__stagedAsset(unifiedArchitecture.mux.inputVideo)}')
         .split('src={track.file}')
         .join('src={__stagedAsset(track.file)}')
+        .replace(/sourceVideo=\{([A-Za-z0-9_$.]+\.source\.videoPath)\}/g, 'sourceVideo={__stagedAsset($1)}')
+        .replace(/src=\{([A-Za-z0-9_$.]+\.source\.videoPath)\}/g, 'src={__stagedAsset($1)}')
     },
   })
 

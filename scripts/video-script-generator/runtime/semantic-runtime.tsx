@@ -203,8 +203,12 @@ const StepRenderer: React.FC<StepRendererProps> = ({ sourceVideo, fps, step, deb
         const holdFrame = msToFrameStart(hold.holdSourceMs, fps)
         return (
           <Sequence key={`hold-${index}`} from={from} durationInFrames={durationInFrames}>
-            <RemotionFreeze frame={holdFrame}>
-              <OffthreadVideo src={sourceVideo} muted />
+            <RemotionFreeze frame={0}>
+              <OffthreadVideo
+                src={sourceVideo}
+                startFrom={holdFrame}
+                muted
+              />
             </RemotionFreeze>
           </Sequence>
         )
