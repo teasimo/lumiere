@@ -5,7 +5,7 @@ import { existsSync, readFileSync, statSync } from 'fs'
 import { basename, dirname, extname, join, relative, resolve } from 'path'
 import { spawnSync } from 'child_process'
 import { XMLParser } from 'fast-xml-parser'
-import { loadCentralConfig } from './shared/central-config.mjs'
+import { getTestScriptConfig, loadCentralConfig } from '../shared/central-config.mjs'
 
 const workspaceRoot = process.cwd()
 const fallbackScenarioPath = 'neo/interactions/dubletten-aufloesen/FR1-case-sus-dubletten-zusammenfuehren.xml'
@@ -21,13 +21,13 @@ function printUsage() {
   console.log([
     'Usage:',
     '  npm run check:testfile -- [<scenario-xml>] [--force] [--out-dir <path>] [-- <playwright-args>]',
-    '  npm run generate:video -- [<scenario-xml>] [--force] [--out-dir <path>] [-- <playwright-args>]',
+    '  npm run run:testfile-script -- [<scenario-xml>] [--force] [--out-dir <path>] [-- <playwright-args>]',
     '',
     'Examples:',
     '  npm run check:testfile -- neo/interactions/dubletten-aufloesen/FR1-case-sus-dubletten-zusammenfuehren.xml',
     '  npm run check:testfile:force -- neo/interactions/dubletten-aufloesen/FR1-case-sus-dubletten-zusammenfuehren.xml',
-    '  npm run generate:video -- neo/interactions/dubletten-aufloesen/FR1-case-sus-dubletten-zusammenfuehren.xml',
-    '  npm run generate:video -- neo/interactions/dubletten-aufloesen/FR1-case-sus-dubletten-zusammenfuehren.xml -- --project=chromium',
+    '  npm run run:testfile-script -- neo/interactions/dubletten-aufloesen/FR1-case-sus-dubletten-zusammenfuehren.xml',
+    '  npm run run:testfile-script -- neo/interactions/dubletten-aufloesen/FR1-case-sus-dubletten-zusammenfuehren.xml -- --project=chromium',
   ].join('\n'))
 }
 
@@ -171,12 +171,73 @@ function readScenarioIdentity(scenarioAbsolutePath) {
   }
 }
 
+function countRenderedFlowSteps(flowEntries) {
+  let count = 0
+
+  for (const step of flowEntries || []) {
+    if (!step || typeof step !== 'object' || Array.isArray(step)) {
+      continue
+    }
+
+    count += 1
+
+    const interactionType = String(step?.interaction?.type || '').trim().toLowerCase()
+    const target = step?.interaction?.target || {}
+    const hasUsableScrollTarget = Boolean(
+      target?.testid || target?.id || target?.['data-id'] || target?.text || Object.keys(target || {}).some((key) => (
+        !['testid', 'id', 'data-id', 'text', 'role', 'url', 'state', 'click_child_selector'].includes(key)
+        && target[key] != null
+      ))
+    )
+    if (['click', 'fill', 'append', 'select', 'search-and-select'].includes(interactionType) && hasUsableScrollTarget) {
+      count += 1
+    }
+
+    if (Array.isArray(step.flow) && step.flow.length > 0) {
+      count += countRenderedFlowSteps(step.flow)
+    }
+
+    if (Array.isArray(step.elseFlow) && step.elseFlow.length > 0) {
+      count += countRenderedFlowSteps(step.elseFlow)
+    }
+  }
+
+  return count
+}
+
+function resolveScenarioTestTimeoutMs(specAbsolutePath) {
+  const siblingPaths = getGeneratedSiblingPathsFromSpec(specAbsolutePath)
+  if (!existsSync(siblingPaths.resolvedJsonPath)) {
+    return 30000
+  }
+
+  try {
+    const raw = readFileSync(siblingPaths.resolvedJsonPath, 'utf8')
+    const parsed = JSON.parse(raw)
+    const scenarioRoot = parsed?.interaction || parsed || {}
+    const flow = Array.isArray(scenarioRoot?.flow) ? scenarioRoot.flow : []
+    const waitBetweenStepsMs = Math.max(0, Math.floor(Number(scenarioRoot?.video?.wait_between_steps ?? 0) || 0))
+    const renderedStepCount = Math.max(1, countRenderedFlowSteps(flow))
+    const actionBudgetMs = renderedStepCount * 3500
+    const pacingBudgetMs = renderedStepCount * waitBetweenStepsMs
+    return Math.max(30000, actionBudgetMs + pacingBudgetMs + 10000)
+  } catch {
+    return 30000
+  }
+}
+
 function getGeneratedSiblingPathsFromSpec(specAbsolutePath) {
+  const specDir = dirname(specAbsolutePath)
   if (specAbsolutePath.endsWith('.spec.js')) {
     const stem = specAbsolutePath.slice(0, -'.spec.js'.length)
     return {
       specPath: specAbsolutePath,
       specMetaPath: `${specAbsolutePath}.meta.json`,
+      scenarioHelpersPath: join(specDir, 'scenario-helpers.mjs'),
+      envFillStrategiesPath: `${stem}.env-fill-strategies.mjs`,
+      scenarioRuntimePath: join(specDir, 'generated-scenario-runtime.js'),
+      centralFillStrategiesPath: join(specDir, 'central-fill-strategies.mjs'),
+      extractPdfCodePath: join(specDir, 'extract-pdf-code.mjs'),
       resolvedXmlPath: `${stem}.resolved.xml`,
       resolvedJsonPath: `${stem}.resolved.json`,
     }
@@ -185,6 +246,11 @@ function getGeneratedSiblingPathsFromSpec(specAbsolutePath) {
   return {
     specPath: specAbsolutePath,
     specMetaPath: `${specAbsolutePath}.meta.json`,
+    scenarioHelpersPath: join(specDir, 'scenario-helpers.mjs'),
+    envFillStrategiesPath: `${specAbsolutePath}.env-fill-strategies.mjs`,
+    scenarioRuntimePath: join(specDir, 'generated-scenario-runtime.js'),
+    centralFillStrategiesPath: join(specDir, 'central-fill-strategies.mjs'),
+    extractPdfCodePath: join(specDir, 'extract-pdf-code.mjs'),
     resolvedXmlPath: `${specAbsolutePath}.resolved.xml`,
     resolvedJsonPath: `${specAbsolutePath}.resolved.json`,
   }
@@ -205,6 +271,11 @@ async function persistScenarioRunArtifacts({
   const specAbsolutePath = resolve(specPath)
   const generatedSiblingPaths = getGeneratedSiblingPathsFromSpec(specAbsolutePath)
   const specMetaPath = generatedSiblingPaths.specMetaPath
+  const scenarioHelpersPath = generatedSiblingPaths.scenarioHelpersPath
+  const envFillStrategiesPath = generatedSiblingPaths.envFillStrategiesPath
+  const scenarioRuntimePath = generatedSiblingPaths.scenarioRuntimePath
+  const centralFillStrategiesPath = generatedSiblingPaths.centralFillStrategiesPath
+  const extractPdfCodePath = generatedSiblingPaths.extractPdfCodePath
   const resolvedXmlPath = generatedSiblingPaths.resolvedXmlPath
   const resolvedJsonPath = generatedSiblingPaths.resolvedJsonPath
   const targetRoot = runRoot
@@ -218,6 +289,21 @@ async function persistScenarioRunArtifacts({
   await cp(specAbsolutePath, join(targetSpecsDir, basename(specAbsolutePath)), { force: true })
   if (existsSync(specMetaPath)) {
     await cp(specMetaPath, join(targetSpecsDir, basename(specMetaPath)), { force: true })
+  }
+  if (existsSync(scenarioHelpersPath)) {
+    await cp(scenarioHelpersPath, join(targetSpecsDir, basename(scenarioHelpersPath)), { force: true })
+  }
+  if (existsSync(envFillStrategiesPath)) {
+    await cp(envFillStrategiesPath, join(targetSpecsDir, basename(envFillStrategiesPath)), { force: true })
+  }
+  if (existsSync(scenarioRuntimePath)) {
+    await cp(scenarioRuntimePath, join(targetSpecsDir, basename(scenarioRuntimePath)), { force: true })
+  }
+  if (existsSync(centralFillStrategiesPath)) {
+    await cp(centralFillStrategiesPath, join(targetSpecsDir, basename(centralFillStrategiesPath)), { force: true })
+  }
+  if (existsSync(extractPdfCodePath)) {
+    await cp(extractPdfCodePath, join(targetSpecsDir, basename(extractPdfCodePath)), { force: true })
   }
   await cp(scenarioAbsolutePath, join(targetRoot, basename(scenarioAbsolutePath)), { force: true })
   if (existsSync(resolvedXmlPath)) {
@@ -312,7 +398,7 @@ function ensureGeneratedSpec({ scenarioPath, outDir, force }) {
     console.log(`Generating temp spec from ${relative(workspaceRoot, scenarioAbsolute)} ...`)
     runCommand(
       'node',
-      ['scripts/generate-tests-from-scenario-xml.mjs', relative(workspaceRoot, scenarioAbsolute), '--out-dir', relative(workspaceRoot, outputDirAbsolute)],
+      ['scripts/test-script-generator/generate-tests-from-scenario-xml.mjs', relative(workspaceRoot, scenarioAbsolute), '--out-dir', relative(workspaceRoot, outputDirAbsolute)],
       'Failed to generate temp spec file.'
     )
   } else {
@@ -426,6 +512,7 @@ function runPlaywright(specAbsolutePath, playwrightArgs, mode, scenarioPath, cen
   const videoSizeEnv = videoConfig.resolution
     ? `${videoConfig.resolution.width}x${videoConfig.resolution.height}`
     : ''
+  const scenarioTestTimeoutMs = resolveScenarioTestTimeoutMs(specAbsolutePath)
   const scenarioRunId = runContext?.scenarioRunId || buildScenarioRunId()
 
   if (mode === 'video' && videoConfig.resolution) {
@@ -443,6 +530,7 @@ function runPlaywright(specAbsolutePath, playwrightArgs, mode, scenarioPath, cen
       ...process.env,
       SCENARIO_VIDEO_MODE: mode === 'video' ? '1' : '0',
       SCENARIO_VIDEO_SIZE: videoSizeEnv,
+      SCENARIO_TEST_TIMEOUT_MS: String(scenarioTestTimeoutMs),
       SCENARIO_RUN_ID: scenarioRunId,
       SCENARIO_ARTIFACTS_DIR: runContext?.artifactsDir || '',
       SCENARIO_REPORT_DIR: runContext?.reportDir || '',
@@ -457,8 +545,9 @@ function runPlaywright(specAbsolutePath, playwrightArgs, mode, scenarioPath, cen
 
 async function main() {
   const central = loadCentralConfig(workspaceRoot)
+  const testScriptConfig = getTestScriptConfig(central.config)
   const rawOptions = parseArgs(process.argv.slice(2))
-  const options = applyConfigDefaults(rawOptions, central.config)
+  const options = applyConfigDefaults(rawOptions, testScriptConfig)
   if (options.help) {
     printUsage()
     return

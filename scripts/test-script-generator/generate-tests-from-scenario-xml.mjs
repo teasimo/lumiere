@@ -5,9 +5,13 @@ import { promisify } from 'util'
 import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'fs/promises'
 import { basename, dirname, extname, join, relative, resolve } from 'path'
 import { XMLBuilder, XMLParser } from 'fast-xml-parser'
-import { renderScenarioSpecTemplate } from './generator/templates/spec-template.mjs'
-import { loadCentralConfig } from './shared/central-config.mjs'
-import { centralDataFunctions } from './generator/central-data-functions.mjs'
+import { renderScenarioSpecTemplate } from './templates/spec-template.mjs'
+import {
+  getScenarioEnvFillStrategiesFilename,
+  getScenarioSpecSupportFilenames,
+} from './templates/spec-template-base.mjs'
+import { getTestScriptConfig, loadCentralConfig } from '../shared/central-config.mjs'
+import { centralDataFunctions } from './central-data-functions.mjs'
 
 const execFileAsync = promisify(execFile)
 
@@ -56,13 +60,13 @@ const RESOLVED_TITLE_SOURCE_ATTRS = [
 function printUsage() {
   console.log([
     'Usage:',
-    '  node scripts/generate-tests-from-scenario-xml.mjs [<scenario-xml>] [--xsd <path>] [--out-dir <path>]',
-    '  node scripts/generate-tests-from-scenario-xml.mjs --all [--scenario-dir <path>] [--xsd <path>] [--out-dir <path>]',
-    '  node scripts/generate-tests-from-scenario-xml.mjs --clean [--out-dir <path>]',
+    '  node scripts/test-script-generator/generate-tests-from-scenario-xml.mjs [<scenario-xml>] [--xsd <path>] [--out-dir <path>]',
+    '  node scripts/test-script-generator/generate-tests-from-scenario-xml.mjs --all [--scenario-dir <path>] [--xsd <path>] [--out-dir <path>]',
+    '  node scripts/test-script-generator/generate-tests-from-scenario-xml.mjs --clean [--out-dir <path>]',
     '',
     'Examples:',
-    '  node scripts/generate-tests-from-scenario-xml.mjs neo/interactions/dubletten-aufloesen/FR1-case-sus-dubletten-zusammenfuehren.xml',
-    '  node scripts/generate-tests-from-scenario-xml.mjs --all --scenario-dir neo/interactions --out-dir temp/testfiles',
+    '  node scripts/test-script-generator/generate-tests-from-scenario-xml.mjs neo/interactions/dubletten-aufloesen/FR1-case-sus-dubletten-zusammenfuehren.xml',
+    '  node scripts/test-script-generator/generate-tests-from-scenario-xml.mjs --all --scenario-dir neo/interactions --out-dir temp/testfiles',
   ].join('\n'))
 }
 
@@ -278,21 +282,6 @@ function deriveEnvFillStrategiesAbsolutePath(scenarioPath) {
   }
 
   return resolve(appRoot, 'env', 'fill-strategies.mjs')
-}
-
-function resolveEnvFillStrategiesImportPath({ scenarioPath, generatedSpecPath }) {
-  const envFillStrategiesAbsolutePath = deriveEnvFillStrategiesAbsolutePath(scenarioPath)
-  if (!envFillStrategiesAbsolutePath) {
-    return null
-  }
-
-  const generatedSpecDir = dirname(generatedSpecPath)
-  const relativeImportPath = String(relative(generatedSpecDir, envFillStrategiesAbsolutePath)).replace(/\\/g, '/')
-  if (!relativeImportPath) {
-    return null
-  }
-
-  return relativeImportPath.startsWith('.') ? relativeImportPath : `./${relativeImportPath}`
 }
 
 function deriveEnvDataFunctionsAbsolutePath(scenarioPath) {
@@ -1365,10 +1354,10 @@ async function scenarioToSpecSource({ scenarioPath, xsdPath, centralConfig, gene
 
   assertUniqueFlowStepIds(resolvedRoot.flow, absoluteScenarioPath)
 
-  const envFillStrategiesImportPath = resolveEnvFillStrategiesImportPath({
-    scenarioPath: absoluteScenarioPath,
-    generatedSpecPath,
-  })
+  const envFillStrategiesAbsolutePath = deriveEnvFillStrategiesAbsolutePath(absoluteScenarioPath)
+  const envFillStrategiesImportPath = envFillStrategiesAbsolutePath && await fileExists(envFillStrategiesAbsolutePath)
+    ? `./${getScenarioEnvFillStrategiesFilename(generatedSpecPath)}`
+    : null
 
   const specSource = renderScenarioSpecTemplate({
     resolvedRoot,
@@ -1380,6 +1369,7 @@ async function scenarioToSpecSource({ scenarioPath, xsdPath, centralConfig, gene
     specSource,
     resolvedRoot,
     resolvedXmlSource: composeResolvedXmlSource(resolvedRootElement),
+    envFillStrategiesAbsolutePath,
   }
 }
 
@@ -1395,6 +1385,50 @@ function getResolvedXmlOutputPath(specOutputPath) {
     return specOutputPath.slice(0, -'.spec.js'.length) + '.resolved.xml'
   }
   return `${specOutputPath}.resolved.xml`
+}
+
+function getScenarioSupportPaths(specOutputPath) {
+  const specDir = dirname(specOutputPath)
+  const supportFilenames = getScenarioSpecSupportFilenames()
+
+  return {
+    scenarioHelpersPath: join(specDir, supportFilenames.scenarioHelpers),
+    envFillStrategiesPath: join(specDir, getScenarioEnvFillStrategiesFilename(specOutputPath)),
+    scenarioRuntimePath: join(specDir, supportFilenames.scenarioRuntime),
+    centralFillStrategiesPath: join(specDir, supportFilenames.centralFillStrategies),
+    extractPdfCodePath: join(specDir, supportFilenames.extractPdfCode),
+  }
+}
+
+async function writeScenarioSupportFiles({ specOutputPath, envFillStrategiesAbsolutePath }) {
+  const supportPaths = getScenarioSupportPaths(specOutputPath)
+
+  await cp(
+    resolve(workspaceRoot, 'scripts', 'test-script-generator', 'runtime', 'scenario-helpers.mjs'),
+    supportPaths.scenarioHelpersPath,
+    { force: true },
+  )
+  await cp(
+    resolve(workspaceRoot, 'scripts', 'test-script-generator', 'runtime', 'generated-scenario-runtime.js'),
+    supportPaths.scenarioRuntimePath,
+    { force: true },
+  )
+  await cp(
+    resolve(workspaceRoot, 'scripts', 'test-script-generator', 'central-fill-strategies.mjs'),
+    supportPaths.centralFillStrategiesPath,
+    { force: true },
+  )
+  await cp(
+    resolve(workspaceRoot, 'scripts', 'test-script-generator', 'extract-pdf-code.mjs'),
+    supportPaths.extractPdfCodePath,
+    { force: true },
+  )
+
+  if (envFillStrategiesAbsolutePath && await fileExists(envFillStrategiesAbsolutePath)) {
+    await cp(envFillStrategiesAbsolutePath, supportPaths.envFillStrategiesPath, { force: true })
+  }
+
+  return supportPaths
 }
 
 function sanitizeFileToken(value, fallback = 'scenario') {
@@ -1464,8 +1498,14 @@ async function cleanOutputDirectory(outDirPath) {
     if (
       entry.name.endsWith('.spec.js')
       || entry.name.endsWith('.spec.js.meta.json')
+      || entry.name.endsWith('.helpers.mjs')
+      || entry.name.endsWith('.env-fill-strategies.mjs')
       || entry.name.endsWith('.resolved.json')
       || entry.name.endsWith('.resolved.xml')
+      || entry.name === 'scenario-helpers.mjs'
+      || entry.name === 'generated-scenario-runtime.js'
+      || entry.name === 'central-fill-strategies.mjs'
+      || entry.name === 'extract-pdf-code.mjs'
     ) {
       await rm(join(outDirPath, entry.name), { force: true })
     }
@@ -1478,7 +1518,7 @@ async function generateOne(scenarioFilePath, outDirPath, options, centralConfig)
   const outputBaseName = `${basename(scenarioFilePath, extname(scenarioFilePath))}.spec.js`
   const outputPath = join(outDirPath, outputBaseName)
 
-  const { specSource, resolvedRoot, resolvedXmlSource } = await scenarioToSpecSource({
+  const { specSource, resolvedRoot, resolvedXmlSource, envFillStrategiesAbsolutePath } = await scenarioToSpecSource({
     scenarioPath: scenarioFilePath,
     xsdPath: options.xsdPath,
     centralConfig,
@@ -1490,6 +1530,10 @@ async function generateOne(scenarioFilePath, outDirPath, options, centralConfig)
   const resolvedXmlPath = getResolvedXmlOutputPath(outputPath)
 
   await writeFile(outputPath, specSource, 'utf8')
+  const supportPaths = await writeScenarioSupportFiles({
+    specOutputPath: outputPath,
+    envFillStrategiesAbsolutePath,
+  })
   await writeFile(resolvedJsonPath, JSON.stringify({ interaction: resolvedRoot }, null, 2), 'utf8')
   await writeFile(resolvedXmlPath, resolvedXmlSource, 'utf8')
   await writeFile(
@@ -1513,7 +1557,21 @@ async function generateOne(scenarioFilePath, outDirPath, options, centralConfig)
   })
   const scenarioOutputGeneratedDir = resolve(workspaceRoot, 'output', scenarioFolderName, 'generated')
   await mkdir(scenarioOutputGeneratedDir, { recursive: true })
+  await rm(
+    join(
+      scenarioOutputGeneratedDir,
+      `${basename(outputPath, '.spec.js')}.helpers.mjs`,
+    ),
+    { force: true },
+  )
   await cp(outputPath, join(scenarioOutputGeneratedDir, basename(outputPath)), { force: true })
+  await cp(supportPaths.scenarioHelpersPath, join(scenarioOutputGeneratedDir, basename(supportPaths.scenarioHelpersPath)), { force: true })
+  if (await fileExists(supportPaths.envFillStrategiesPath)) {
+    await cp(supportPaths.envFillStrategiesPath, join(scenarioOutputGeneratedDir, basename(supportPaths.envFillStrategiesPath)), { force: true })
+  }
+  await cp(supportPaths.scenarioRuntimePath, join(scenarioOutputGeneratedDir, basename(supportPaths.scenarioRuntimePath)), { force: true })
+  await cp(supportPaths.centralFillStrategiesPath, join(scenarioOutputGeneratedDir, basename(supportPaths.centralFillStrategiesPath)), { force: true })
+  await cp(supportPaths.extractPdfCodePath, join(scenarioOutputGeneratedDir, basename(supportPaths.extractPdfCodePath)), { force: true })
   await cp(resolvedJsonPath, join(scenarioOutputGeneratedDir, basename(resolvedJsonPath)), { force: true })
   await cp(resolvedXmlPath, join(scenarioOutputGeneratedDir, basename(resolvedXmlPath)), { force: true })
   await cp(metaPath, join(scenarioOutputGeneratedDir, basename(metaPath)), { force: true })
@@ -1523,8 +1581,9 @@ async function generateOne(scenarioFilePath, outDirPath, options, centralConfig)
 
 async function main() {
   const central = loadCentralConfig(workspaceRoot)
+  const testScriptConfig = getTestScriptConfig(central.config)
   const rawOptions = parseArgs(process.argv.slice(2))
-  const options = applyConfigDefaults(rawOptions, central.config)
+  const options = applyConfigDefaults(rawOptions, testScriptConfig)
 
   if (options.help) {
     printUsage()
@@ -1547,7 +1606,7 @@ async function main() {
 
   const written = []
   for (const scenarioFilePath of scenarioFiles) {
-    const outputPath = await generateOne(scenarioFilePath, outDirPath, options, central.config)
+    const outputPath = await generateOne(scenarioFilePath, outDirPath, options, testScriptConfig)
     written.push(outputPath)
   }
 

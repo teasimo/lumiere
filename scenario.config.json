@@ -1,49 +1,54 @@
 {
   "scenario": {
-    "defaults": {
-      "scenario_path": "neo/interactions/dubletten-aufloesen/FR1-case-sus-dubletten-zusammenfuehren.xml",
-      "scenario_dir": "neo/interactions",
-      "output_dir": "temp/testfiles"
-    },
-    "video": {
-      "wait_between_steps": 0,
-      "scroll_delay_ms": 35,
-      "autoscroll_smooth": false,
-      "resolution": {
-        "width": 1280,
-        "height": 720
-      }
-    },
-    "tts": [{
-      "profile": "all-channels",
-      "channels": {
-        "Zweck": {
-          "enabled": true,
-          "prefix": ""
-        },
-        "Erklaerung": {
-          "enabled": true,
-          "prefix": ""
-        },
-        "Hinweis": {
-          "enabled": true,
-          "prefix": ""
-        },
-        "Konsequenz": {
-          "enabled": true,
-          "prefix": ""
-        },
-        "Bedingung": {
-          "enabled": false,
-          "prefix": ""
-        }
-
+    "test-script": {
+      "defaults": {
+        "scenario_path": "neo/interactions/dubletten-aufloesen/FR1-case-sus-dubletten-zusammenfuehren.xml",
+        "scenario_dir": "neo/interactions",
+        "output_dir": "temp/testfiles"
       },
-      "pauses": {
-        "between_channels_ms": 200,
-        "before_action_ms": 300,
-        "after_action_ms": 300
+      "video": {
+        "wait_between_steps": 0,
+        "scroll_delay_ms": 35,
+        "scroll_step_px": 20,
+        "autoscroll_smooth": false,
+        "resolution": {
+          "width": 1280,
+          "height": 720
+        }
       }
-    }]
+    },
+    "video-script": {
+      "tts": [{
+        "profile": "all-channels",
+        "channels": {
+          "Zweck": {
+            "enabled": true,
+            "prefix": ""
+          },
+          "Erklaerung": {
+            "enabled": true,
+            "prefix": ""
+          },
+          "Hinweis": {
+            "enabled": true,
+            "prefix": ""
+          },
+          "Konsequenz": {
+            "enabled": true,
+            "prefix": ""
+          },
+          "Bedingung": {
+            "enabled": false,
+            "prefix": ""
+          }
+
+        },
+        "pauses": {
+          "between_channels_ms": 200,
+          "before_action_ms": 300,
+          "after_action_ms": 300
+        }
+      }]
+    }
   }
 }

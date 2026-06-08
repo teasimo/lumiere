@@ -104,7 +104,7 @@ async function main() {
   const scenarioPathArg = argv.find((arg) => !arg.startsWith('-'))
   const wantsHelp = argv.includes('--help') || argv.includes('-h')
   if (!scenarioPathArg || wantsHelp) {
-    console.log('Usage: node scripts/remotion-render.mjs <scenario.xml> [--keep-temp-project]')
+    console.log('Usage: node scripts/video-script-generator/remotion-render.mjs <scenario.xml> [--keep-temp-project]')
     process.exit(wantsHelp ? 0 : 1)
   }
 
@@ -138,7 +138,7 @@ async function main() {
   if (requiresPlanRefresh) {
     console.log('Vorbereitung: Erzeuge aktuellen Remotion-Plan (plan-only) ...')
     const prepareExitCode = runCommand('node', [
-      'scripts/run-annotated-video.mjs',
+      'scripts/video-script-generator/run-annotated-video.mjs',
       '--scenario-tts',
       scenarioPathArg,
       '--profile=all-channels',
@@ -182,7 +182,7 @@ async function main() {
   }
 
   const muxArgs = [
-    'scripts/remotion-mux-video-tts.mjs',
+    'scripts/video-script-generator/remotion-mux-video-tts.mjs',
     `--plan=${planPath}`,
     `--tsx=${renderTsxPath}`,
   ]

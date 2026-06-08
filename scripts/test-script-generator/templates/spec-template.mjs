@@ -1,6 +1,6 @@
 import { basename } from 'path'
 import { XMLParser } from 'fast-xml-parser'
-import { getAllTemplateParts } from './spec-template-base.mjs'
+import { getScenarioSpecImports, getScenarioSpecSetupLines } from './spec-template-base.mjs'
 
 const REMOTION_INTERACTION_TAG_KIND = {
   Click: 'click',
@@ -12,7 +12,7 @@ const REMOTION_INTERACTION_TAG_KIND = {
   SucheAuswahl: 'search-and-select',
 }
 
-const REMOTION_PRESENTATION_TAGS = new Set(['Folie', 'Info', 'Video', 'Ton', 'VideoStart'])
+const REMOTION_PRESENTATION_TAGS = new Set(['Folie', 'Info', 'Video', 'Ton'])
 
 function toXmlAttr(value) {
   return String(value ?? '')
@@ -958,6 +958,7 @@ function buildInteractionLines(step, options = {}) {
   const target = interaction.target || {}
   const lines = []
   const scrollDelayRef = options.scrollDelayRef || '35'
+  const smoothScrollEnabledRef = options.smoothScrollEnabledRef || 'false'
 
   if (!interactionType) {
     if (hasChapter) {
@@ -981,7 +982,7 @@ function buildInteractionLines(step, options = {}) {
       )
     }
     if (target.testid) {
-      lines.push(`await applyFillValue(page, ${toLiteral(String(target.testid))}, resolveRuntimeTemplateString(${toLiteral(String(interaction.value || ''))}, runtimeVariables))`)
+      lines.push(`await applyFillValue(page, ${toLiteral(String(target.testid))}, resolveRuntimeTemplateString(${toLiteral(String(interaction.value || ''))}, runtimeVariables), { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true })`)
     } else if (target.text) {
       // Fill by visible text (first matching input/textarea/select)
       lines.push(`await page.getByLabel(resolveRuntimeTemplateString(${toLiteral(String(target.text))}, runtimeVariables), { exact: true }).fill(resolveRuntimeTemplateString(${toLiteral(String(interaction.value || ''))}, runtimeVariables))`)
@@ -991,7 +992,7 @@ function buildInteractionLines(step, options = {}) {
     } else if (target.id || target['data-id']) {
       const selectorType = target['data-id'] ? 'data-id' : 'id'
       const value = target['data-id'] || target.id
-      lines.push(`await applyFillValueById(page, ${toLiteral(String(value))}, resolveRuntimeTemplateString(${toLiteral(String(interaction.value || ''))}, runtimeVariables), ${toLiteral(selectorType)})`)
+      lines.push(`await applyFillValueById(page, ${toLiteral(String(value))}, resolveRuntimeTemplateString(${toLiteral(String(interaction.value || ''))}, runtimeVariables), ${toLiteral(selectorType)}, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true })`)
     } else {
       throw new Error(`Step "${step.id}" has interaction type "fill" but no usable target fields.`)
     }
@@ -1033,13 +1034,14 @@ function buildInteractionLines(step, options = {}) {
         }
       }
     } else if (target.testid) {
-      lines.push(`await page.getByTestId(${toLiteral(String(target.testid))}).click()`)
+      lines.push(`const __scenarioClickLocator = page.getByTestId(${toLiteral(String(target.testid))}).first()`)
+      lines.push('await __scenarioClickLocator.click()')
     } else if (buildGenericTargetSelector(target)) {
-      lines.push(`await applyClickValueBySelector(page, ${toLiteral(buildGenericTargetSelector(target))})`)
+      lines.push(`await applyClickValueBySelector(page, ${toLiteral(buildGenericTargetSelector(target))}, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true })`)
     } else {
       const selectorType = target['data-id'] ? 'data-id' : 'id'
       const value = target['data-id'] || target.id
-      lines.push(`await applyClickValueById(page, ${toLiteral(String(value))}, ${toLiteral(selectorType)})`)
+      lines.push(`await applyClickValueById(page, ${toLiteral(String(value))}, ${toLiteral(selectorType)}, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true })`)
     }
   } else if (interactionType === 'select') {
     if (!target.testid && !target.id && !target['data-id']) {
@@ -1051,11 +1053,11 @@ function buildInteractionLines(step, options = {}) {
       )
     }
     if (target.testid) {
-      lines.push(`await applySelectValue(page, ${toLiteral(String(target.testid))}, ${toLiteral(String(interaction.value || ''))})`)
+      lines.push(`await applySelectValue(page, ${toLiteral(String(target.testid))}, ${toLiteral(String(interaction.value || ''))}, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true })`)
     } else {
       const selectorType = target['data-id'] ? 'data-id' : 'id'
       const value = target['data-id'] || target.id
-      lines.push(`await applySelectValueById(page, ${toLiteral(String(value))}, ${toLiteral(String(interaction.value || ''))}, ${toLiteral(selectorType)})`)
+      lines.push(`await applySelectValueById(page, ${toLiteral(String(value))}, ${toLiteral(String(interaction.value || ''))}, ${toLiteral(selectorType)}, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true })`)
     }
   } else if (interactionType === 'scroll') {
     const focus = interaction.focus === true
@@ -1160,7 +1162,7 @@ function buildInteractionLines(step, options = {}) {
     const value = String(interaction.value)
     const resultSelector = String(interaction.resultSelector)
     const resultIndex = interaction.resultIndex != null ? Number(interaction.resultIndex) : 0
-    lines.push(`await searchAndSelect(page, { target: { 'data-id': ${toLiteral(dataId)} }, value: ${toLiteral(value)}, resultSelector: ${toLiteral(resultSelector)}, resultIndex: ${resultIndex} })`)
+    lines.push(`await searchAndSelect(page, { target: { 'data-id': ${toLiteral(dataId)} }, value: ${toLiteral(value)}, resultSelector: ${toLiteral(resultSelector)}, resultIndex: ${resultIndex}, smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true })`)
     // Assertion falls vorhanden
     if (interaction.assert) {
       lines.push(...buildExpectedResultAssertions([interaction.assert]))
@@ -1192,10 +1194,14 @@ function buildInteractionLines(step, options = {}) {
   return lines
 }
 
-export function renderScenarioSpecTemplate({ resolvedRoot, scenarioPathRelative, envFillStrategiesImportPath = null }) {
+export function renderScenarioSpecTemplate({
+  resolvedRoot,
+  scenarioPathRelative,
+  envFillStrategiesImportPath = null,
+}) {
   const baseFlow = Array.isArray(resolvedRoot?.flow) ? resolvedRoot.flow : []
   const autoScrollSmoothEnabled = resolvedRoot?.video?.autoscroll_smooth === true
-  const flow = injectAutoScrollSteps(baseFlow, { enabled: autoScrollSmoothEnabled })
+  const flow = injectAutoScrollSteps(baseFlow, { enabled: true })
   if (!flow.length) {
     throw new Error('Scenario contains no flow steps.')
   }
@@ -1205,6 +1211,8 @@ export function renderScenarioSpecTemplate({ resolvedRoot, scenarioPathRelative,
   const stepIdentifierLogEnabledByScenario = resolvedRoot?.debug?.log_step_identifiers === true
   const waitBetweenStepsMs = Number(resolvedRoot?.video?.wait_between_steps ?? 0)
   const scrollDelayMs = Number(resolvedRoot?.video?.scroll_delay_ms ?? 35)
+  const scrollStepPx = Number(resolvedRoot?.video?.scroll_step_px ?? 20)
+  const smoothScrollEnabled = autoScrollSmoothEnabled
   const renderedStepCount = Math.max(1, countRenderedSteps(flow))
   const actionBudgetMs = renderedStepCount * 3500
   const pacingBudgetMs = renderedStepCount * Math.max(0, Math.floor(waitBetweenStepsMs))
@@ -1213,9 +1221,11 @@ export function renderScenarioSpecTemplate({ resolvedRoot, scenarioPathRelative,
   const testTitle = `runs generated flow for ${scenarioName}`
 
   const parts = []
-  
-  // Add all base template parts (functions and utilities)
-  parts.push(...getAllTemplateParts(envFillStrategiesImportPath))
+  parts.push(...getScenarioSpecImports())
+  parts.push(...getScenarioSpecSetupLines({
+    envFillStrategiesImportPath,
+    scrollStepPx: Number.isFinite(scrollStepPx) ? Math.max(1, Math.floor(scrollStepPx)) : 20,
+  }))
 
   // Add describe and test start
   parts.push('')
@@ -1225,6 +1235,7 @@ export function renderScenarioSpecTemplate({ resolvedRoot, scenarioPathRelative,
   parts.push(`    test.setTimeout(${dynamicTestTimeoutMs})`)
   parts.push(`    const waitBetweenStepsMs = ${Number.isFinite(waitBetweenStepsMs) ? Math.max(0, Math.floor(waitBetweenStepsMs)) : 0}`)
   parts.push(`    const scrollDelayMs = ${Number.isFinite(scrollDelayMs) ? Math.max(0, Math.floor(scrollDelayMs)) : 35}`)
+  parts.push(`    const smoothScrollEnabled = ${smoothScrollEnabled ? 'true' : 'false'}`)
   parts.push(`    const stepIdentifierLogEnabledByScenario = ${stepIdentifierLogEnabledByScenario ? 'true' : 'false'}`)
   parts.push('    const stepIdentifierLogEnabledByEnv = process.env.SCENARIO_STEP_DOM_LOG === "1" || process.env.SCENARIO_STEP_DOM_LOG === "true"')
   parts.push('    const stepIdentifierLogEnabled = stepIdentifierLogEnabledByScenario || stepIdentifierLogEnabledByEnv')
@@ -1315,7 +1326,7 @@ export function renderScenarioSpecTemplate({ resolvedRoot, scenarioPathRelative,
       } else if (nestedFlow.length > 0) {
         emitFlowSteps(nestedFlow, `${indent}  `)
       } else {
-        const interactionLines = buildInteractionLines(step, { scrollDelayRef: 'scrollDelayMs' })
+        const interactionLines = buildInteractionLines(step, { scrollDelayRef: 'scrollDelayMs', smoothScrollEnabledRef: 'smoothScrollEnabled' })
         for (const line of interactionLines) {
           parts.push(`${indent}  ${line}`)
         }

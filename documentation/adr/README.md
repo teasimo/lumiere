@@ -19,7 +19,7 @@ Jede ADR folgt der [ADR-Template](https://github.com/joelparkerhenderson/archite
 
 **Status**: Accepted
 
-**Summary**: Alle UI-Komponenten-Interaktionen (fill, select, etc.) werden über ein plugin-basiertes Fill-Strategy-Pattern abgewickelt. Dies ermöglicht es dem Generator, app-agnostisch zu bleiben, während app-spezifische Verhalten über env-spezifische Strategien injiziert werden.
+**Summary**: Alle UI-Komponenten-Interaktionen (fill, select, etc.) werden im Testscript-Generator über ein plugin-basiertes Fill-Strategy-Pattern abgewickelt. Dies ermöglicht es dem Generator, app-agnostisch zu bleiben, während app-spezifische Verhalten über env-spezifische Strategien injiziert werden.
 
 **Key Points**:
 - Zentrale Strategien für Standard-Quasar-Komponenten
@@ -28,9 +28,9 @@ Jede ADR folgt der [ADR-Template](https://github.com/joelparkerhenderson/archite
 - Klares Fehler-Feedback bei fehlender Strategie
 
 **Related Files**:
-- [scripts/generator/central-fill-strategies.mjs](../scripts/generator/central-fill-strategies.mjs) — zentrale Quasar-Strategien
-- [lunettes/env/fill-strategies.mjs](../lunettes/env/fill-strategies.mjs) — Beispiel: app-spezifische Strategien
-- [scripts/generator/templates/spec-template.mjs](../scripts/generator/templates/spec-template.mjs) — Generator nutzt Strategien
+- [scripts/test-script-generator/central-fill-strategies.mjs](../../scripts/test-script-generator/central-fill-strategies.mjs) — zentrale Quasar-Strategien
+- [lunettes/env/fill-strategies.mjs](../../lunettes/env/fill-strategies.mjs) — Beispiel: app-spezifische Strategien
+- [scripts/test-script-generator/templates/spec-template.mjs](../../scripts/test-script-generator/templates/spec-template.mjs) — Testscript-Generator nutzt Strategien
 
 ---
 
@@ -40,4 +40,3 @@ Jede ADR folgt der [ADR-Template](https://github.com/joelparkerhenderson/archite
 2. ADR-Template verwenden (siehe [ADR 0001](./0001-fill-strategies-for-component-interactions.md))
 3. Dieses README aktualisieren
 4. Im Projekt diskutieren und akzeptieren lassen
-

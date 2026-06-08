@@ -150,14 +150,26 @@ function buildStepWindowMap({ scenarioRoot, timelineReport, presentationRange = 
     const timeToShowAfterInteraction = 500;
 
     const timelineRelativeStartMs = Math.max(0, Math.floor(window.startedAtMs - timelineOriginMs))
-    const timelineRelativeEndMs = Math.max(timelineRelativeStartMs, Math.floor(window.endedAtMs - timelineOriginMs+ timeToShowAfterInteraction))
+    const timelineRelativeEndMs = Math.max(
+      timelineRelativeStartMs,
+      Math.floor(window.endedAtMs - timelineOriginMs + timeToShowAfterInteraction),
+    )
 
-    const clipRelativeStartMs = Math.max(0, timelineRelativeStartMs - clipStartMs - timeToShowBeforeInteraction)
-    const unclampedRelativeEndMs = Math.max(timelineRelativeStartMs, timelineRelativeEndMs)
-    const clampedRelativeEndMs = clipEndMs == null
-      ? unclampedRelativeEndMs
-      : Math.min(unclampedRelativeEndMs, clipEndMs)
-    const clipRelativeEndMs = Math.max(clipRelativeStartMs + 1, clampedRelativeEndMs - clipStartMs )
+    const unclippedWindowStartMs = Math.max(0, timelineRelativeStartMs - timeToShowBeforeInteraction)
+    const unclippedWindowEndMs = Math.max(unclippedWindowStartMs + 1, timelineRelativeEndMs)
+    const clipWindowStartMs = clipStartMs
+    const clipWindowEndMs = clipEndMs == null
+      ? Number.POSITIVE_INFINITY
+      : clipEndMs
+
+    if (unclippedWindowEndMs <= clipWindowStartMs || unclippedWindowStartMs >= clipWindowEndMs) {
+      continue
+    }
+
+    const clippedWindowStartMs = Math.max(unclippedWindowStartMs, clipWindowStartMs)
+    const clippedWindowEndMs = Math.min(unclippedWindowEndMs, clipWindowEndMs)
+    const clipRelativeStartMs = Math.max(0, clippedWindowStartMs - clipWindowStartMs)
+    const clipRelativeEndMs = Math.max(clipRelativeStartMs + 1, clippedWindowEndMs - clipWindowStartMs)
 
     stepWindowById.set(flowEntry.id, {
       sourceStartMs: clipRelativeStartMs,

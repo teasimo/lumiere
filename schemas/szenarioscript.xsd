@@ -270,8 +270,20 @@
     <!-- Video -->
     <!-- ========================================================= -->
     <xs:complexType name="VideoStartType">
+        <xs:annotation>
+            <xs:documentation>
+      Dies ist nur eine Steuerung des Video-Generator-Scriptes:
+      - "VideoStart" markiert den Start eines Video-Segments, das generiert werden soll.
+            </xs:documentation>
+        </xs:annotation>
     </xs:complexType>
     <xs:complexType name="VideoStopType">
+        <xs:annotation>
+            <xs:documentation>
+      Dies ist nur eine Steuerung des Video-Generator-Scriptes:
+      - "VideoStop" markiert das Ende eines Video-Segments, das generiert werden soll.
+            </xs:documentation>
+        </xs:annotation>
     </xs:complexType>
 
     <!-- Einstellungen -->

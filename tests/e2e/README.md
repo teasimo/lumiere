@@ -249,7 +249,7 @@ Wichtige Umgebungsvariablen (falls gesetzt):
 ## Annotiertes Video aus Trace erzeugen
 
 Playwright kann neben Video-Aufnahmen auch Traces aufzeichnen, die exakte Zeitstempel pro `test.step` enthalten.
-Das Skript `scripts/annotate-video-from-trace.mjs` kombiniert beides: Es liest den Trace, berechnet die Dauer jedes Schritts und blendet die Schrittbezeichnung per `ffmpeg` als Overlay ins Video ein.
+Das Skript `scripts/video-script-generator/annotate-video-from-trace.mjs` kombiniert beides: Es liest den Trace, berechnet die Dauer jedes Schritts und blendet die Schrittbezeichnung per `ffmpeg` als Overlay ins Video ein.
 
 **Voraussetzungen:** `ffmpeg` und `unzip` muessen im PATH verfuegbar sein.
 
@@ -294,7 +294,7 @@ npm run test:e2e:annotated-video -- \
 Der einfachste Weg dafuer ist `--rerender`. Dabei reicht die Nennung des Testfiles, und das Skript sucht automatisch den letzten passenden Lauf unter `frontend/test-artifacts` heraus:
 
 ```bash
-node scripts/run-annotated-video.mjs \
+node scripts/video-script-generator/run-annotated-video.mjs \
   --rerender \
   tests/e2e/idee-flow.spec.js
 ```
@@ -302,7 +302,7 @@ node scripts/run-annotated-video.mjs \
 Optional auch mit TTS:
 
 ```bash
-node scripts/run-annotated-video.mjs \
+node scripts/video-script-generator/run-annotated-video.mjs \
   --rerender \
   tests/e2e/idee-flow.spec.js \
   --tts
@@ -311,7 +311,7 @@ node scripts/run-annotated-video.mjs \
 Optional mit explizitem Ausgabe-Dateinamen:
 
 ```bash
-node scripts/run-annotated-video.mjs \
+node scripts/video-script-generator/run-annotated-video.mjs \
   --rerender \
   tests/e2e/idee-flow.spec.js \
   idee-flow-neu.mp4
@@ -328,7 +328,7 @@ Falls die Artefakte manuell angegeben werden sollen oder kein passender letzter 
 Wenn `trace.zip`, `video.webm` und das zugehoerige `demo`-Verzeichnis bereits vorliegen, kann das Video komplett neu gebaut werden, ohne Playwright nochmal zu starten:
 
 ```bash
-node scripts/run-annotated-video.mjs \
+node scripts/video-script-generator/run-annotated-video.mjs \
   --annotate-only \
   test-artifacts/annotate-run-20260425191328/RUN_ORDNER/trace.zip \
   test-artifacts/annotate-run-20260425191328/RUN_ORDNER/video.webm \
@@ -339,7 +339,7 @@ node scripts/run-annotated-video.mjs \
 Auch dieser Modus unterstuetzt optional TTS:
 
 ```bash
-node scripts/run-annotated-video.mjs \
+node scripts/video-script-generator/run-annotated-video.mjs \
   --annotate-only \
   test-artifacts/annotate-run-20260425191328/RUN_ORDNER/trace.zip \
   test-artifacts/annotate-run-20260425191328/RUN_ORDNER/video.webm \
@@ -353,7 +353,7 @@ node scripts/run-annotated-video.mjs \
 Wenn bereits ein annotiertes Video und ein passendes `demo`-Verzeichnis aus einem frueheren Run existieren, kann nur der Audio-Teil neu erzeugt und neu gemischt werden.
 
 ```bash
-node scripts/run-annotated-video.mjs \
+node scripts/video-script-generator/run-annotated-video.mjs \
   --tts-only \
   test-artifacts/idee-flow.spec-annotated-20260425191328.mp4 \
   test-artifacts/annotate-run-20260425191328/RUN_ORDNER/demo \
@@ -363,7 +363,7 @@ node scripts/run-annotated-video.mjs \
 Optional kann ein expliziter Ausgabename fuer das gemixte Video angegeben werden:
 
 ```bash
-node scripts/run-annotated-video.mjs \
+node scripts/video-script-generator/run-annotated-video.mjs \
   --tts-only \
   test-artifacts/idee-flow.spec-annotated-20260425191328.mp4 \
   test-artifacts/annotate-run-20260425191328/RUN_ORDNER/demo \
@@ -460,7 +460,7 @@ test-results/
 ### 3. Annotiertes Video erstellen
 
 ```bash
-node scripts/annotate-video-from-trace.mjs \
+node scripts/video-script-generator/annotate-video-from-trace.mjs \
   test-results/<testname>/trace.zip \
   test-results/<testname>/video.webm \
   annotated.mp4

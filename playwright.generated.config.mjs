@@ -10,8 +10,20 @@ function buildRunScopedOutputDir() {
   return runId ? `temp/test-results/${runId}` : 'temp/test-results'
 }
 
+function parseScenarioTimeout() {
+  const value = Number(process.env.SCENARIO_TEST_TIMEOUT_MS || 0)
+  if (!Number.isFinite(value) || value <= 0) {
+    return undefined
+  }
+
+  return Math.max(30000, Math.floor(value))
+}
+
+const scenarioTimeout = parseScenarioTimeout()
+
 export default defineConfig({
   testDir: '.',
   testMatch: ['**/*.spec.js'],
   outputDir: buildRunScopedOutputDir(),
+  timeout: scenarioTimeout,
 })

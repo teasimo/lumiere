@@ -28,7 +28,7 @@ function parseArgs(argv) {
   }
 
   if (!planPath) {
-    throw new Error('Usage: node scripts/remotion-mux-video-tts.mjs --plan=<path-to-plan.json> --tsx=<path-to-composition.tsx>')
+    throw new Error('Usage: node scripts/video-script-generator/remotion-mux-video-tts.mjs --plan=<path-to-plan.json> --tsx=<path-to-composition.tsx>')
   }
 
   if (!tsxPath) {

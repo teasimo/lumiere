@@ -5,13 +5,14 @@ import { mkdir, readdir, readFile, stat, writeFile } from 'fs/promises'
 import { basename, dirname, extname, join, resolve } from 'path'
 import { spawnSync } from 'child_process'
 import { createHash } from 'crypto'
+import { XMLParser } from 'fast-xml-parser'
 import {
   buildCanonicalVideoCompositionModel,
   buildRemotionRenderPlan,
   buildSemanticRemotionTsx,
   buildSemanticVideoPlan,
-} from './generator/semantic-remotion.mjs'
-import { loadCentralConfig } from './shared/central-config.mjs'
+} from './semantic-remotion.mjs'
+import { getVideoScriptConfig, loadCentralConfig } from '../shared/central-config.mjs'
 
 const OUTPUT_ROOT = resolve('output')
 const OUTPUT_MANUAL_SCOPE_DIR = 'manual-runs'
@@ -38,21 +39,21 @@ function resolveChapterFadeInDurationMs(chapterDurationMs) {
 
 function printUsage() {
   console.log(`Verwendung:
-  node scripts/run-annotated-video.mjs --scenario-tts <scenario.xml> --profile=<profil> [output.mp4] [--tts-voice=<name>]
-  node scripts/run-annotated-video.mjs <testfile> [output.mp4] [--slowmo=<ms>] [--tts] [--tts-voice=<name>] [weitere Playwright-Argumente]
-  node scripts/run-annotated-video.mjs --rerender <testfile> [output.mp4] [--tts] [--tts-voice=<name>]
-  node scripts/run-annotated-video.mjs --annotate-only <trace.zip> <video.webm> <demoDir> [output.mp4] [--tts] [--tts-voice=<name>]
-  node scripts/run-annotated-video.mjs --tts-only <annotated.mp4> <demoDir> [output-tts.mp4] [--tts-voice=<name>]
+  node scripts/video-script-generator/run-annotated-video.mjs --scenario-tts <scenario.xml> --profile=<profil> [output.mp4] [--tts-voice=<name>]
+  node scripts/video-script-generator/run-annotated-video.mjs <testfile> [output.mp4] [--slowmo=<ms>] [--tts] [--tts-voice=<name>] [weitere Playwright-Argumente]
+  node scripts/video-script-generator/run-annotated-video.mjs --rerender <testfile> [output.mp4] [--tts] [--tts-voice=<name>]
+  node scripts/video-script-generator/run-annotated-video.mjs --annotate-only <trace.zip> <video.webm> <demoDir> [output.mp4] [--tts] [--tts-voice=<name>]
+  node scripts/video-script-generator/run-annotated-video.mjs --tts-only <annotated.mp4> <demoDir> [output-tts.mp4] [--tts-voice=<name>]
 
 Beispiele:
-  node scripts/run-annotated-video.mjs --scenario-tts neo/interactions/dubletten-aufloesen/FR1-case-sus-dubletten-zusammenfuehren.xml --profile=training-basic
-  node scripts/run-annotated-video.mjs tests/e2e/idee-planungsanker-plaintext-flow.spec.js
-  node scripts/run-annotated-video.mjs tests/e2e/idee-planungsanker-plaintext-flow.spec.js --slowmo=1000
-  node scripts/run-annotated-video.mjs tests/e2e/idee-planungsanker-plaintext-flow.spec.js annotated.mp4 --project=chromium
-  node scripts/run-annotated-video.mjs --rerender tests/e2e/idee-flow.spec.js --tts
-  node scripts/run-annotated-video.mjs --annotate-only ../output/my-scenario_1_0/artifacts/trace.zip ../output/my-scenario_1_0/artifacts/video.webm ../output/my-scenario_1_0/artifacts/demo annotated.mp4 --tts
-  node scripts/run-annotated-video.mjs tests/e2e/idee-flow.spec.js --project=chromium --tts
-  node scripts/run-annotated-video.mjs --tts-only output/idee-flow-spec/manual-runs/20260425191328/final/idee-flow-spec-annotated-20260425191328.mp4 output/idee-flow-spec/manual-runs/20260425191328/artifacts/demo --tts-voice=de-DE-Neural2-B
+  node scripts/video-script-generator/run-annotated-video.mjs --scenario-tts neo/interactions/dubletten-aufloesen/FR1-case-sus-dubletten-zusammenfuehren.xml --profile=training-basic
+  node scripts/video-script-generator/run-annotated-video.mjs tests/e2e/idee-planungsanker-plaintext-flow.spec.js
+  node scripts/video-script-generator/run-annotated-video.mjs tests/e2e/idee-planungsanker-plaintext-flow.spec.js --slowmo=1000
+  node scripts/video-script-generator/run-annotated-video.mjs tests/e2e/idee-planungsanker-plaintext-flow.spec.js annotated.mp4 --project=chromium
+  node scripts/video-script-generator/run-annotated-video.mjs --rerender tests/e2e/idee-flow.spec.js --tts
+  node scripts/video-script-generator/run-annotated-video.mjs --annotate-only ../output/my-scenario_1_0/artifacts/trace.zip ../output/my-scenario_1_0/artifacts/video.webm ../output/my-scenario_1_0/artifacts/demo annotated.mp4 --tts
+  node scripts/video-script-generator/run-annotated-video.mjs tests/e2e/idee-flow.spec.js --project=chromium --tts
+  node scripts/video-script-generator/run-annotated-video.mjs --tts-only output/idee-flow-spec/manual-runs/20260425191328/final/idee-flow-spec-annotated-20260425191328.mp4 output/idee-flow-spec/manual-runs/20260425191328/artifacts/demo --tts-voice=de-DE-Neural2-B
   npm run test:e2e:annotated-video -- tests/e2e/idee-planungsanker-plaintext-flow.spec.js --project=chromium
 `)
 }
@@ -454,7 +455,7 @@ function ensureResolvedJsonForScenarioXml(scenarioAbsolutePath) {
   const resolvedJsonPath = resolve(outDirRelative, `${scenarioName}.resolved.json`)
 
   const exitCode = runCommand('node', [
-    'scripts/generate-tests-from-scenario-xml.mjs',
+    'scripts/test-script-generator/generate-tests-from-scenario-xml.mjs',
     scenarioAbsolutePath,
     '--out-dir',
     outDirRelative,
@@ -471,6 +472,90 @@ function ensureResolvedJsonForScenarioXml(scenarioAbsolutePath) {
   return resolvedJsonPath
 }
 
+function getResolvedXmlPathForScenarioXml(scenarioAbsolutePath) {
+  const scenarioName = basename(scenarioAbsolutePath, extname(scenarioAbsolutePath))
+  return resolve('temp/testfiles', `${scenarioName}.resolved.xml`)
+}
+
+function getXmlNodeTag(node) {
+  if (!node || typeof node !== 'object' || Array.isArray(node)) {
+    return null
+  }
+
+  for (const key of Object.keys(node)) {
+    if (key === ':@' || key === '#text' || key === '#comment' || key === '#cdata') {
+      continue
+    }
+    if (key.startsWith('?')) {
+      continue
+    }
+    return key
+  }
+
+  return null
+}
+
+function findVideoScriptRangeAnchorsInResolvedXml(resolvedXmlRaw) {
+  const parser = new XMLParser({
+    preserveOrder: true,
+    ignoreAttributes: false,
+    attributeNamePrefix: '@_',
+    parseTagValue: false,
+    trimValues: false,
+  })
+  const parsed = parser.parse(String(resolvedXmlRaw || ''))
+  const interactionTags = new Set(['Click', 'Eingabe', 'Auswahl', 'Anzeige', 'Warten', 'Oeffnen', 'SucheAuswahl'])
+  let seenVideoStart = false
+  let startResolvedId = null
+  let stopResolvedId = null
+  let lastInteractionResolvedId = null
+
+  function visitNodes(nodes) {
+    for (const node of nodes || []) {
+      if (!node || typeof node !== 'object' || Array.isArray(node)) {
+        continue
+      }
+
+      const tag = getXmlNodeTag(node)
+      if (!tag) {
+        continue
+      }
+
+      const payload = node[tag]
+      if (tag === 'VideoStart') {
+        seenVideoStart = true
+      }
+
+      if (tag === 'VideoStop') {
+        if (lastInteractionResolvedId && !stopResolvedId) {
+          stopResolvedId = lastInteractionResolvedId
+        }
+        seenVideoStart = false
+      }
+
+      const attrs = node[':@'] || {}
+      if (interactionTags.has(tag)) {
+        const resolvedId = String(attrs['@_resolved-id'] || '').trim()
+        if (resolvedId) {
+          lastInteractionResolvedId = resolvedId
+          if (seenVideoStart && !startResolvedId) {
+            startResolvedId = resolvedId
+          }
+        }
+      }
+
+      const nested = Array.isArray(payload) ? payload : []
+      visitNodes(nested)
+    }
+  }
+
+  visitNodes(Array.isArray(parsed) ? parsed : [])
+  return {
+    startResolvedId,
+    stopResolvedId,
+  }
+}
+
 async function loadScenarioRootForTts(scenarioAbsolutePath) {
   const extension = extname(scenarioAbsolutePath).toLowerCase()
   if (extension !== '.xml') {
@@ -478,9 +563,12 @@ async function loadScenarioRootForTts(scenarioAbsolutePath) {
   }
 
   const resolvedJsonPath = ensureResolvedJsonForScenarioXml(scenarioAbsolutePath)
+  const resolvedXmlPath = getResolvedXmlPathForScenarioXml(scenarioAbsolutePath)
   const resolvedJsonRaw = await readFile(resolvedJsonPath, 'utf8')
   const resolvedJsonParsed = JSON.parse(resolvedJsonRaw)
   const scenarioRoot = resolvedJsonParsed.interaction || resolvedJsonParsed
+  const resolvedXmlRaw = existsSync(resolvedXmlPath) ? await readFile(resolvedXmlPath, 'utf8') : ''
+  const videoScriptRange = findVideoScriptRangeAnchorsInResolvedXml(resolvedXmlRaw)
 
   if (!scenarioRoot || typeof scenarioRoot !== 'object') {
     throw new Error('Ungueltiges aufgeloestes Szenario nach XML-Import.')
@@ -489,6 +577,8 @@ async function loadScenarioRootForTts(scenarioAbsolutePath) {
   return {
     scenarioRoot,
     resolvedJsonPath,
+    resolvedXmlPath,
+    videoScriptRange,
   }
 }
 
@@ -670,6 +760,17 @@ function flattenFlowSteps(flowEntries, out = [], idPrefix = '') {
   return out
 }
 
+function findFlowStepIdByResolvedId(flowEntries, resolvedId) {
+  const normalizedResolvedId = String(resolvedId || '').trim()
+  if (!normalizedResolvedId) {
+    return null
+  }
+
+  const flattened = flattenFlowSteps(flowEntries)
+  const match = flattened.find((entry) => String(entry?.step?.resolvedId || '').trim() === normalizedResolvedId)
+  return String(match?.id || '').trim() || null
+}
+
 function resolveScenarioStepMatchForTimelineStep(timelineStepId, flattenedFlowStepEntries) {
   const normalizedTimelineStepId = String(timelineStepId || '').trim()
   if (!normalizedTimelineStepId) {
@@ -803,7 +904,7 @@ function resolveNeighborWindowForAnonStep(stepId, flattenedFlowStepEntries, sort
   return null
 }
 
-function resolveScenarioPresentationVideoRangeFromTimeline({ scenarioRoot, timelineReport }) {
+function resolveScenarioPresentationVideoRangeFromTimeline({ scenarioRoot, timelineReport, videoScriptRange = null }) {
   const flow = Array.isArray(scenarioRoot?.flow) ? scenarioRoot.flow : []
   const timelineSteps = Array.isArray(timelineReport?.steps) ? timelineReport.steps : []
   if (!flow.length || !timelineSteps.length) {
@@ -811,7 +912,9 @@ function resolveScenarioPresentationVideoRangeFromTimeline({ scenarioRoot, timel
   }
 
   const directives = collectPresentationVideoDirectivesFromFlow(flow)
-  if (!directives.length) {
+  const videoStartStepId = findFlowStepIdByResolvedId(flow, videoScriptRange?.startResolvedId)
+  const videoStopStepId = findFlowStepIdByResolvedId(flow, videoScriptRange?.stopResolvedId)
+  if (!directives.length && !videoStartStepId && !videoStopStepId) {
     return null
   }
 
@@ -825,6 +928,25 @@ function resolveScenarioPresentationVideoRangeFromTimeline({ scenarioRoot, timel
   let startAbsMs = null
   let endAbsMs = null
   let startDirectiveStepId = null
+
+  if (videoStartStepId || videoScriptRange?.startResolvedId) {
+    const videoStartWindow =
+      resolvePresentationStepWindowMs(videoStartStepId, sortedTimelineSteps)
+      || resolvePresentationStepWindowMs(videoScriptRange?.startResolvedId, sortedTimelineSteps)
+    if (videoStartWindow) {
+      startAbsMs = videoStartWindow.startedAtMs
+      startDirectiveStepId = videoStartStepId
+    }
+  }
+
+  if (videoStopStepId || videoScriptRange?.stopResolvedId) {
+    const videoStopWindow =
+      resolvePresentationStepWindowMs(videoStopStepId, sortedTimelineSteps)
+      || resolvePresentationStepWindowMs(videoScriptRange?.stopResolvedId, sortedTimelineSteps)
+    if (videoStopWindow) {
+      endAbsMs = videoStopWindow.endedAtMs
+    }
+  }
 
   for (const directive of directives) {
     let window = resolvePresentationStepWindowMs(directive.stepId, sortedTimelineSteps)
@@ -866,6 +988,8 @@ function resolveScenarioPresentationVideoRangeFromTimeline({ scenarioRoot, timel
     startMs,
     endMs,
     startDirectiveStepId,
+    startStepId: videoStartStepId,
+    stopStepId: videoStopStepId,
     directives,
   }
 }
@@ -1295,18 +1419,6 @@ function buildScenarioChapterTitlesFromTimeline({ scenarioRoot, timelineReport, 
 
     const absoluteAtMs = Math.max(0, Math.floor(anchorAbsMs - originMs))
     if (absoluteAtMs < clipStartMs) {
-      chapterTitles.push({
-        id: `${chapterStepId}-chapter`,
-        title: chapterCard.text,
-        atMs: 0,
-        durationMs: chapterCard.durationMs,
-        fontSize: chapterCard.fontSize,
-        textYStart: chapterCard.textYStart,
-        lineSpacing: chapterCard.lineSpacing,
-        hasExplicitDuration: chapterCard.hasExplicitDuration,
-        sourceTimelineStepId: chapterStepId,
-        sourceScenarioStepId: chapterStepId,
-      })
       continue
     }
     if (clipEndMs != null && absoluteAtMs >= clipEndMs) {
@@ -2366,7 +2478,7 @@ function writeSemanticRemotionArtifacts({ inputVideo, outputVideo, adjustedAudio
   const renderScriptTsxPath = `${outputVideo}.semantic.tsx`
   const widthHeight = getVideoDimensions(inputVideo)
   const fps = getVideoFps(inputVideo)
-  const semanticRuntimePath = resolve('scripts/generator/runtime/semantic-runtime.tsx')
+  const semanticRuntimePath = resolve('scripts/video-script-generator/runtime/semantic-runtime.tsx')
 
   const canonicalModel = buildCanonicalVideoCompositionModel({
     scenarioRoot: semanticContext?.scenarioRoot || null,
@@ -2420,7 +2532,7 @@ function writeSemanticRemotionArtifacts({ inputVideo, outputVideo, adjustedAudio
 
   if (render) {
     const exitCode = runCommand('node', [
-      'scripts/remotion-mux-video-tts.mjs',
+      'scripts/video-script-generator/remotion-mux-video-tts.mjs',
       `--plan=${renderPlanPath}`,
       `--tsx=${renderScriptTsxPath}`,
     ])
@@ -2608,7 +2720,7 @@ async function buildAnnotatedArtifacts({
   const videoClip = await resolveVideoClipFromDemoDir(resolvedDemoDir)
   const introlessOutputVideo = outputPathWithSuffix(resolvedOutputVideo, '-raw')
   const annotateArgs = [
-    'scripts/annotate-video-from-trace.mjs',
+    'scripts/video-script-generator/annotate-video-from-trace.mjs',
     resolvedTracePath,
     resolvedInputVideo,
     introlessOutputVideo,
@@ -2794,6 +2906,7 @@ function buildScenarioTtsDiagnosticsLog({
 
 async function runScenarioTtsMode({ scenarioPath, profileName, outputVideo, ttsVoice = null, remotionPlanOnly = false }) {
   const central = loadCentralConfig(process.cwd())
+  const videoScriptConfig = getVideoScriptConfig(central.config)
   const scenarioAbsolutePath = resolve(scenarioPath)
   if (!existsSync(scenarioAbsolutePath)) {
     throw new Error(`Szenario-Datei nicht gefunden: ${scenarioPath}`)
@@ -2804,9 +2917,9 @@ async function runScenarioTtsMode({ scenarioPath, profileName, outputVideo, ttsV
   }
 
   const scenarioPathRelative = normalizeWorkspaceRelativePath(scenarioPath)
-  const profile = resolveScenarioTtsProfile(central.config, profileName)
+  const profile = resolveScenarioTtsProfile(videoScriptConfig, profileName)
 
-  const { scenarioRoot } = await loadScenarioRootForTts(scenarioAbsolutePath)
+  const { scenarioRoot, videoScriptRange } = await loadScenarioRootForTts(scenarioAbsolutePath)
 
   const artifacts = await ensureScenarioVideoTimelinePair({
     scenarioPathRelative,
@@ -2828,6 +2941,7 @@ async function runScenarioTtsMode({ scenarioPath, profileName, outputVideo, ttsV
   const presentationRange = resolveScenarioPresentationVideoRangeFromTimeline({
     scenarioRoot,
     timelineReport: artifacts.timeline,
+    videoScriptRange,
   })
 
   const profileToken = sanitizeFileToken(profileName)
@@ -2902,7 +3016,18 @@ async function runScenarioTtsMode({ scenarioPath, profileName, outputVideo, ttsV
 
   const clickIndicatorConfig = resolveScenarioClickIndicatorConfig(scenarioRoot)
 
-  const sourceVideoForTts = artifacts.videoPath
+  let sourceVideoForTts = artifacts.videoPath
+
+  if (presentationRange) {
+    const clippedSourceVideo = join(ttsOutputDir, `${scenarioToken}-${profileToken}-clip-${runId}.mp4`)
+    cutVideoToRange({
+      inputVideo: artifacts.videoPath,
+      outputVideo: clippedSourceVideo,
+      startMs: Math.max(0, Number(presentationRange.startMs) || 0),
+      endMs: presentationRange.endMs == null ? null : Math.max(0, Number(presentationRange.endMs) || 0),
+    })
+    sourceVideoForTts = clippedSourceVideo
+  }
   let clickAnnotateMeta = { clickHolds: [] }
   let visualRemotionPlan = null
 
@@ -2932,7 +3057,7 @@ async function runScenarioTtsMode({ scenarioPath, profileName, outputVideo, ttsV
   if (clickIndicatorConfig?.enabled === true && existsSync(tracePath)) {
     const clickAnnotatedVideo = join(ttsOutputDir, `${scenarioToken}-${profileToken}-click-${runId}.mp4`)
     const annotateArgs = [
-      'scripts/annotate-video-from-trace.mjs',
+      'scripts/video-script-generator/annotate-video-from-trace.mjs',
       tracePath,
       artifacts.videoPath,
       clickAnnotatedVideo,

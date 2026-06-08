@@ -2,7 +2,7 @@
 <SzenarioScript id="sus-dublette-zusammenfuehren" szenario-version="1.0" status="Entwurf" neo-version-min="6.0" titel="Schüler*innen-Datensätze zusammenführen">
   <Einstellungen>    
     <Gruppe name="video">
-      <Einstellung name="autoscroll_smooth" value="False"/>
+      <Einstellung name="autoscroll_smooth" value="True"/>
       <Einstellung name="wait_between_steps" value="1000"/>
       <Gruppe name="resolution">
         <Einstellung name="width" value="1280"/>
@@ -22,7 +22,7 @@
   </Einstellungen>
   <Daten>
     <Datensatz name="runtime">
-      <Wert name="base_url" value="https://neo-integration.de"/>
+      <Wert name="base_url" value="https://neo-test.de"/>
     </Datensatz>
     <Wert name="random" value="{{randomNumber()}}"/>
     <Datensatz name="actor">
@@ -34,7 +34,7 @@
       <Wert name="nachname" value="Mustermann {{random}}"/>
       <Wert name="geburtsdatum" value="01.01.2020"/>
       <Wert name="geburtsort" value="Musterstadt"/>
-      <Wert name="adresseSuche" value="Fuchsbau 6 Emmerke"/>
+      <Wert name="adresseSuche" value="Osterfeld 2 Emmerke"/>
     </Datensatz>
     <Datensatz name="schueler.ez1">
       <Wert name="anrede" value="Frau"/>
@@ -42,7 +42,7 @@
       <Wert name="nachname" value="Mustermann"/>
       <Wert name="geburtsdatum" value="01.01.1975"/>
       <Wert name="geburtsort" value="Musterstadt"/>
-      <Wert name="adresseSuche" value="Fuchsbau 6 Emmerke"/>
+      <Wert name="adresseSuche" value="Osterfeld 2 Emmerke"/>
     </Datensatz>
     <Datensatz name="schueler.ez2">
       <Wert name="anrede" value="Herr"/>
@@ -50,7 +50,7 @@
       <Wert name="nachname" value="Mustermann"/>
       <Wert name="geburtsdatum" value="01.01.1970"/>
       <Wert name="geburtsort" value="Musterstadt"/>
-      <Wert name="adresseSuche" value="Fuchsbau 6 Emmerke"/>
+      <Wert name="adresseSuche" value="Osterfeld 2 Emmerke"/>
     </Datensatz>
   </Daten>
   <Variablen>

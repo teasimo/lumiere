@@ -8,7 +8,7 @@
 
 ## Problem
 
-Die Testgenerierung aus YAML-Szenarien muss verschiedenste UI-Komponenten mit unterschiedlichen Interaktionsmustern handhaben können:
+Die Testgenerierung aus XML-Szenarien muss verschiedenste UI-Komponenten mit unterschiedlichen Interaktionsmustern handhaben können:
 
 - Standard-Eingabefelder (Text, Number)
 - Quasar-Komponenten (q-field, q-select, q-editor, etc.)
@@ -25,6 +25,8 @@ Ohne ein strukturiertes Pattern führt dies zu:
 ## Entscheidung
 
 **Alle Komponenten-Interaktionen (fill, select, etc.) werden ausschließlich über Fill-Strategien abgewickelt.**
+
+Diese Entscheidung gilt explizit für den **Testscript-Generator**. Der Video-Script-Generator konsumiert erzeugte Test-/Timeline-Artefakte, entscheidet aber nicht selbst über UI-Interaktionsstrategien.
 
 Eine Fill-Strategie ist ein Objekt mit der Struktur:
 
@@ -44,7 +46,7 @@ Eine Fill-Strategie ist ein Objekt mit der Struktur:
 
 ### Schichtenmodell
 
-**1. Zentrale Strategien (`scripts/generator/central-fill-strategies.mjs`)**
+**1. Zentrale Strategien (`scripts/test-script-generator/central-fill-strategies.mjs`)**
 
 Standard-Komponenten und generische Quasar-Komponenten, die nicht App-spezifisch sind:
 - `quasar-native-input`: Standard `q-field` mit Text/Number Input
@@ -52,7 +54,7 @@ Standard-Komponenten und generische Quasar-Komponenten, die nicht App-spezifisch
 - `generic-input`: HTML `<input>`, `<textarea>`
 - `generic-contenteditable`: Standard contenteditable-Elemente (ohne spezielle Behavior)
 
-Diese Strategien sind **wartbar**, **dokumentiert** und **versioniert** mit dem Generator.
+Diese Strategien sind **wartbar**, **dokumentiert** und **versioniert** mit dem Testscript-Generator.
 
 **2. App-spezifische Strategien (`<app>/env/fill-strategies.mjs`)**
 
@@ -60,14 +62,14 @@ App-Eigene Komponenten oder Quasar-Komponenten mit spezialisiertem Behavior:
 - `idee-description-editor-contenteditable`: Lunettes-eigenes contenteditable-Element mit besonderen Dispatch-Anforderungen
 - `app-spezifische-komponente`: Jedes App-eigene Verhalten
 
-Diese Strategien werden vom Generator **zur Laufzeit geladen** und haben Vorrang vor zentralen Strategien.
+Diese Strategien werden vom Testscript-Generator **zur Laufzeit geladen** und haben Vorrang vor zentralen Strategien.
 
 ### Laden und Fallback
 
-Der Generator ([scripts/generator/templates/spec-template.mjs](scripts/generator/templates/spec-template.mjs)) lädt Strategien in dieser Reihenfolge:
+Der Testscript-Generator ([scripts/test-script-generator/templates/spec-template.mjs](../../scripts/test-script-generator/templates/spec-template.mjs)) lädt Strategien in dieser Reihenfolge:
 
 1. **App-spezifische Strategien** (aus `<app>/env/fill-strategies.mjs`)
-2. **Zentrale Strategien** (aus `scripts/generator/central-fill-strategies.mjs`)
+2. **Zentrale Strategien** (aus `scripts/test-script-generator/central-fill-strategies.mjs`)
 3. **Fehler mit klarer Anleitung**, falls keine Strategie matched
 
 ---
@@ -76,12 +78,12 @@ Der Generator ([scripts/generator/templates/spec-template.mjs](scripts/generator
 
 ### ✅ Vorteile
 
-- **Klare Separation of Concerns**: Generator behandelt alle Komponenten einheitlich
-- **Erweiterbar**: Neue Komponenten erfordern nur neue Strategien, nicht Generator-Änderungen
+- **Klare Separation of Concerns**: Testscript-Generator behandelt alle Komponenten einheitlich
+- **Erweiterbar**: Neue Komponenten erfordern nur neue Strategien, nicht Testscript-Generator-Änderungen
 - **Wartbar**: Quasar-Upgrades → zentrale Strategien anpassen, nicht überall
 - **Testbar**: Jede Strategie kann isoliert getestet werden
 - **Dokumentiert**: Jede Strategie erklärt ihr Verhalten und Match-Kriterien
-- **App-agnostisch**: Generator bleibt unabhängig von konkreten Apps
+- **App-agnostisch**: Testscript-Generator bleibt unabhängig von konkreten Apps
 
 ### ⚠️ Nachteile
 
@@ -96,7 +98,7 @@ Der Generator ([scripts/generator/templates/spec-template.mjs](scripts/generator
 ### Zentrale Strategien-Vorlage
 
 ```javascript
-// scripts/generator/central-fill-strategies.mjs
+// scripts/test-script-generator/central-fill-strategies.mjs
 export const centralFillStrategies = [
   {
     name: 'quasar-native-input',
@@ -157,7 +159,6 @@ export const fillStrategies = [
 
 ## Siehe auch
 
-- [spec-template.mjs](../../scripts/generator/templates/spec-template.mjs) — Generator-Logik für Strategie-Laden
+- [spec-template.mjs](../../scripts/test-script-generator/templates/spec-template.mjs) — Generator-Logik für Strategie-Laden
 - [fill-strategies.mjs](../../lunettes/env/fill-strategies.mjs) — Beispiel App-spezifische Strategien
-- [generate-tests-from-scenario-xml.mjs](../../scripts/generate-tests-from-scenario-xml.mjs) — Strategie-Pfad-Auflösung
-
+- [generate-tests-from-scenario-xml.mjs](../../scripts/test-script-generator/generate-tests-from-scenario-xml.mjs) — Strategie-Pfad-Auflösung
