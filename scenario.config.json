@@ -18,6 +18,16 @@
       }
     },
     "video-script": {
+      "intro": {
+        "enabled": true,
+        "path": "neo/assets/video-intro-remotion-safe.mp4"
+      },
+      "presentation": {
+        "slide": {
+          "default_duration_ms": 3000,
+          "inline_default_duration_ms": 3000
+        }
+      },
       "tts": [{
         "profile": "all-channels",
         "channels": {
@@ -25,7 +35,7 @@
             "enabled": true,
             "prefix": ""
           },
-          "Erklaerung": {
+          "Erklärung": {
             "enabled": true,
             "prefix": ""
           },

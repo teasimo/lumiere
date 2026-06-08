@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React, { Children, Fragment, isValidElement, type ReactElement, type ReactNode } from 'react'
-import { AbsoluteFill, Audio, Freeze as RemotionFreeze, OffthreadVideo, Sequence, useVideoConfig } from 'remotion'
+import { AbsoluteFill, Audio, Freeze as RemotionFreeze, Img, OffthreadVideo, Sequence, useVideoConfig } from 'remotion'
 
 type BaseProps = {
   children?: ReactNode
@@ -9,6 +9,8 @@ type BaseProps = {
 type VideoScriptProps = BaseProps & {
   id: string
   sourceVideo: string
+  introVideo?: string
+  introDurationMs?: number
   fps?: number
   width?: number
   height?: number
@@ -55,10 +57,12 @@ type CalloutProps = {
   text: string
   atMs?: number
   durationMs?: number
-  variant?: 'default' | 'chapter-card'
+  variant?: 'default' | 'chapter-card' | 'slide-card' | 'step-overlay'
   fontSize?: number
   textYStart?: number | null
   lineSpacing?: number | null
+  logoLeft?: string
+  logoRight?: string
 }
 
 type ClickMarkerProps = {
@@ -88,6 +92,8 @@ type StepPlan = {
 
 export const VideoScript: React.FC<VideoScriptProps> = ({
   sourceVideo,
+  introVideo,
+  introDurationMs = 0,
   children,
   debug = false,
 }) => {
@@ -108,11 +114,19 @@ export const VideoScript: React.FC<VideoScriptProps> = ({
 
   return (
     <AbsoluteFill>
+      {introVideo && Number(introDurationMs) > 0 ? (
+        <Sequence
+          from={0}
+          durationInFrames={msToDurationFrames(Math.max(1, Number(introDurationMs || 0)), fps)}
+        >
+          <OffthreadVideo src={introVideo} />
+        </Sequence>
+      ) : null}
       {planned.map((step) => {
-        const from = msToFrameStart(step.startMs, fps)
+        const from = msToFrameStart(step.startMs + Math.max(0, Number(introDurationMs || 0)), fps)
         const to = Math.max(
           from + 1,
-          msToFrameEndExclusive(step.startMs + step.durationMs, fps),
+          msToFrameEndExclusive(step.startMs + step.durationMs + Math.max(0, Number(introDurationMs || 0)), fps),
         )
         const durationInFrames = Math.max(1, to - from)
         return (
@@ -227,50 +241,61 @@ const StepRenderer: React.FC<StepRendererProps> = ({ sourceVideo, fps, step, deb
         const from = msToFrameIndex(Math.max(0, Number(callout.atMs || 0)), fps)
         const durationInFrames = msToDurationFrames(Math.max(1, Number(callout.durationMs || 1200)), fps)
         const isChapterCard = callout.variant === 'chapter-card'
+        const isSlideCard = callout.variant === 'slide-card'
+        const isStepOverlay = callout.variant === 'step-overlay'
         const lineSpacing = Number.isFinite(Number(callout.lineSpacing)) ? Number(callout.lineSpacing) : 12
         const textYStart = Number.isFinite(Number(callout.textYStart)) ? Number(callout.textYStart) : null
+        const layerStyle = getCalloutLayerStyle({ isSlideCard, isStepOverlay, isChapterCard, textYStart })
+        const contentStyle = getCalloutContentStyle({ callout, isSlideCard, isStepOverlay, isChapterCard })
+        const renderAsLines = isChapterCard || isSlideCard || isStepOverlay
+        const calloutLines = String(callout.text || '').split('\n')
         return (
           <Sequence key={`callout-${index}`} from={from} durationInFrames={durationInFrames}>
-            <AbsoluteFill
-              style={isChapterCard
-                ? {
-                  justifyContent: 'flex-start',
-                  alignItems: 'stretch',
-                  paddingTop: textYStart ?? 160,
-                  paddingLeft: 32,
-                  paddingRight: 32,
-                  backgroundColor: 'rgba(255,255,255,0.28)',
-                  pointerEvents: 'none',
-                }
-                : {
-                  justifyContent: 'flex-end',
-                  alignItems: 'flex-end',
-                  padding: 24,
-                  pointerEvents: 'none',
-                }}
-            >
-              <div
-                style={isChapterCard
-                  ? {
-                    color: 'white',
-                    fontWeight: 700,
-                    fontSize: Number(callout.fontSize || 54),
-                    lineHeight: 1.2,
-                    textAlign: 'center',
-                    textShadow: '0 4px 18px rgba(0,0,0,0.45)',
-                    whiteSpace: 'pre-wrap',
-                  }
-                  : {
-                    backgroundColor: 'rgba(0,0,0,0.7)',
-                    color: 'white',
-                    padding: '10px 14px',
-                    borderRadius: 8,
-                    fontSize: 24,
-                  }}
-              >
-                {isChapterCard
-                  ? String(callout.text || '').split('\n').map((line, lineIndex) => (
-                    <div key={lineIndex} style={{ marginBottom: lineIndex === String(callout.text || '').split('\n').length - 1 ? 0 : lineSpacing }}>
+            <AbsoluteFill style={layerStyle}>
+              {isSlideCard && (callout.logoLeft || callout.logoRight) ? (
+                <AbsoluteFill style={{ pointerEvents: 'none' }}>
+                  {callout.logoLeft ? (
+                    <Img
+                      src={callout.logoLeft}
+                      style={{
+                        position: 'absolute',
+                        top: 24,
+                        left: 24,
+                        maxWidth: 280,
+                        maxHeight: 76,
+                        objectFit: 'contain',
+                        zIndex: 30,
+                        backgroundColor: 'rgba(255,255,255,0.95)',
+                        borderRadius: 8,
+                        padding: 8,
+                        boxShadow: '0 2px 10px rgba(0,0,0,0.12)',
+                      }}
+                    />
+                  ) : null}
+                  {callout.logoRight ? (
+                    <Img
+                      src={callout.logoRight}
+                      style={{
+                        position: 'absolute',
+                        top: 24,
+                        right: 24,
+                        maxWidth: 240,
+                        maxHeight: 76,
+                        objectFit: 'contain',
+                        zIndex: 30,
+                        backgroundColor: 'rgba(255,255,255,0.95)',
+                        borderRadius: 8,
+                        padding: 8,
+                        boxShadow: '0 2px 10px rgba(0,0,0,0.12)',
+                      }}
+                    />
+                  ) : null}
+                </AbsoluteFill>
+              ) : null}
+              <div style={contentStyle}>
+                {renderAsLines
+                  ? calloutLines.map((line, lineIndex) => (
+                    <div key={lineIndex} style={{ marginBottom: lineIndex === calloutLines.length - 1 ? 0 : lineSpacing }}>
                       {line}
                     </div>
                   ))
@@ -305,23 +330,6 @@ const StepRenderer: React.FC<StepRendererProps> = ({ sourceVideo, fps, step, deb
         )
       })}
 
-      {String(step.stepTitle || '').trim() ? (
-        <AbsoluteFill style={{ justifyContent: 'flex-start', alignItems: 'flex-end', padding: 12, pointerEvents: 'none' }}>
-          <div
-            style={{
-              backgroundColor: 'rgba(0,0,0,0.62)',
-              color: 'white',
-              padding: '6px 10px',
-              borderRadius: 6,
-              fontSize: 18,
-              fontWeight: 600,
-            }}
-          >
-            {step.stepTitle}
-          </div>
-        </AbsoluteFill>
-      ) : null}
-
       {debug ? (
         <AbsoluteFill style={{ justifyContent: 'flex-start', alignItems: 'flex-start', padding: 12, pointerEvents: 'none' }}>
           <div style={{ backgroundColor: 'rgba(0,0,0,0.7)', color: 'white', padding: '6px 10px', borderRadius: 6, fontSize: 18 }}>
@@ -331,6 +339,99 @@ const StepRenderer: React.FC<StepRendererProps> = ({ sourceVideo, fps, step, deb
       ) : null}
     </AbsoluteFill>
   )
+}
+
+function getCalloutLayerStyle({ isSlideCard, isStepOverlay, isChapterCard, textYStart }) {
+  if (isSlideCard) {
+    return {
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 48,
+      backgroundColor: 'rgb(255, 255, 255)',
+      pointerEvents: 'none',
+    }
+  }
+
+  if (isStepOverlay) {
+    return {
+      justifyContent: 'flex-start',
+      alignItems: 'flex-start',
+      padding: 16,
+      pointerEvents: 'none',
+    }
+  }
+
+  if (isChapterCard) {
+    return {
+      justifyContent: 'flex-start',
+      alignItems: 'stretch',
+      paddingTop: textYStart ?? 160,
+      paddingLeft: 32,
+      paddingRight: 32,
+      backgroundColor: 'rgb(38, 25, 223)',
+      pointerEvents: 'none',
+    }
+  }
+
+  return {
+    justifyContent: 'flex-end',
+    alignItems: 'flex-end',
+    padding: 24,
+    pointerEvents: 'none',
+  }
+}
+
+function getCalloutContentStyle({ callout, isSlideCard, isStepOverlay, isChapterCard }) {
+  if (isSlideCard) {
+    return {
+      color: 'black',
+      fontWeight: 700,
+      fontFamily: 'DejaVu Sans, Arial, Helvetica, sans-serif',
+      fontSize: Number(callout.fontSize || 56),
+      lineHeight: 1.2,
+      textAlign: 'center',
+      whiteSpace: 'pre-wrap',
+      maxWidth: '84%',
+      width: '84%',
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'center',
+      alignItems: 'center',
+      minHeight: '62%',
+    }
+  }
+
+  if (isStepOverlay) {
+    return {
+      backgroundColor: 'rgba(0,0,0,1)',
+      color: 'white',
+      padding: '8px 12px',
+      borderRadius: 8,
+      fontSize: 18,
+      fontWeight: 600,
+      whiteSpace: 'pre-wrap',
+    }
+  }
+
+  if (isChapterCard) {
+    return {
+      color: 'white',
+      fontWeight: 700,
+      fontSize: Number(callout.fontSize || 54),
+      lineHeight: 1.2,
+      textAlign: 'center',
+      textShadow: '0 4px 18px rgba(0,0,0,0.45)',
+      whiteSpace: 'pre-wrap',
+    }
+  }
+
+  return {
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    color: 'white',
+    padding: '10px 14px',
+    borderRadius: 8,
+    fontSize: 24,
+  }
 }
 
 function collectChapters(children: ReactNode) {

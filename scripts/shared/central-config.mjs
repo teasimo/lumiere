@@ -20,6 +20,16 @@ const DEFAULTS = {
     },
   },
   'video-script': {
+    intro: {
+      enabled: true,
+      path: 'neo/assets/video-intro.mp4',
+    },
+    presentation: {
+      slide: {
+        default_duration_ms: 2000,
+        inline_default_duration_ms: 3000,
+      },
+    },
     tts: [],
   },
 }

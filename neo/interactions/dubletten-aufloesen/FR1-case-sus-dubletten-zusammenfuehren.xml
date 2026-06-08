@@ -124,13 +124,13 @@
 
   <!-- Szenario -->
   <Gruppe>
-    <VideoStart/>
 
-    
+
+
 
     <!-- Intro -->
-    <Folie>Schüler*innen-Datensätze zusammenführen</Folie>
-    <Info typ="Erklärung">Folgende Funktionalität ermöglicht Ihnen das Zusammenführen von doppelten Schüler*innen-Datensätzen.</Info>
+
+    <!-- <Info typ="Erklärung">Folgende Funktionalität ermöglicht Ihnen das Zusammenführen von doppelten Schüler*innen-Datensätzen.</Info>
     <Folie>Zweck: Ein Datensatz pro Schüler*in</Folie>
     <Info typ="Erklärung">In NEO Niedersachsen sollte für jede Schüler*in immer nur genau ein Datensatz vorliegen, um keine widersprüchlichen Daten zu erzeugen. Ist dies nicht der Fall, sollte man die Daten der verschiedenen Datensätze zusammenführen.</Info>
     <Folie>Zweck: Ein Datensatz pro Schüler*in
@@ -144,8 +144,13 @@ Berechtigung: Datenpflege der Funktion Schulleitung</Folie>
 Auslöser: Immer nutzbar
 Berechtigung: Datenpflege der Funktion Schulleitung
 Wirkung: Datenübernahme und Vormerkung zur Löschung</Folie>
-    <Info typ="Erklärung">Das Ergebnis ist, dass bei Bedarf Daten aus dem nachrangigen Datensatz in den führenden Datensatz übernommen wurden und der nachrangige Datensatz ausgeblendet und für die Löschung vorgemerkt ist.</Info>
-    
+    <Info typ="Erklärung">Das Ergebnis ist, dass bei Bedarf Daten aus dem nachrangigen Datensatz in den führenden Datensatz übernommen wurden und der nachrangige Datensatz ausgeblendet und für die Löschung vorgemerkt ist.</Info> -->
+
+    <VideoStart/>
+    <Folie>Schüler*innen-Datensätze zusammenführen</Folie>
+    <Kapitel>Schüler*innen-Datensätze zusammenführen</Kapitel>
+    <Schritt>Doppelte Datensätze identifizieren</Schritt>
+
     <!-- Ausgangslage -->
     <Fragment name="neo-hauptmenue-sus-schuelerinnen"/>
 
@@ -157,8 +162,9 @@ Wirkung: Datenübernahme und Vormerkung zur Löschung</Folie>
     <Info typ="Erklärung">In diesem Beispiel liegen zwei Datensätze für die gleiche Person vor.</Info>
 
     <!-- Umgang -->
-    
-    <Kapitel>Schüler*innen-Datensätze zusammenführen</Kapitel>
+
+
+
 
     <Schritt>Führenden Datensatz öffnen</Schritt>
     <!-- 1) Führenden Datensatz öffnen -->
@@ -166,13 +172,15 @@ Wirkung: Datenübernahme und Vormerkung zur Löschung</Folie>
     <Click data-id="controlBtn/action-detaillink"/>
     <Click text="Einstellungen"/>
 
+    <VideoStop/>
+
     <Schritt>Nachrangigen Datensatz identifizieren</Schritt>
     <!-- 2) Nachrangigen Datensatz identifizieren -->
     <Click data-id="btn_container/btn_container~1/link_schueler_dublette"/>
     <Info typ="Erklärung">Hier kann ein nachrangiger Datensatz identifiziert werden. Der Auswahldialog filtert in den Voreinstellungen auf die in NEO Niedersachsen üblichen Merkmale zur Identifikation doppelter Datensätze. Dies sind - Vorname, Nachname, Geburtsort und Geburtsdatum. Diese Angaben des aktuell geöffneten Datensatzes werden automatisch im Dialog als Filter gesetzt, um die Identifikation von Dubletten zu unterstützen.</Info>
     <Click aria-label="{{schueler.nachname}}, {{schueler.vorname}} markieren"/>
     <Click data-id="btn_container/btn_container~1/link_schueler_dublette/uebernehmen"/>
-    <Info typ="Erklärung">Identifizierte Dubletten können nun im Folgeschritt mit dem führenden Datensatz zusammengeführt werden.</Info>
+    <Info typ="Erklärung" interaktion="danach">Identifizierte Dubletten können nun im Folgeschritt mit dem führenden Datensatz zusammengeführt werden.</Info>
     <Click data-id="g_linked/$data0/verschmelzen-btn"/>
 
     <!-- 3) Nachrangigen Datensatz zusammenführen -->
@@ -182,13 +190,15 @@ Wirkung: Datenübernahme und Vormerkung zur Löschung</Folie>
     <Click text="Ja"/>
     <Info typ="Erklärung">Der nachrangige Datensatz, der in den führenden Datensatz übernommen wurde, ist in der Standard-Filterung nun ausgeblendet.</Info>
     <Fragment name="neo-hauptmenue-sus-schuelerinnen"/>
-    <Info typ="Zweck">Die als nachrangig markierten sowie die bereits aufgelösten Datensätze können in der Liste der Schüler*innen bis zur Löschung weiterhin eingesehen werden.</Info>
-    <Info typ="Erklärung">Hierzu muss die Standard-Filterung angepasst werden, dass diese angezeigt werden.</Info>
+    <Info typ="Zweck" interaktion="vorige">Die als nachrangig markierten sowie die bereits aufgelösten Datensätze können in der Liste der Schüler*innen bis zur Löschung weiterhin eingesehen werden.</Info>
+    
 
 
-    <Kapitel>Zusammenführte Datensätze prüfen</Kapitel>
+    <Folie>Zusammengeführte Datensätze prüfen</Folie>
+    <Kapitel>Zusammengeführte Datensätze prüfen</Kapitel>
     <Schritt>Aufgelöste Datensätze anzeigen</Schritt>
     <!-- 4) Aufgelöste Datensätze anzeigen -->
+    <Info typ="Erklärung" interaktion="währenddessen">Hierzu muss die Standard-Filterung angepasst werden, dass diese angezeigt werden.</Info>
     <Click data-id="filters"/>
     <Click data-id="filters/basic/0" aria-label="Schüler*in-Markierung"/>
     <Click data-id="markierung/markierung/option/16" text="Dublette (verschmolzen)"/>

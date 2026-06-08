@@ -266,9 +266,20 @@ function buildStepTagMap(stepWindowById, stepSegments) {
   return tagMap
 }
 
-function toChapterCardCallout(chapterCard) {
+function toChapterCardCallout(chapterCard, slideDefaults = null) {
   if (!chapterCard || typeof chapterCard !== 'object') {
     return []
+  }
+
+  const slideText = String(chapterCard.slideText || '').trim()
+  if (slideText) {
+    const slideCallout = toSlideCallout({
+      text: slideText,
+      durationMs: chapterCard.durationMs,
+      fontSize: chapterCard.fontSize,
+      'row-index': chapterCard?.['row-index'] ?? null,
+    }, slideDefaults)
+    return slideCallout ? [slideCallout] : []
   }
 
   return [{
@@ -276,10 +287,56 @@ function toChapterCardCallout(chapterCard) {
     atMs: 0,
     durationMs: Math.max(1, Math.floor(Number(chapterCard.durationMs || 1))),
     variant: 'chapter-card',
+    'row-index': chapterCard?.['row-index'] ?? null,
     fontSize: Number(chapterCard.fontSize) || 54,
     textYStart: Number.isFinite(Number(chapterCard.textYStart)) ? Math.floor(Number(chapterCard.textYStart)) : null,
     lineSpacing: Number.isFinite(Number(chapterCard.lineSpacing)) ? Math.floor(Number(chapterCard.lineSpacing)) : null,
   }].filter((entry) => entry.text)
+}
+
+function toSlideCallout(slide, slideDefaults = null) {
+  if (!slide || typeof slide !== 'object') {
+    return null
+  }
+
+  const text = String(slide.title || slide.text || '').trim()
+  if (!text) {
+    return null
+  }
+
+  const rawDuration = Number(slide.duration_ms ?? slide.durationMs)
+  const defaultDurationMs = Math.max(1, Math.floor(Number(slideDefaults?.defaultDurationMs) || 2000))
+  const durationMs = Math.max(1, Number.isFinite(rawDuration) ? Math.floor(rawDuration) : defaultDurationMs)
+  const rawFontSize = Number(slide.font_size ?? slide.fontSize)
+  const fontSize = Math.max(1, Number.isFinite(rawFontSize) ? Math.floor(rawFontSize) : 64)
+
+  return {
+    text,
+    atMs: 0,
+    durationMs,
+    variant: 'slide-card',
+    fontSize,
+    logoLeft: resolve('neo/assets/kultusministerium-logo.png'),
+    logoRight: resolve('neo/assets/neo-logo.svg'),
+    'row-index': slide?.['row-index'] ?? null,
+  }
+}
+
+function toStepOverlayCallout({ chapterTitle, stepTitle, durationMs, rowIndex }) {
+  const chapter = String(chapterTitle || '').trim()
+  const step = String(stepTitle || '').trim()
+  const text = [chapter, step].filter(Boolean).join('\n')
+  if (!text) {
+    return null
+  }
+
+  return {
+    text,
+    atMs: 0,
+    durationMs: Math.max(1, Math.floor(Number(durationMs) || 1)),
+    variant: 'step-overlay',
+    'row-index': rowIndex ?? null,
+  }
 }
 
 
@@ -448,6 +505,7 @@ export function buildCanonicalVideoCompositionModel({
   height,
   fps,
   clickIndicator = null,
+  slideDefaults = null,
 }) {
   const flow = Array.isArray(scenarioRoot?.flow) ? scenarioRoot.flow : []
   const { flattenedFlowStepEntries, stepWindowById } = buildStepWindowMap({
@@ -559,6 +617,7 @@ export function buildCanonicalVideoCompositionModel({
       type: 'video-segment',
       stepId,
       title,
+      'row-index': step?.['row-index'] ?? null,
       kind,
       chapterId: currentChapterId,
       source: {
@@ -630,6 +689,7 @@ export function buildCanonicalVideoCompositionModel({
       const ttsBlock = {
         type: 'tts',
         chapterId: currentChapterId,
+        'row-index': step?.['row-index'] ?? null,
         mode: ttsEntry.mode,
         afterStepId: stepId,
         text: ttsEntry.text,
@@ -657,10 +717,12 @@ export function buildCanonicalVideoCompositionModel({
 
     const inlineSlide = step?.slide && typeof step.slide === 'object' ? step.slide : null
     if (inlineSlide) {
-      const slideDurationMs = Math.max(1, Math.floor(Number(inlineSlide.durationMs || 3000)))
+      const inlineDefaultDurationMs = Math.max(1, Math.floor(Number(slideDefaults?.inlineDefaultDurationMs) || 3000))
+      const slideDurationMs = Math.max(1, Math.floor(Number(inlineSlide.durationMs || inlineDefaultDurationMs)))
       timeline.push({
         type: 'slide',
         chapterId: currentChapterId,
+        'row-index': inlineSlide?.['row-index'] ?? step?.['row-index'] ?? null,
         title: String(inlineSlide.title || 'Folie'),
         durationMs: slideDurationMs,
         composition: {
@@ -683,6 +745,7 @@ export function buildCanonicalVideoCompositionModel({
       timeline.push({
         type: 'audio',
         chapterId: currentChapterId,
+        'row-index': step?.['row-index'] ?? null,
         src: String(inlineAudio.src || '').trim(),
         startMode,
         composition: {
@@ -703,6 +766,7 @@ export function buildCanonicalVideoCompositionModel({
       timeline.push({
         type: 'image',
         chapterId: currentChapterId,
+        'row-index': step?.['row-index'] ?? null,
         src: String(inlineImage.src || '').trim(),
         durationMs,
         composition: {
@@ -755,6 +819,8 @@ export function buildSemanticVideoPlan({
   width,
   height,
   fps,
+  slideDefaults = null,
+  videoIntro = null,
 }) {
   const { flattenedFlowStepEntries, stepWindowById } = buildStepWindowMap({
     scenarioRoot,
@@ -807,6 +873,7 @@ export function buildSemanticVideoPlan({
       currentChapter = {
         id: stepId,
         title: String(chapterCard?.title || chapterCard?.text || flowEntry?.step?.chapter?.text || defaultChapterTitle).trim() || defaultChapterTitle,
+        'row-index': flowEntry?.step?.chapter?.['row-index'] ?? flowEntry?.step?.['row-index'] ?? chapterCard?.['row-index'] ?? null,
         steps: [],
       }
       chapters.push(currentChapter)
@@ -818,6 +885,7 @@ export function buildSemanticVideoPlan({
         currentChapter.steps.push({
           id: `${stepId}--intro`,
           title: currentChapter.title,
+          'row-index': flowEntry?.step?.['row-index'] ?? chapterCard?.['row-index'] ?? null,
           tags: [],
           clip: {
             sourceStartMs: Math.max(0, Number(chapterWindow?.sourceStartMs || 0)),
@@ -826,7 +894,7 @@ export function buildSemanticVideoPlan({
           freezes: [],
           pauses: chapterPauses,
           narrations: chapterNarrations,
-          callouts: toChapterCardCallout(chapterCard),
+          callouts: toChapterCardCallout(chapterCard, slideDefaults),
           clickMarkers: [],
         })
       }
@@ -864,9 +932,51 @@ export function buildSemanticVideoPlan({
       }
     }
 
+    const rowIndex = flowEntry?.step?.['row-index'] ?? null
+    const markersWithRowIndex = baseMarkers.map((marker) => ({
+      ...marker,
+      'row-index': marker?.['row-index'] ?? rowIndex,
+    }))
+
+    const slideCallout = toSlideCallout(flowEntry?.step?.slide, slideDefaults)
+    if (slideCallout) {
+      currentChapter.steps.push({
+        id: `${stepId}--slide`,
+        title: slideCallout.text,
+        'row-index': slideCallout['row-index'] ?? rowIndex,
+        tags: [],
+        clip: {
+          sourceStartMs: window.sourceStartMs,
+          sourceEndMs: Math.max(window.sourceStartMs + 1, window.sourceStartMs + 1),
+        },
+        freezes: [],
+        pauses: [{
+          atSourceMs: window.sourceStartMs,
+          durationMs: slideCallout.durationMs,
+        }],
+        narrations: [],
+        callouts: [slideCallout],
+        clickMarkers: [],
+      })
+    }
+
+    const stepTitle = humanizeStepTitle(flowEntry?.step?.title || stepId) || stepId
+    const stepDurationMs = Math.max(
+      1,
+      (Math.max(1, Number(window.sourceEndMs || 1)) - Math.max(0, Number(window.sourceStartMs || 0)))
+      + basePauses.reduce((sum, pause) => sum + Math.max(0, Number(pause?.durationMs || 0)), 0),
+    )
+    const stepOverlay = toStepOverlayCallout({
+      chapterTitle: currentChapter?.title,
+      stepTitle,
+      durationMs: stepDurationMs,
+      rowIndex,
+    })
+
     currentChapter.steps.push({
       id: stepId,
-      title: humanizeStepTitle(flowEntry?.step?.title || stepId) || stepId,
+      title: stepTitle,
+      'row-index': rowIndex,
       tags: tagMap.get(stepId) || [],
       clip: {
         sourceStartMs: window.sourceStartMs,
@@ -875,8 +985,8 @@ export function buildSemanticVideoPlan({
       freezes: [],
       pauses: basePauses,
       narrations: narrationsByStepId.get(stepId) || [],
-      callouts: [],
-      clickMarkers: baseMarkers,
+      callouts: stepOverlay ? [stepOverlay] : [],
+      clickMarkers: markersWithRowIndex,
     })
   }
 
@@ -893,6 +1003,8 @@ export function buildSemanticVideoPlan({
     },
     source: {
       videoPath: resolve(String(inputVideo || '')),
+      introVideoPath: videoIntro?.path ? resolve(String(videoIntro.path)) : null,
+      introDurationMs: Math.max(0, Math.floor(Number(videoIntro?.durationMs || 0))),
       fps: Number(fps) || 30,
       width: Number(width) || 1280,
       height: Number(height) || 720,
@@ -905,39 +1017,14 @@ function renderJsxText(value) {
   return JSON.stringify(String(value || ''))
 }
 
-function sourceToPlanOffsetMsForDocument(sourceMs, sourceStartMs, holds) {
-  const clampedSourceMs = Math.max(sourceStartMs, Number(sourceMs || sourceStartMs))
-  let offsetMs = Math.max(0, clampedSourceMs - sourceStartMs)
-  for (const hold of holds) {
-    if (Number(hold?.atSourceMs || 0) <= clampedSourceMs) {
-      offsetMs += Math.max(0, Number(hold?.durationMs || 0))
-    }
-  }
-  return offsetMs
-}
-
-function msToFrameStartForDocument(ms, fps) {
-  return Math.max(0, Math.floor((Math.max(0, Number(ms || 0)) / 1000) * fps))
-}
-
-function msToFrameEndExclusiveForDocument(ms, fps) {
-  return Math.max(1, Math.ceil((Math.max(0, Number(ms || 0)) / 1000) * fps))
-}
-
-function msToFrameIndexForDocument(ms, fps) {
-  return Math.max(0, Math.round((Math.max(0, Number(ms || 0)) / 1000) * fps))
-}
-
-function msToDurationFramesForDocument(ms, fps) {
-  return Math.max(1, Math.round((Math.max(0, Number(ms || 0)) / 1000) * fps))
-}
-
-function msToDurationFramesCeilForDocument(ms, fps) {
-  return Math.max(1, Math.ceil((Math.max(0, Number(ms || 0)) / 1000) * fps))
-}
-
 export function buildSemanticRemotionTsx({ semanticPlan, outputFilePath, runtimeFilePath, debugOverlay = false }) {
   const runtimeImportPath = normalizeImportSpecifier(relative(dirname(outputFilePath), runtimeFilePath))
+  const introProps = []
+  if (semanticPlan?.source?.introVideoPath) {
+    introProps.push(`introVideo={__stagedAsset(${renderJsxText(semanticPlan.source.introVideoPath)})}`)
+    introProps.push(`introDurationMs={${Math.max(0, Number(semanticPlan?.source?.introDurationMs || 0))}}`)
+  }
+  const introPropsSegment = introProps.length > 0 ? ` ${introProps.join(' ')}` : ''
   const lines = [
     "import React from 'react'",
     "import {",
@@ -956,7 +1043,7 @@ export function buildSemanticRemotionTsx({ semanticPlan, outputFilePath, runtime
     '',
     'export default function GeneratedSemanticVideoScript() {',
     '  return (',
-    `    <VideoScript id={semanticVideoPlan.id} sourceVideo={__stagedAsset(semanticVideoPlan.source.videoPath)}${debugOverlay ? ' debug' : ''}>`,
+    `    <VideoScript id={semanticVideoPlan.id} sourceVideo={__stagedAsset(semanticVideoPlan.source.videoPath)}${debugOverlay ? ' debug' : ''}${introPropsSegment}>`,
   ]
 
   for (const chapter of semanticPlan.chapters || []) {
@@ -983,6 +1070,8 @@ export function buildSemanticRemotionTsx({ semanticPlan, outputFilePath, runtime
         if (Number.isFinite(Number(callout.fontSize))) extraProps.push(`fontSize={${Math.floor(Number(callout.fontSize))}}`)
         if (Number.isFinite(Number(callout.textYStart))) extraProps.push(`textYStart={${Math.floor(Number(callout.textYStart))}}`)
         if (Number.isFinite(Number(callout.lineSpacing))) extraProps.push(`lineSpacing={${Math.floor(Number(callout.lineSpacing))}}`)
+        if (callout.logoLeft) extraProps.push(`logoLeft={__stagedAsset(${renderJsxText(callout.logoLeft)})}`)
+        if (callout.logoRight) extraProps.push(`logoRight={__stagedAsset(${renderJsxText(callout.logoRight)})}`)
         lines.push(`          <Callout ${extraProps.join(' ')} />`)
       }
       for (const marker of step.clickMarkers || []) {
@@ -994,210 +1083,6 @@ export function buildSemanticRemotionTsx({ semanticPlan, outputFilePath, runtime
   }
 
   lines.push('    </VideoScript>')
-  lines.push('  )')
-  lines.push('}')
-  lines.push('')
-  return lines.join('\n')
-}
-
-export function buildConcreteSequenceRemotionTsx({ semanticPlan }) {
-  const fps = Math.max(1, Number(semanticPlan?.source?.fps || 30))
-  const lines = [
-    "import React from 'react'",
-    "import { AbsoluteFill, Audio, Freeze as RemotionFreeze, OffthreadVideo, Sequence } from 'remotion'",
-    '',
-    `export const semanticVideoPlan = ${JSON.stringify(semanticPlan, null, 2)} as const`,
-    `const SOURCE_VIDEO = ${renderJsxText(semanticPlan?.source?.videoPath || '')}`,
-    '',
-    'export default function GeneratedConcreteSequenceDocument() {',
-    '  return (',
-    '    <AbsoluteFill>',
-  ]
-
-  let stepStartMs = 0
-  for (const chapter of semanticPlan?.chapters || []) {
-    for (const step of chapter?.steps || []) {
-      const stepId = String(step?.id || '')
-      const stepTitle = String(step?.title || stepId)
-      const sourceStartMs = Math.max(0, Number(step?.clip?.sourceStartMs || 0))
-      const sourceEndMs = Math.max(sourceStartMs + 1, Number(step?.clip?.sourceEndMs || (sourceStartMs + 1)))
-      const holds = [
-        ...(Array.isArray(step?.freezes) ? step.freezes : []),
-        ...(Array.isArray(step?.pauses) ? step.pauses : []),
-      ]
-        .map((hold) => ({
-          atSourceMs: Math.max(0, Math.floor(Number(hold?.atSourceMs || 0))),
-          durationMs: Math.max(1, Math.floor(Number(hold?.durationMs || 0))),
-        }))
-        .sort((left, right) => left.atSourceMs - right.atSourceMs)
-
-      const sourceSegments = []
-      const holdSegments = []
-      let sourceCursorMs = sourceStartMs
-      let planCursorMs = 0
-
-      for (const hold of holds) {
-        const atSourceMs = Math.min(sourceEndMs, Math.max(sourceStartMs, hold.atSourceMs))
-        if (atSourceMs > sourceCursorMs) {
-          sourceSegments.push({
-            startMs: sourceCursorMs,
-            endMs: atSourceMs,
-            planStartMs: planCursorMs,
-          })
-          planCursorMs += atSourceMs - sourceCursorMs
-          sourceCursorMs = atSourceMs
-        }
-
-        holdSegments.push({
-          holdSourceMs: atSourceMs,
-          durationMs: hold.durationMs,
-          planStartMs: planCursorMs,
-        })
-        planCursorMs += hold.durationMs
-      }
-
-      if (sourceCursorMs < sourceEndMs) {
-        sourceSegments.push({
-          startMs: sourceCursorMs,
-          endMs: sourceEndMs,
-          planStartMs: planCursorMs,
-        })
-      }
-
-      const stepDurationMs = Math.max(1, (sourceEndMs - sourceStartMs) + holds.reduce((sum, hold) => sum + hold.durationMs, 0))
-      lines.push(`      {/* ${chapter.id} :: ${stepId} :: ${stepTitle} */}`)
-
-      sourceSegments.forEach((segment, index) => {
-        const globalStartMs = stepStartMs + segment.planStartMs
-        const from = msToFrameStartForDocument(globalStartMs, fps)
-        const startFromFrame = msToFrameStartForDocument(segment.startMs, fps)
-        const endAtFrame = Math.max(startFromFrame + 1, msToFrameEndExclusiveForDocument(segment.endMs, fps))
-        const durationInFrames = Math.max(1, endAtFrame - startFromFrame)
-        lines.push(`      <Sequence key=${renderJsxText(`${chapter.id}:${stepId}:video:${index}`)} from={${from}} durationInFrames={${durationInFrames}}>`)
-        lines.push(`        <OffthreadVideo src={SOURCE_VIDEO} startFrom={${startFromFrame}} endAt={${Math.max(startFromFrame + 1, endAtFrame)}} muted />`)
-        lines.push('      </Sequence>')
-      })
-
-      holdSegments.forEach((hold, index) => {
-        const globalStartMs = stepStartMs + hold.planStartMs
-        const from = msToFrameStartForDocument(globalStartMs, fps)
-        const durationInFrames = msToDurationFramesCeilForDocument(hold.durationMs, fps)
-        const holdFrame = msToFrameStartForDocument(hold.holdSourceMs, fps)
-        lines.push(`      <Sequence key=${renderJsxText(`${chapter.id}:${stepId}:hold:${index}`)} from={${from}} durationInFrames={${durationInFrames}}>`)
-        lines.push(`        <RemotionFreeze frame={${holdFrame}}>`)
-        lines.push('          <OffthreadVideo src={SOURCE_VIDEO} muted />')
-        lines.push('        </RemotionFreeze>')
-        lines.push('      </Sequence>')
-      })
-
-      for (const narration of step?.narrations || []) {
-        const globalStartMs = stepStartMs + Math.max(0, Number(narration?.atMs || 0))
-        const from = msToFrameIndexForDocument(globalStartMs, fps)
-        lines.push(`      <Sequence key=${renderJsxText(`${chapter.id}:${stepId}:narration:${String(narration?.id || from)}`)} from={${from}}>`)
-        lines.push(`        <Audio src={${renderJsxText(String(narration?.file || ''))}} />`)
-        lines.push('      </Sequence>')
-      }
-
-      ;(step?.callouts || []).forEach((callout, index) => {
-        const globalStartMs = stepStartMs + Math.max(0, Number(callout?.atMs || 0))
-        const from = msToFrameIndexForDocument(globalStartMs, fps)
-        const durationInFrames = msToDurationFramesForDocument(Math.max(1, Number(callout?.durationMs || 1200)), fps)
-        const isChapterCard = callout?.variant === 'chapter-card'
-        const lineSpacing = Number.isFinite(Number(callout?.lineSpacing)) ? Number(callout.lineSpacing) : 12
-        const textYStart = Number.isFinite(Number(callout?.textYStart)) ? Number(callout.textYStart) : null
-        lines.push(`      <Sequence key=${renderJsxText(`${chapter.id}:${stepId}:callout:${index}`)} from={${from}} durationInFrames={${durationInFrames}}>`)
-        lines.push('        <AbsoluteFill')
-        lines.push(`          style={${JSON.stringify(isChapterCard
-          ? {
-            justifyContent: 'flex-start',
-            alignItems: 'stretch',
-            paddingTop: textYStart ?? 160,
-            paddingLeft: 32,
-            paddingRight: 32,
-            backgroundColor: 'rgba(255,255,255,0.28)',
-            pointerEvents: 'none',
-          }
-          : {
-            justifyContent: 'flex-end',
-            alignItems: 'flex-end',
-            padding: 24,
-            pointerEvents: 'none',
-          })}}`
-        )
-        lines.push('        >')
-        lines.push('          <div')
-        lines.push(`            style={${JSON.stringify(isChapterCard
-            ? {
-              color: 'white',
-              fontWeight: 700,
-              fontSize: Number(callout?.fontSize || 54),
-              lineHeight: 1.2,
-              textAlign: 'center',
-              textShadow: '0 4px 18px rgba(0,0,0,0.45)',
-              whiteSpace: 'pre-wrap',
-            }
-            : {
-              backgroundColor: 'rgba(0,0,0,0.7)',
-              color: 'white',
-              padding: '10px 14px',
-              borderRadius: 8,
-              fontSize: 24,
-            })}}`
-        )
-        lines.push('          >')
-        if (isChapterCard) {
-          for (const [lineIndex, line] of String(callout?.text || '').split('\n').entries()) {
-            const isLast = lineIndex === String(callout?.text || '').split('\n').length - 1
-            lines.push(`            <div key={${lineIndex}} style={{ marginBottom: ${isLast ? 0 : lineSpacing} }}>`)
-            lines.push(`              {${renderJsxText(line)}}`)
-            lines.push('            </div>')
-          }
-        } else {
-          lines.push(`            {${renderJsxText(callout?.text || '')}}`)
-        }
-        lines.push('          </div>')
-        lines.push('        </AbsoluteFill>')
-        lines.push('      </Sequence>')
-      })
-
-      ;(step?.clickMarkers || []).forEach((marker, index) => {
-        const markerPlanMs = sourceToPlanOffsetMsForDocument(marker?.atSourceMs, sourceStartMs, holds)
-        const globalStartMs = stepStartMs + markerPlanMs
-        const from = msToFrameIndexForDocument(globalStartMs, fps)
-        const durationInFrames = msToDurationFramesForDocument(Math.max(1, Number(marker?.durationMs || 900)), fps)
-        lines.push(`      <Sequence key=${renderJsxText(`${chapter.id}:${stepId}:click:${index}`)} from={${from}} durationInFrames={${durationInFrames}}>`)
-        lines.push('        <AbsoluteFill style={{ pointerEvents: "none" }}>')
-        lines.push('          <div')
-        lines.push(`            style={${JSON.stringify({
-          position: 'absolute',
-          left: Math.max(0, Number(marker?.x || 0)) - 20,
-          top: Math.max(0, Number(marker?.y || 0)) - 20,
-          width: 40,
-          height: 40,
-          borderRadius: 999,
-          border: '4px solid rgba(40, 52, 221, 0.95)',
-          boxShadow: '0 0 0 8px rgba(153, 158, 230, 0.95)',
-        })}}`
-        )
-        lines.push('          />')
-        lines.push('        </AbsoluteFill>')
-        lines.push('      </Sequence>')
-      })
-
-      lines.push(`      <Sequence key=${renderJsxText(`${chapter.id}:${stepId}:debug`)} from={${msToFrameStartForDocument(stepStartMs, fps)}} durationInFrames={${Math.max(1, msToFrameEndExclusiveForDocument(stepStartMs + stepDurationMs, fps) - msToFrameStartForDocument(stepStartMs, fps))}}>`)
-      lines.push('        <AbsoluteFill style={{ justifyContent: "flex-start", alignItems: "flex-start", padding: 12, pointerEvents: "none" }}>')
-      lines.push('          <div style={{ backgroundColor: "rgba(0,0,0,0.7)", color: "white", padding: "6px 10px", borderRadius: 6, fontSize: 18 }}>')
-      lines.push(`            {${renderJsxText(`${chapter.title} :: ${stepTitle}`)}}`)
-      lines.push('          </div>')
-      lines.push('        </AbsoluteFill>')
-      lines.push('      </Sequence>')
-
-      stepStartMs += stepDurationMs
-      lines.push('')
-    }
-  }
-
-  lines.push('    </AbsoluteFill>')
   lines.push('  )')
   lines.push('}')
   lines.push('')
@@ -1218,7 +1103,8 @@ export function buildRemotionRenderPlan({ semanticPlan, outputVideo, adjustedAud
   const narrationEndMs = allNarrations.reduce((maxValue, entry) => {
     return Math.max(maxValue, Math.max(0, Number(entry?.finalOutputEndMs || entry?.startMs || 0)))
   }, 0)
-  const outputDurationMs = Math.max(maxEndMs, narrationEndMs, 1)
+  const introDurationMs = Math.max(0, Math.floor(Number(semanticPlan?.source?.introDurationMs || 0)))
+  const outputDurationMs = Math.max(maxEndMs + introDurationMs, narrationEndMs + introDurationMs, 1)
   const fps = Math.max(1, Number(semanticPlan?.source?.fps || 30))
 
   return {

@@ -202,10 +202,53 @@ async function stageMediaToPublic({ workDir, plan }) {
   }
 }
 
+async function stageExtraAssetsFromTsx({ tsxPath, publicDir }) {
+  const tsxRaw = await readFile(tsxPath, 'utf8')
+  const absoluteAssets = []
+  const seen = new Set()
+  const pattern = /__stagedAsset\(("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')\)/g
+  let match
+  while ((match = pattern.exec(tsxRaw)) != null) {
+    const quoted = String(match[1] || '').trim()
+    if (!quoted) continue
+
+    let candidate = ''
+    try {
+      candidate = JSON.parse(quoted.startsWith("'") ? `"${quoted.slice(1, -1).replace(/\\/g, '\\\\').replace(/\"/g, '\\\"')}"` : quoted)
+    } catch {
+      continue
+    }
+
+    const absolutePath = resolve(String(candidate || ''))
+    if (!absolutePath.startsWith('/')) continue
+    if (!existsSync(absolutePath)) continue
+    if (seen.has(absolutePath)) continue
+    seen.add(absolutePath)
+    absoluteAssets.push(absolutePath)
+  }
+
+  const stagedMap = {}
+  for (let index = 0; index < absoluteAssets.length; index += 1) {
+    const absolutePath = absoluteAssets[index]
+    const sourceName = basename(absolutePath)
+    const sourceExt = extname(sourceName)
+    const rawBase = sourceExt ? sourceName.slice(0, sourceName.length - sourceExt.length) : sourceName
+    const safeBase = sanitizeFileToken(rawBase) || `asset-${index + 1}`
+    const stagingToken = `asset-${String(index + 1).padStart(3, '0')}-${safeBase}`
+    const stagedName = `${stagingToken}${sourceExt}`
+    await copyFile(absolutePath, join(publicDir, stagedName))
+    stagedMap[absolutePath] = stagedName
+  }
+
+  return stagedMap
+}
+
 async function createRemotionProjectFromTsx({ workDir, tsxPath, plan }) {
   const srcDir = join(workDir, 'src')
   await mkdir(srcDir, { recursive: true })
   const stagedMedia = await stageMediaToPublic({ workDir, plan })
+  const publicDir = join(workDir, 'public')
+  const stagedExtraAssetMap = await stageExtraAssetsFromTsx({ tsxPath, publicDir })
 
   const userCompositionPath = join(srcDir, 'UserComposition.tsx')
   const rootPath = join(srcDir, 'Root.tsx')
@@ -228,6 +271,8 @@ async function createRemotionProjectFromTsx({ workDir, tsxPath, plan }) {
     if (!staged) continue
     assetMap[absoluteAudioPath] = staged.src
   }
+
+  Object.assign(assetMap, stagedExtraAssetMap)
 
   const resolverBlock = [
     '',

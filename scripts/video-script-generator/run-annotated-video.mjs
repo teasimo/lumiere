@@ -7,7 +7,6 @@ import { spawnSync } from 'child_process'
 import { createHash } from 'crypto'
 import { XMLParser } from 'fast-xml-parser'
 import {
-  buildConcreteSequenceRemotionTsx,
   buildCanonicalVideoCompositionModel,
   buildRemotionRenderPlan,
   buildSemanticRemotionTsx,
@@ -30,6 +29,7 @@ const DEMO_TTS_INDEX_PATH = join(DEMO_TTS_CACHE_DIR, 'index.json')
 const VIDEO_HOLD_FRAME_SLICE_SEC = 0.04
 const VIDEO_HOLD_FRAME_LEAD_SEC = 0.08
 const DEFAULT_SLOWMO_MS = 1000
+const DEFAULT_VIDEO_INTRO_PATH = resolve('neo', 'assets', 'video-intro.mp4')
 const SCENARIO_SCRIPT_XSD_PATH = resolve('schemas', 'szenarioscript.xsd')
 const SEMANTIC_VIDEO_PLAN_SCHEMA_PATH = resolve('schemas', 'lumiere-semantic-video-plan.schema.json')
 
@@ -407,6 +407,23 @@ function isChapterOnlyMarkerStep(value) {
   return !hasExecutionContent
 }
 
+const RAW_VIDEO_IGNORE_KEYS = new Set([
+  'presentation',
+  'didactics',
+  'didactic',
+  'chapter',
+  'kapitel',
+  'slide',
+  'folie',
+  'info',
+  'schritt',
+])
+
+function shouldIgnoreRawVideoComparableKey(key) {
+  const normalized = String(key || '').trim().toLowerCase()
+  return RAW_VIDEO_IGNORE_KEYS.has(normalized)
+}
+
 function stripPresentationDeep(value) {
   if (Array.isArray(value)) {
     return value
@@ -426,13 +443,39 @@ function stripPresentationDeep(value) {
 
   const result = {}
   for (const [key, entry] of Object.entries(value)) {
-    if (key === 'presentation' || key === 'didactics' || key === 'didactic' || key === 'chapter') {
+    if (key === '#comment' || key === '#cdata') {
+      continue
+    }
+    if (key === '#text') {
+      const normalizedText = typeof entry === 'string'
+        ? entry.replace(/\s+/g, ' ').trim()
+        : ''
+      if (!normalizedText) {
+        continue
+      }
+      result[key] = normalizedText
+      continue
+    }
+    if (shouldIgnoreRawVideoComparableKey(key)) {
       continue
     }
     result[key] = stripPresentationDeep(entry)
   }
 
   return result
+}
+
+function buildRawVideoComparableFromXml(xmlRaw) {
+  const parser = new XMLParser({
+    preserveOrder: false,
+    ignoreAttributes: false,
+    attributeNamePrefix: '@_',
+    parseTagValue: false,
+    trimValues: false,
+  })
+  const parsed = parser.parse(String(xmlRaw || ''))
+  const root = parsed?.interaction || parsed || {}
+  return toCanonicalComparable(stripPresentationDeep(root))
 }
 
 function toCanonicalComparable(value) {
@@ -559,6 +602,316 @@ function findVideoScriptRangeAnchorsInResolvedXml(resolvedXmlRaw) {
   }
 }
 
+function collectXmlTextContent(nodes) {
+  let text = ''
+  for (const node of nodes || []) {
+    if (!node || typeof node !== 'object' || Array.isArray(node)) {
+      continue
+    }
+
+    if (typeof node['#text'] === 'string') {
+      text += node['#text']
+    }
+
+    const tag = getXmlNodeTag(node)
+    if (!tag) {
+      continue
+    }
+
+    const payload = node[tag]
+    if (Array.isArray(payload) && payload.length > 0) {
+      text += collectXmlTextContent(payload)
+    }
+  }
+
+  return text
+}
+
+function buildFlowStepIndexByResolvedId(flowEntries, index = new Map()) {
+  for (const step of flowEntries || []) {
+    if (!step || typeof step !== 'object' || Array.isArray(step)) {
+      continue
+    }
+
+    const resolvedId = String(step.resolvedId || '').trim()
+    if (resolvedId && !index.has(resolvedId)) {
+      index.set(resolvedId, step)
+    }
+
+    if (Array.isArray(step.flow) && step.flow.length > 0) {
+      buildFlowStepIndexByResolvedId(step.flow, index)
+    }
+  }
+
+  return index
+}
+
+function annotateScenarioPresentationFromResolvedXml(scenarioRoot, resolvedXmlRaw) {
+  const flow = Array.isArray(scenarioRoot?.flow) ? scenarioRoot.flow : []
+  if (!flow.length || !resolvedXmlRaw) {
+    return
+  }
+
+  const parser = new XMLParser({
+    preserveOrder: true,
+    ignoreAttributes: false,
+    attributeNamePrefix: '@_',
+    parseTagValue: false,
+    trimValues: false,
+  })
+
+  const parsed = parser.parse(String(resolvedXmlRaw || ''))
+  const flowStepByResolvedId = buildFlowStepIndexByResolvedId(flow)
+  const interactionTags = new Set(['Click', 'Eingabe', 'Auswahl', 'Anzeige', 'Warten', 'Oeffnen', 'SucheAuswahl', 'Scroll'])
+  const pendingSlides = []
+  let pendingChapter = ''
+  let currentStepTitle = ''
+
+  function visitNodes(nodes) {
+    for (const node of nodes || []) {
+      if (!node || typeof node !== 'object' || Array.isArray(node)) {
+        continue
+      }
+
+      const tag = getXmlNodeTag(node)
+      if (!tag) {
+        continue
+      }
+
+      const payload = node[tag]
+      const payloadNodes = Array.isArray(payload) ? payload : []
+      const text = collectXmlTextContent(payloadNodes)
+        .replace(/\s+/g, ' ')
+        .trim()
+
+      if (tag === 'Kapitel' && text) {
+        pendingChapter = text
+      } else if (tag === 'Schritt' && text) {
+        currentStepTitle = text
+      } else if (tag === 'Folie' && text) {
+        pendingSlides.push(text)
+      } else if (interactionTags.has(tag)) {
+        const attrs = node[':@'] || {}
+        const resolvedId = String(attrs['@_resolved-id'] || '').trim()
+        const step = flowStepByResolvedId.get(resolvedId)
+        if (step && typeof step === 'object') {
+          if (pendingChapter && (!step.chapter || typeof step.chapter !== 'object')) {
+            step.chapter = { text: pendingChapter }
+            pendingChapter = ''
+          }
+          if (currentStepTitle && !String(step.title || '').trim()) {
+            step.title = currentStepTitle
+          }
+          if (pendingSlides.length > 0 && (!step.slide || typeof step.slide !== 'object')) {
+            step.slide = { text: pendingSlides.shift() }
+          }
+        }
+      }
+
+      if (payloadNodes.length > 0) {
+        visitNodes(payloadNodes)
+      }
+    }
+  }
+
+  visitNodes(Array.isArray(parsed) ? parsed : [])
+}
+
+function extractScenarioTagLineIndices(scenarioXmlRaw) {
+  const lines = String(scenarioXmlRaw || '').split(/\r?\n/)
+  const chapterLines = []
+  const slideLines = []
+  const stepLines = []
+  const clickLines = []
+  const fragmentRanges = []
+  const fragmentStartStack = []
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const lineNo = index + 1
+    const line = String(lines[index] || '')
+
+    if (/<Kapitel\b/i.test(line)) {
+      chapterLines.push(lineNo)
+    }
+    if (/<Folie\b/i.test(line)) {
+      slideLines.push(lineNo)
+    }
+    if (/<Schritt\b/i.test(line)) {
+      stepLines.push(lineNo)
+    }
+    if (/<Click\b/i.test(line)) {
+      clickLines.push(lineNo)
+    }
+
+    if (/<Fragment\b[^>]*\/\s*>/i.test(line)) {
+      fragmentRanges.push({
+        start: lineNo,
+        end: lineNo,
+      })
+    } else if (/<Fragment\b/i.test(line)) {
+      fragmentStartStack.push(lineNo)
+    }
+
+    if (/<\/Fragment\s*>/i.test(line)) {
+      const start = fragmentStartStack.pop() || lineNo
+      fragmentRanges.push({
+        start,
+        end: lineNo,
+      })
+    }
+  }
+
+  return {
+    chapterLines,
+    slideLines,
+    stepLines,
+    clickLines,
+    fragmentRanges,
+  }
+}
+
+function extractFolieTextsFromScenarioXml(scenarioXmlRaw) {
+  const xml = String(scenarioXmlRaw || '').replace(/<!--[\s\S]*?-->/g, ' ')
+  const folieTexts = []
+  const foliePattern = /<Folie\b[^>]*>([\s\S]*?)<\/Folie>/gi
+  let match
+  while ((match = foliePattern.exec(xml)) != null) {
+    const text = String(match[1] || '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+    if (text) {
+      folieTexts.push(text)
+    }
+  }
+  return folieTexts
+}
+
+function formatRowIndexRange(range) {
+  if (!range || typeof range !== 'object') {
+    return null
+  }
+  const start = Math.max(1, Math.floor(Number(range.start) || 0))
+  const end = Math.max(start, Math.floor(Number(range.end) || start))
+  return `${start}-${end}`
+}
+
+function isClickFlowStep(step) {
+  if (!step || typeof step !== 'object') {
+    return false
+  }
+
+  const interactionType = String(step?.interaction?.type || '').trim().toLowerCase()
+  if (interactionType === 'click') {
+    return true
+  }
+
+  return typeof step.click === 'object' && step.click !== null
+}
+
+function annotateScenarioFlowRowIndices(scenarioRoot, scenarioXmlRaw) {
+  const flow = Array.isArray(scenarioRoot?.flow) ? scenarioRoot.flow : []
+  if (!flow.length) {
+    return
+  }
+
+  const indices = extractScenarioTagLineIndices(scenarioXmlRaw)
+  const cursors = {
+    chapter: 0,
+    slide: 0,
+    step: 0,
+    click: 0,
+    fragment: 0,
+  }
+
+  let currentStepLine = null
+  let previousTitle = null
+
+  function nextLine(listName) {
+    const list = indices[listName]
+    const cursorKey = listName.replace('Lines', '')
+    const cursor = cursors[cursorKey]
+    if (!Array.isArray(list) || cursor >= list.length) {
+      return null
+    }
+    cursors[cursorKey] += 1
+    return Math.max(1, Math.floor(Number(list[cursor]) || 0))
+  }
+
+  function nextFragmentRange() {
+    const range = indices.fragmentRanges[cursors.fragment] || null
+    if (range) {
+      cursors.fragment += 1
+    }
+    return range
+  }
+
+  function visit(entries, inheritedFragmentRange = null) {
+    for (const step of entries || []) {
+      if (!step || typeof step !== 'object' || Array.isArray(step)) {
+        continue
+      }
+
+      let rowIndex = null
+      const title = String(step?.title || '').trim()
+      if (title && title !== previousTitle) {
+        const stepLine = nextLine('stepLines')
+        if (stepLine != null) {
+          currentStepLine = stepLine
+        }
+        previousTitle = title
+      }
+
+      if (step.chapter && typeof step.chapter === 'object') {
+        const chapterLine = nextLine('chapterLines')
+        if (chapterLine != null) {
+          step.chapter['row-index'] = chapterLine
+          rowIndex = chapterLine
+        }
+      }
+
+      if (step.slide && typeof step.slide === 'object') {
+        const slideLine = nextLine('slideLines')
+        if (slideLine != null) {
+          step.slide['row-index'] = slideLine
+          rowIndex = rowIndex ?? slideLine
+        }
+      }
+
+      const localFragmentRange = step.include ? (nextFragmentRange() || inheritedFragmentRange) : inheritedFragmentRange
+
+      if (isClickFlowStep(step)) {
+        const clickRowIndex = localFragmentRange
+          ? formatRowIndexRange(localFragmentRange)
+          : (nextLine('clickLines') ?? currentStepLine)
+        if (clickRowIndex != null) {
+          rowIndex = clickRowIndex
+          if (step.interaction && typeof step.interaction === 'object') {
+            step.interaction['row-index'] = clickRowIndex
+          }
+          if (step.click && typeof step.click === 'object') {
+            step.click['row-index'] = clickRowIndex
+          }
+        }
+      }
+
+      if (rowIndex == null && currentStepLine != null) {
+        rowIndex = currentStepLine
+      }
+
+      if (rowIndex != null) {
+        step['row-index'] = rowIndex
+      }
+
+      if (Array.isArray(step.flow) && step.flow.length > 0) {
+        visit(step.flow, localFragmentRange)
+      }
+    }
+  }
+
+  visit(flow)
+}
+
 async function loadScenarioRootForTts(scenarioAbsolutePath) {
   const extension = extname(scenarioAbsolutePath).toLowerCase()
   if (extension !== '.xml') {
@@ -570,7 +923,10 @@ async function loadScenarioRootForTts(scenarioAbsolutePath) {
   const resolvedJsonRaw = await readFile(resolvedJsonPath, 'utf8')
   const resolvedJsonParsed = JSON.parse(resolvedJsonRaw)
   const scenarioRoot = resolvedJsonParsed.interaction || resolvedJsonParsed
+  const scenarioXmlRaw = await readFile(scenarioAbsolutePath, 'utf8')
   const resolvedXmlRaw = existsSync(resolvedXmlPath) ? await readFile(resolvedXmlPath, 'utf8') : ''
+  annotateScenarioPresentationFromResolvedXml(scenarioRoot, resolvedXmlRaw)
+  annotateScenarioFlowRowIndices(scenarioRoot, scenarioXmlRaw)
   const videoScriptRange = findVideoScriptRangeAnchorsInResolvedXml(resolvedXmlRaw)
 
   if (!scenarioRoot || typeof scenarioRoot !== 'object') {
@@ -637,8 +993,8 @@ async function assertScenarioMatchesRawVideoIgnoringPresentation({
   let snapshotJson
 
   if (currentExtension === '.xml' && snapshotExtension === '.xml') {
-    currentJson = JSON.stringify(currentRaw.replace(/\s+/g, ' ').trim())
-    snapshotJson = JSON.stringify(snapshotRaw.replace(/\s+/g, ' ').trim())
+    currentJson = JSON.stringify(buildRawVideoComparableFromXml(currentRaw))
+    snapshotJson = JSON.stringify(buildRawVideoComparableFromXml(snapshotRaw))
   } else {
     const currentParsed = JSON.parse(currentRaw)
     const snapshotParsed = JSON.parse(snapshotRaw)
@@ -650,7 +1006,7 @@ async function assertScenarioMatchesRawVideoIgnoringPresentation({
 
   if (currentJson !== snapshotJson) {
     throw new Error([
-      'Das aktuelle Szenario passt nicht mehr zum vorhandenen Rohvideo (Vergleich ignoriert presentation).',
+      'Das aktuelle Szenario passt nicht mehr zum vorhandenen Rohvideo (Vergleich ignoriert presentation/slide/info/chapter/schritt).',
       'Bitte zuerst das Rohvideo neu generieren:',
       `npm run generate:video:force -- ${scenarioPathRelative}`,
     ].join(' '))
@@ -1368,20 +1724,37 @@ function buildScenarioChapterTitlesFromTimeline({ scenarioRoot, timelineReport, 
       continue
     }
 
-    const chapterStepId = String(flowEntry?.id || '').trim()
+    const scenarioStepId = String(flowEntry?.id || '').trim()
+    const resolvedStepId = String(stepEntry?.resolvedId || '').trim()
+    const timelineCandidateIds = [resolvedStepId, scenarioStepId].filter(Boolean)
+    const chapterStepId = timelineCandidateIds[0] || ''
     if (!chapterStepId) {
       continue
     }
 
-    let window = resolvePresentationStepWindowMs(chapterStepId, sortedSteps)
+    let window = null
+    for (const candidateId of timelineCandidateIds) {
+      window = resolvePresentationStepWindowMs(candidateId, sortedSteps)
+      if (window) {
+        break
+      }
+    }
 
     if (!window) {
       for (let nextIndex = index + 1; nextIndex < flattenedFlowStepEntries.length; nextIndex += 1) {
-        const nextId = String(flattenedFlowStepEntries[nextIndex]?.id || '').trim()
-        if (!nextId) {
+        const nextScenarioId = String(flattenedFlowStepEntries[nextIndex]?.id || '').trim()
+        const nextResolvedId = String(flattenedFlowStepEntries[nextIndex]?.step?.resolvedId || '').trim()
+        const nextCandidates = [nextResolvedId, nextScenarioId].filter(Boolean)
+        if (nextCandidates.length === 0) {
           continue
         }
-        window = resolvePresentationStepWindowMs(nextId, sortedSteps)
+
+        for (const nextId of nextCandidates) {
+          window = resolvePresentationStepWindowMs(nextId, sortedSteps)
+          if (window) {
+            break
+          }
+        }
         if (window) {
           break
         }
@@ -1420,6 +1793,7 @@ function buildScenarioChapterTitlesFromTimeline({ scenarioRoot, timelineReport, 
     chapterTitles.push({
       id: `${chapterStepId}-chapter`,
       title: chapterCard.text,
+      'row-index': stepEntry?.chapter?.['row-index'] ?? stepEntry?.['row-index'] ?? null,
       atMs: Math.max(0, absoluteAtMs - clipStartMs),
       durationMs: chapterCard.durationMs,
       fontSize: chapterCard.fontSize,
@@ -2170,14 +2544,125 @@ function insertStepTitleCardsIntoVideo({ inputVideo, outputVideo, stepTitles }) 
   writeFileSync(resolvedOutput, readFileSync(resolvedInput))
 }
 
-function prependIntroToVideo({ inputVideo, outputVideo, title = null, logoPath = DEMO_LOGO_PATH }) {
+function prependIntroToVideo({ inputVideo, outputVideo, introVideoPath = null }) {
   const resolvedInput = resolve(String(inputVideo || ''))
   const resolvedOutput = resolve(String(outputVideo || ''))
+  const resolvedIntro = resolve(String(introVideoPath || DEFAULT_VIDEO_INTRO_PATH))
   if (!resolvedInput || !resolvedOutput || resolvedInput === resolvedOutput) {
     return
   }
 
-  writeFileSync(resolvedOutput, readFileSync(resolvedInput))
+  if (!existsSync(resolvedInput)) {
+    throw new Error(`Eingabevideo fuer Intro nicht gefunden: ${resolvedInput}`)
+  }
+
+  if (!existsSync(resolvedIntro)) {
+    console.warn(`Intro-Video nicht gefunden, ueberspringe Intro: ${resolvedIntro}`)
+    writeFileSync(resolvedOutput, readFileSync(resolvedInput))
+    return
+  }
+
+  const introHasAudio = hasAudioStream(resolvedIntro)
+  const mainHasAudio = hasAudioStream(resolvedInput)
+  const introDurationSec = Math.max(0, Number(getMediaDurationSeconds(resolvedIntro) || 0))
+  const mainDurationSec = Math.max(0, Number(getMediaDurationSeconds(resolvedInput) || 0))
+  const targetSize = getVideoDimensions(resolvedInput)
+
+  const args = [
+    '-y',
+    '-i', resolvedIntro,
+    '-i', resolvedInput,
+  ]
+
+  const filterParts = [
+    `[0:v]scale=${targetSize.width}:${targetSize.height}:force_original_aspect_ratio=decrease,pad=${targetSize.width}:${targetSize.height}:(ow-iw)/2:(oh-ih)/2,setsar=1[v0]`,
+    `[1:v]scale=${targetSize.width}:${targetSize.height}:force_original_aspect_ratio=decrease,pad=${targetSize.width}:${targetSize.height}:(ow-iw)/2:(oh-ih)/2,setsar=1[v1]`,
+    '[v0][v1]concat=n=2:v=1:a=0[v]',
+  ]
+
+  let hasOutputAudio = false
+  if (introHasAudio && mainHasAudio) {
+    filterParts.push('[0:a][1:a]concat=n=2:v=0:a=1[a]')
+    hasOutputAudio = true
+  } else if (introHasAudio && !mainHasAudio) {
+    args.push('-f', 'lavfi', '-t', String(mainDurationSec), '-i', 'anullsrc=channel_layout=stereo:sample_rate=48000')
+    filterParts.push('[0:a][2:a]concat=n=2:v=0:a=1[a]')
+    hasOutputAudio = true
+  } else if (!introHasAudio && mainHasAudio) {
+    args.push('-f', 'lavfi', '-t', String(introDurationSec), '-i', 'anullsrc=channel_layout=stereo:sample_rate=48000')
+    filterParts.push('[2:a][1:a]concat=n=2:v=0:a=1[a]')
+    hasOutputAudio = true
+  }
+
+  args.push(
+    '-filter_complex', filterParts.join(';'),
+    '-map', '[v]',
+    '-c:v', 'libx264',
+    '-preset', 'veryfast',
+    '-crf', '18',
+    '-pix_fmt', 'yuv420p',
+  )
+
+  if (hasOutputAudio) {
+    args.push('-map', '[a]', '-c:a', 'aac', '-ar', '48000', '-ac', '2', '-b:a', '192k')
+  }
+
+  args.push('-movflags', '+faststart', resolvedOutput)
+
+  const exitCode = runCommand('ffmpeg', args)
+  if (exitCode !== 0) {
+    throw new Error(`Intro-Video konnte nicht vorangestellt werden (Exit-Code ${exitCode}).`)
+  }
+}
+
+function resolveVideoIntroConfig(videoScriptConfig) {
+  const rawConfig = videoScriptConfig && typeof videoScriptConfig === 'object'
+    ? videoScriptConfig
+    : {}
+  const introRaw = rawConfig.intro && typeof rawConfig.intro === 'object'
+    ? rawConfig.intro
+    : {}
+
+  let enabled = true
+  if (introRaw.enabled === false) {
+    enabled = false
+  }
+
+  const configuredPath = String(
+    introRaw.path
+    || rawConfig.intro_video
+    || rawConfig.introVideo
+    || DEFAULT_VIDEO_INTRO_PATH
+  ).trim()
+
+  return {
+    enabled,
+    path: configuredPath ? resolve(configuredPath) : DEFAULT_VIDEO_INTRO_PATH,
+  }
+}
+
+function resolveVideoPresentationConfig(videoScriptConfig) {
+  const rawConfig = videoScriptConfig && typeof videoScriptConfig === 'object'
+    ? videoScriptConfig
+    : {}
+  const slideRaw = rawConfig?.presentation?.slide && typeof rawConfig.presentation.slide === 'object'
+    ? rawConfig.presentation.slide
+    : {}
+
+  return {
+    slide: {
+      defaultDurationMs: Math.max(1, Math.floor(Number(
+        slideRaw.default_duration_ms
+        ?? slideRaw.defaultDurationMs
+        ?? 2000,
+      ) || 2000)),
+      inlineDefaultDurationMs: Math.max(1, Math.floor(Number(
+        slideRaw.inline_default_duration_ms
+        ?? slideRaw.inlineDefaultDurationMs
+        ?? 3000,
+      ) || 3000)),
+    },
+  }
 }
 
 function normalizeNarrationTimeline(audioFiles) {
@@ -2431,13 +2916,23 @@ function writeSemanticRemotionArtifacts({ inputVideo, outputVideo, adjustedAudio
   const canonicalModelPath = `${outputVideo}.composition-model.json`
   const semanticVideoPlanPath = `${outputVideo}.semantic-video-plan.json`
   const renderScriptTsxPath = `${outputVideo}.semantic.tsx`
-  const concreteSequenceDocumentPath = `${outputVideo}.sequence-document.tsx`
   const runtimeScriptSnapshotPath = `${outputVideo}.runtime.tsx`
-  const finalRemotionDocumentPath = concreteSequenceDocumentPath
+  const finalRemotionDocumentPath = renderScriptTsxPath
   const frameTimelineLogPath = `${outputVideo}.frame-timeline.log`
   const widthHeight = getVideoDimensions(inputVideo)
   const fps = getVideoFps(inputVideo)
   const semanticRuntimePath = resolve('scripts/video-script-generator/runtime/semantic-runtime.tsx')
+  const introConfig = semanticContext?.videoIntroConfig && typeof semanticContext.videoIntroConfig === 'object'
+    ? semanticContext.videoIntroConfig
+    : null
+  const introPathCandidate = introConfig?.enabled === false ? null : String(introConfig?.path || '').trim()
+  const introPathResolved = introPathCandidate ? resolve(introPathCandidate) : null
+  const introDurationMs = introPathResolved && existsSync(introPathResolved)
+    ? Math.max(0, Math.floor(Number(getMediaDurationSeconds(introPathResolved) || 0) * 1000))
+    : 0
+  const videoIntro = introPathResolved && introDurationMs > 0
+    ? { path: introPathResolved, durationMs: introDurationMs }
+    : null
 
   const canonicalModel = buildCanonicalVideoCompositionModel({
     scenarioRoot: semanticContext?.scenarioRoot || null,
@@ -2455,6 +2950,8 @@ function writeSemanticRemotionArtifacts({ inputVideo, outputVideo, adjustedAudio
       afterMs: 100,
       fadeMs: 50,
     },
+    slideDefaults: semanticContext?.videoPresentationConfig?.slide || null,
+    videoIntro,
   })
 
   writeFileSync(canonicalModelPath, JSON.stringify(canonicalModel, null, 2), 'utf8')
@@ -2473,6 +2970,8 @@ function writeSemanticRemotionArtifacts({ inputVideo, outputVideo, adjustedAudio
     width: widthHeight.width,
     height: widthHeight.height,
     fps,
+    slideDefaults: semanticContext?.videoPresentationConfig?.slide || null,
+    videoIntro,
   })
   const renderPlan = buildRemotionRenderPlan({
     semanticPlan: semanticVideoPlan,
@@ -2485,14 +2984,10 @@ function writeSemanticRemotionArtifacts({ inputVideo, outputVideo, adjustedAudio
     runtimeFilePath: semanticRuntimePath,
     debugOverlay: debugOverlayEnabled,
   })
-  const concreteSequenceDocumentTsx = buildConcreteSequenceRemotionTsx({
-    semanticPlan: semanticVideoPlan,
-  })
 
   writeFileSync(renderPlanPath, JSON.stringify(renderPlan, null, 2), 'utf8')
   writeFileSync(semanticVideoPlanPath, JSON.stringify(semanticVideoPlan, null, 2), 'utf8')
   writeFileSync(renderScriptTsxPath, renderScriptTsx, 'utf8')
-  writeFileSync(concreteSequenceDocumentPath, concreteSequenceDocumentTsx, 'utf8')
   writeFileSync(runtimeScriptSnapshotPath, readFileSync(semanticRuntimePath, 'utf8'), 'utf8')
   writeFileSync(frameTimelineLogPath, buildFrameTimelineLog({ semanticVideoPlan, outputVideo }), 'utf8')
 
@@ -2512,7 +3007,6 @@ function writeSemanticRemotionArtifacts({ inputVideo, outputVideo, adjustedAudio
     renderPlanPath,
     semanticVideoPlanPath,
     renderScriptTsxPath,
-    concreteSequenceDocumentPath,
     runtimeScriptSnapshotPath,
     finalRemotionDocumentPath,
     frameTimelineLogPath,
@@ -2567,7 +3061,6 @@ function muxNarrationAudioIntoVideo({ inputVideo, outputVideo, audioFiles, seman
   let remotionRenderPlanPath = null
   let remotionSemanticPlanPath = null
   let remotionRenderScriptTsxPath = null
-  let remotionConcreteSequenceDocumentPath = null
   let remotionRuntimeScriptTsxPath = null
   let finalRemotionDocumentPath = null
   let frameTimelineLogPath = null
@@ -2583,7 +3076,6 @@ function muxNarrationAudioIntoVideo({ inputVideo, outputVideo, audioFiles, seman
   remotionRenderPlanPath = remotionArtifacts.renderPlanPath
   remotionSemanticPlanPath = remotionArtifacts.semanticVideoPlanPath
   remotionRenderScriptTsxPath = remotionArtifacts.renderScriptTsxPath
-  remotionConcreteSequenceDocumentPath = remotionArtifacts.concreteSequenceDocumentPath
   remotionRuntimeScriptTsxPath = remotionArtifacts.runtimeScriptSnapshotPath
   finalRemotionDocumentPath = remotionArtifacts.finalRemotionDocumentPath
   frameTimelineLogPath = remotionArtifacts.frameTimelineLogPath
@@ -2597,7 +3089,6 @@ function muxNarrationAudioIntoVideo({ inputVideo, outputVideo, audioFiles, seman
     remotionRenderPlanPath,
     remotionSemanticPlanPath,
     remotionRenderScriptTsxPath,
-    remotionConcreteSequenceDocumentPath,
     remotionRuntimeScriptTsxPath,
     finalRemotionDocumentPath,
     frameTimelineLogPath,
@@ -2690,6 +3181,8 @@ async function buildAnnotatedArtifacts({
   resolvedOutputVideo,
   tts = false,
   ttsVoice = null,
+  videoIntroConfig = { enabled: true, path: DEFAULT_VIDEO_INTRO_PATH },
+  videoPresentationConfig = { slide: { defaultDurationMs: 2000, inlineDefaultDurationMs: 3000 } },
 }) {
   const resolvedTracePath = resolve(tracePath)
   const resolvedInputVideo = resolve(inputVideo)
@@ -2741,7 +3234,11 @@ async function buildAnnotatedArtifacts({
     inputVideo: resolvedInputVideo,
     outputVideo: introlessOutputVideo,
     audioFiles: [],
-    semanticContext,
+    semanticContext: {
+      ...semanticContext,
+      videoIntroConfig,
+      videoPresentationConfig,
+    },
     render: true,
   })
 
@@ -2774,7 +3271,11 @@ async function buildAnnotatedArtifacts({
       inputVideo: resolvedInputVideo,
       outputVideo: outputWithTtsRaw,
       audioFiles: timedAudioFiles,
-      semanticContext,
+      semanticContext: {
+        ...semanticContext,
+        videoIntroConfig,
+        videoPresentationConfig,
+      },
       render: true,
     })
     await copyFile(outputWithTtsRaw, outputWithTts)
@@ -2908,7 +3409,6 @@ async function exportScenarioTtsDebugArtifacts({
   await copyArtifactIfExists(muxMeta?.remotionRenderPlanPath, join(debugDir, 'remotion-render-plan.json'))
   await copyArtifactIfExists(muxMeta?.remotionSemanticPlanPath, join(debugDir, 'remotion-semantic-video-plan.json'))
   await copyArtifactIfExists(muxMeta?.remotionRenderScriptTsxPath, join(debugDir, 'remotion-semantic.tsx'))
-  await copyArtifactIfExists(muxMeta?.remotionConcreteSequenceDocumentPath, join(debugDir, 'remotion-sequence-document.tsx'))
   await copyArtifactIfExists(muxMeta?.remotionRuntimeScriptTsxPath, join(debugDir, 'remotion-runtime.tsx'))
   await copyArtifactIfExists(muxMeta?.finalRemotionDocumentPath, join(debugDir, 'final-remotion-document.tsx'))
   await copyArtifactIfExists(muxMeta?.frameTimelineLogPath, join(debugDir, 'frame-timeline.log'))
@@ -2919,6 +3419,8 @@ async function exportScenarioTtsDebugArtifacts({
 async function runScenarioTtsMode({ scenarioPath, profileName, outputVideo, ttsVoice = null, remotionPlanOnly = false }) {
   const central = loadCentralConfig(process.cwd())
   const videoScriptConfig = getVideoScriptConfig(central.config)
+  const videoIntroConfig = resolveVideoIntroConfig(videoScriptConfig)
+  const videoPresentationConfig = resolveVideoPresentationConfig(videoScriptConfig)
   const scenarioAbsolutePath = resolve(scenarioPath)
   if (!existsSync(scenarioAbsolutePath)) {
     throw new Error(`Szenario-Datei nicht gefunden: ${scenarioPath}`)
@@ -2932,16 +3434,21 @@ async function runScenarioTtsMode({ scenarioPath, profileName, outputVideo, ttsV
   const profile = resolveScenarioTtsProfile(videoScriptConfig, profileName)
 
   const { scenarioRoot, resolvedJsonPath, resolvedXmlPath, videoScriptRange } = await loadScenarioRootForTts(scenarioAbsolutePath)
+  const scenarioXmlRaw = await readFile(scenarioAbsolutePath, 'utf8')
 
   const artifacts = await ensureScenarioVideoTimelinePair({
     scenarioPathRelative,
   })
 
-  await assertScenarioMatchesRawVideoIgnoringPresentation({
-    scenarioAbsolutePath,
-    scenarioPathRelative,
-    artifactsDir: artifacts.dir,
-  })
+  if (!remotionPlanOnly) {
+    await assertScenarioMatchesRawVideoIgnoringPresentation({
+      scenarioAbsolutePath,
+      scenarioPathRelative,
+      artifactsDir: artifacts.dir,
+    })
+  } else {
+    console.warn('[scenario-tts] remotion-plan-only: Ueberspringe strikte Szenario-vs-Rohvideo-Validierung.')
+  }
 
   const narrations = buildNarrationsFromScenarioTimeline({
     scenarioRoot,
@@ -3221,6 +3728,23 @@ async function runScenarioTtsMode({ scenarioPath, profileName, outputVideo, ttsV
     synthesizedNarrations = null
   }
 
+  const folieTexts = extractFolieTextsFromScenarioXml(scenarioXmlRaw)
+  if (folieTexts.length > 0 && Array.isArray(resolvedChapterCards) && resolvedChapterCards.length > 0) {
+    resolvedChapterCards = resolvedChapterCards.map((entry, index) => {
+      if (!entry || typeof entry !== 'object') {
+        return entry
+      }
+      const slideText = String(folieTexts[index] || '').trim()
+      if (!slideText) {
+        return entry
+      }
+      return {
+        ...entry,
+        slideText,
+      }
+    })
+  }
+
   // Keep timeline strictly ordered before synthesis/mux. Otherwise overflow
   // handling may shift early chapter narrations behind later normal steps.
   effectiveNarrations.sort((left, right) => {
@@ -3280,6 +3804,8 @@ async function runScenarioTtsMode({ scenarioPath, profileName, outputVideo, ttsV
       clickMarkers: visualOverlays.clickMarkers,
       clickIndicator: clickIndicatorConfig,
       stepSegments: visualOverlays.stepSegments,
+      videoIntroConfig,
+      videoPresentationConfig,
     },
     render: !remotionPlanOnly,
   })
@@ -3320,7 +3846,6 @@ async function runScenarioTtsMode({ scenarioPath, profileName, outputVideo, ttsV
       renderPlanPath: muxMeta?.remotionRenderPlanPath || null,
       semanticVideoPlanPath: muxMeta?.remotionSemanticPlanPath || null,
       renderTsxPath: muxMeta?.remotionRenderScriptTsxPath || null,
-      concreteSequenceDocumentPath: muxMeta?.remotionConcreteSequenceDocumentPath || null,
       runtimeTsxPath: muxMeta?.remotionRuntimeScriptTsxPath || null,
       finalRemotionDocumentPath: muxMeta?.finalRemotionDocumentPath || null,
       frameTimelineLogPath: muxMeta?.frameTimelineLogPath || null,
@@ -3360,11 +3885,16 @@ async function runScenarioTtsMode({ scenarioPath, profileName, outputVideo, ttsV
     console.log(`Render-Zielvideo (noch nicht erzeugt): ${resolvedOutputVideo}`)
     return
   }
+
   console.log(`Profil-Voiceover-Video bereit: ${resolvedOutputVideo}`)
 }
 
 async function main() {
   const parsed = parseArgs(process.argv.slice(2))
+  const central = loadCentralConfig(process.cwd())
+  const videoScriptConfig = getVideoScriptConfig(central.config)
+  const videoIntroConfig = resolveVideoIntroConfig(videoScriptConfig)
+  const videoPresentationConfig = resolveVideoPresentationConfig(videoScriptConfig)
   if (parsed.help) {
     printUsage()
     return
@@ -3398,6 +3928,8 @@ async function main() {
       resolvedOutputVideo,
       tts: parsed.tts,
       ttsVoice: parsed.ttsVoice,
+      videoIntroConfig,
+      videoPresentationConfig,
     })
     return
   }
@@ -3420,6 +3952,8 @@ async function main() {
       resolvedOutputVideo,
       tts: parsed.tts,
       ttsVoice: parsed.ttsVoice,
+      videoIntroConfig,
+      videoPresentationConfig,
     })
     return
   }
@@ -3540,6 +4074,8 @@ async function main() {
       resolvedOutputVideo,
       tts,
       ttsVoice,
+      videoIntroConfig,
+      videoPresentationConfig,
     })
   } catch (error) {
     status = 'failed'
