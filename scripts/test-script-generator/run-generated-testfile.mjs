@@ -238,7 +238,7 @@ function getGeneratedSiblingPathsFromSpec(specAbsolutePath) {
       scenarioRuntimePath: join(specDir, 'generated-scenario-runtime.js'),
       centralFillStrategiesPath: join(specDir, 'central-fill-strategies.mjs'),
       extractPdfCodePath: join(specDir, 'extract-pdf-code.mjs'),
-      resolvedXmlPath: `${stem}.resolved.xml`,
+      resolvedXmlPath: `${stem}.test-resolved.xml`,
       resolvedJsonPath: `${stem}.resolved.json`,
     }
   }
@@ -251,7 +251,7 @@ function getGeneratedSiblingPathsFromSpec(specAbsolutePath) {
     scenarioRuntimePath: join(specDir, 'generated-scenario-runtime.js'),
     centralFillStrategiesPath: join(specDir, 'central-fill-strategies.mjs'),
     extractPdfCodePath: join(specDir, 'extract-pdf-code.mjs'),
-    resolvedXmlPath: `${specAbsolutePath}.resolved.xml`,
+    resolvedXmlPath: `${specAbsolutePath}.test-resolved.xml`,
     resolvedJsonPath: `${specAbsolutePath}.resolved.json`,
   }
 }

@@ -1382,9 +1382,9 @@ function getResolvedJsonOutputPath(specOutputPath) {
 
 function getResolvedXmlOutputPath(specOutputPath) {
   if (specOutputPath.endsWith('.spec.js')) {
-    return specOutputPath.slice(0, -'.spec.js'.length) + '.resolved.xml'
+    return specOutputPath.slice(0, -'.spec.js'.length) + '.test-resolved.xml'
   }
-  return `${specOutputPath}.resolved.xml`
+  return `${specOutputPath}..test-resolved.xml`
 }
 
 function getScenarioSupportPaths(specOutputPath) {
@@ -1501,7 +1501,7 @@ async function cleanOutputDirectory(outDirPath) {
       || entry.name.endsWith('.helpers.mjs')
       || entry.name.endsWith('.env-fill-strategies.mjs')
       || entry.name.endsWith('.resolved.json')
-      || entry.name.endsWith('.resolved.xml')
+      || entry.name.endsWith('.test-resolved.xml')
       || entry.name === 'scenario-helpers.mjs'
       || entry.name === 'generated-scenario-runtime.js'
       || entry.name === 'central-fill-strategies.mjs'

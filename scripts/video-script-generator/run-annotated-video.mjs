@@ -477,7 +477,7 @@ function ensureResolvedJsonForScenarioXml(scenarioAbsolutePath) {
 
 function getResolvedXmlPathForScenarioXml(scenarioAbsolutePath) {
   const scenarioName = basename(scenarioAbsolutePath, extname(scenarioAbsolutePath))
-  return resolve('temp/testfiles', `${scenarioName}.resolved.xml`)
+  return resolve('temp/testfiles', `${scenarioName}.test-resolved.xml`)
 }
 
 function getXmlNodeTag(node) {
@@ -2425,6 +2425,8 @@ function buildFrameTimelineLog({ semanticVideoPlan, outputVideo }) {
 }
 
 function writeSemanticRemotionArtifacts({ inputVideo, outputVideo, adjustedAudioFiles, semanticContext, render = true }) {
+  const debugOverlayEnabled = ['1', 'true', 'yes', 'on']
+    .includes(String(process.env.LUMIERE_VIDEO_DEBUG_OVERLAY || '').trim().toLowerCase())
   const renderPlanPath = `${outputVideo}.remotion-render-plan.json`
   const canonicalModelPath = `${outputVideo}.composition-model.json`
   const semanticVideoPlanPath = `${outputVideo}.semantic-video-plan.json`
@@ -2481,6 +2483,7 @@ function writeSemanticRemotionArtifacts({ inputVideo, outputVideo, adjustedAudio
     semanticPlan: semanticVideoPlan,
     outputFilePath: renderScriptTsxPath,
     runtimeFilePath: semanticRuntimePath,
+    debugOverlay: debugOverlayEnabled,
   })
   const concreteSequenceDocumentTsx = buildConcreteSequenceRemotionTsx({
     semanticPlan: semanticVideoPlan,
@@ -2899,7 +2902,7 @@ async function exportScenarioTtsDebugArtifacts({
   await copyArtifactIfExists(SCENARIO_SCRIPT_XSD_PATH, join(debugDir, 'szenarioscript.xsd'))
   await copyArtifactIfExists(SEMANTIC_VIDEO_PLAN_SCHEMA_PATH, join(debugDir, 'lumiere-semantic-video-plan.schema.json'))
   await copyArtifactIfExists(scenarioAbsolutePath, join(debugDir, basename(String(scenarioAbsolutePath || 'scenario.xml'))))
-  await copyArtifactIfExists(resolvedXmlPath, join(debugDir, basename(String(resolvedXmlPath || 'scenario.resolved.xml'))))
+  await copyArtifactIfExists(resolvedXmlPath, join(debugDir, basename(String(resolvedXmlPath || 'scenario.test-resolved.xml'))))
   await copyArtifactIfExists(resolvedJsonPath, join(debugDir, basename(String(resolvedJsonPath || 'scenario.resolved.json'))))
   await copyArtifactIfExists(muxMeta?.remotionCompositionModelPath, join(debugDir, 'remotion-composition-model.json'))
   await copyArtifactIfExists(muxMeta?.remotionRenderPlanPath, join(debugDir, 'remotion-render-plan.json'))

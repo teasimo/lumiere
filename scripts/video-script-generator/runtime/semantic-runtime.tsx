@@ -305,10 +305,27 @@ const StepRenderer: React.FC<StepRendererProps> = ({ sourceVideo, fps, step, deb
         )
       })}
 
+      {String(step.stepTitle || '').trim() ? (
+        <AbsoluteFill style={{ justifyContent: 'flex-start', alignItems: 'flex-end', padding: 12, pointerEvents: 'none' }}>
+          <div
+            style={{
+              backgroundColor: 'rgba(0,0,0,0.62)',
+              color: 'white',
+              padding: '6px 10px',
+              borderRadius: 6,
+              fontSize: 18,
+              fontWeight: 600,
+            }}
+          >
+            {step.stepTitle}
+          </div>
+        </AbsoluteFill>
+      ) : null}
+
       {debug ? (
         <AbsoluteFill style={{ justifyContent: 'flex-start', alignItems: 'flex-start', padding: 12, pointerEvents: 'none' }}>
           <div style={{ backgroundColor: 'rgba(0,0,0,0.7)', color: 'white', padding: '6px 10px', borderRadius: 6, fontSize: 18 }}>
-            {step.chapterTitle} :: {step.stepTitle}
+            {step.stepId} :: {step.chapterTitle}
           </div>
         </AbsoluteFill>
       ) : null}
@@ -369,7 +386,7 @@ function flattenStepPlans(chapters: Array<{ id: string, title: string, steps: Ar
         chapterId: chapter.id,
         chapterTitle: chapter.title,
         stepId: stepProps.id,
-        stepTitle: stepProps.title || entry.chapterLikeTitle || stepProps.id,
+        stepTitle: stepProps.title || entry.chapterLikeTitle,
         clip: parsed.clip,
         holds: parsed.holds,
         narrations: parsed.narrations,

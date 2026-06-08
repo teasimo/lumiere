@@ -22,8 +22,8 @@
     "run:speechscript": "node scripts/video-script-generator/run-annotated-video.mjs --scenario-tts --profile=all-channels",
     "run:speechscript:force": "node scripts/video-script-generator/run-annotated-video.mjs --scenario-tts --force-video --profile=all-channels",
     "generate:videoscript": "node scripts/video-script-generator/run-annotated-video.mjs --scenario-tts --profile=all-channels --remotion-plan-only",
-    "run:videoscript": "node scripts/video-script-generator/remotion-render.mjs",
-    "run:videoscript:debug": "node scripts/video-script-generator/remotion-render.mjs --keep-temp-project"
+    "run:videoscript": "LUMIERE_VIDEO_DEBUG_OVERLAY=0 node scripts/video-script-generator/remotion-render.mjs",
+    "run:videoscript:debug": "LUMIERE_VIDEO_DEBUG_OVERLAY=1 node scripts/video-script-generator/remotion-render.mjs --keep-temp-project"
   },
   "dependencies": {
     "@google-cloud/text-to-speech": "^6.4.1",

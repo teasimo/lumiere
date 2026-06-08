@@ -85,7 +85,8 @@
     <xs:complexType name="GruppeType">
         <xs:choice minOccurs="0" maxOccurs="unbounded">
             <xs:element name="Folie" type="TextBlockType"/>
-            <xs:element name="Banner" type="TextBlockType"/>
+            <xs:element name="Kapitel" type="TextBlockType"/>
+            <xs:element name="Schritt" type="TextBlockType"/>
             <xs:element name="VideoStop" type="VideoStopType"/>
             <xs:element name="VideoStart" type="VideoStartType"/>
             <xs:element name="Info" type="InfoType"/>

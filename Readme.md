@@ -194,7 +194,7 @@ Relevant fuer `scripts/video-script-generator/run-annotated-video.mjs` und `scri
 
 Wichtig:
 
-- Der Video-Script-Generator konsumiert je nach Modus zusaetzlich `resolved.json`, `resolved.xml`, `scenario-step-timeline.json`, `trace.zip`, Demo-Artefakte und das Rohvideo aus dem Testlauf.
+- Der Video-Script-Generator konsumiert je nach Modus zusaetzlich `resolved.json`, `test-resolved.xml`, `scenario-step-timeline.json`, `trace.zip`, Demo-Artefakte und das Rohvideo aus dem Testlauf.
 - `<Folie>`, `<Info>`, `<Ton>` und `<Video>` haben in der aktuellen XML-Pipeline fuer `run:speechscript` und `run:videoscript` keine direkte Auswirkung allein durch ihre Existenz im XML.
 
 ## Relevante Skripte

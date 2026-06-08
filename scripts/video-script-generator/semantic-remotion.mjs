@@ -936,7 +936,7 @@ function msToDurationFramesCeilForDocument(ms, fps) {
   return Math.max(1, Math.ceil((Math.max(0, Number(ms || 0)) / 1000) * fps))
 }
 
-export function buildSemanticRemotionTsx({ semanticPlan, outputFilePath, runtimeFilePath }) {
+export function buildSemanticRemotionTsx({ semanticPlan, outputFilePath, runtimeFilePath, debugOverlay = false }) {
   const runtimeImportPath = normalizeImportSpecifier(relative(dirname(outputFilePath), runtimeFilePath))
   const lines = [
     "import React from 'react'",
@@ -956,7 +956,7 @@ export function buildSemanticRemotionTsx({ semanticPlan, outputFilePath, runtime
     '',
     'export default function GeneratedSemanticVideoScript() {',
     '  return (',
-    `    <VideoScript id={semanticVideoPlan.id} sourceVideo={__stagedAsset(semanticVideoPlan.source.videoPath)} debug>`,
+    `    <VideoScript id={semanticVideoPlan.id} sourceVideo={__stagedAsset(semanticVideoPlan.source.videoPath)}${debugOverlay ? ' debug' : ''}>`,
   ]
 
   for (const chapter of semanticPlan.chapters || []) {
