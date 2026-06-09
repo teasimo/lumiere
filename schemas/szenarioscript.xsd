@@ -106,6 +106,7 @@
             <xs:element name="Click" type="ClickType"/>
             <xs:element name="Eingabe" type="KomponentInputType"/>
             <xs:element name="Auswahl" type="KomponentInputType"/>
+            <xs:element name="Upload" type="KomponentInputType"/>
             <xs:element name="Anzeige" type="InteractionType"/>
             <xs:element name="Auslesen" type="AuslesenType"/>
             <xs:element name="Gruppe" type="GruppeType"/>
@@ -124,6 +125,7 @@
             <xs:element name="Click" type="ClickType"/>
             <xs:element name="Eingabe" type="KomponentInputType"/>
             <xs:element name="Auswahl" type="KomponentInputType"/>
+            <xs:element name="Upload" type="KomponentInputType"/>
             <xs:element name="Anzeige" type="InteractionType"/>
             <xs:element name="Auslesen" type="AuslesenType"/>
             <xs:element name="Warten" type="WartenType"/>

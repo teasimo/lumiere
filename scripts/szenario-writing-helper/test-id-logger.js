@@ -8,7 +8,7 @@
 
   const selectorStrategies = [
     {
-      key: 'testid',
+      key: 'data-testid',
       closestSelector: '[data-testid]',
       getValue: (el) => el?.dataset?.testid || null
     },
@@ -99,6 +99,14 @@
     }
 
     const tagName = String(element.tagName || '').toLowerCase()
+    const inputType = String(element.getAttribute?.('type') || '').toLowerCase()
+    if (tagName === 'input' && inputType === 'file') {
+      const files = Array.from(element.files || [])
+        .map((file) => String(file?.name || '').trim())
+        .filter(Boolean)
+      return files.join(', ')
+    }
+
     if (tagName === 'input' || tagName === 'textarea' || tagName === 'select') {
       return String(element.value ?? '')
     }
@@ -120,22 +128,79 @@
   }
 
   function logJsonSnippet(entry) {
-    const target = entry.interaction.target || {}
-    const interactionType = entry.interaction.type
-    const firstTargetValue = String(Object.values(target)[0] || '')
-    const snippet = {
-      id: entry.id || firstTargetValue,
-      interaction: {
-        type: interactionType,
-        target,
-      },
+    console.log(buildXmlSnippet(entry))
+  }
+
+  function escapeXml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;')
+  }
+
+  function toScenarioTagName(interactionType) {
+    switch (String(interactionType || '').toLowerCase()) {
+      case 'click':
+        return 'Click'
+      case 'fill':
+        return 'Eingabe'
+      case 'select':
+        return 'Auswahl'
+      case 'upload':
+        return 'Upload'
+      default:
+        return 'Aktion'
+    }
+  }
+
+  function buildScenarioAttributes(entry) {
+    const interactionType = String(entry?.interaction?.type || '').toLowerCase()
+    const target = entry?.interaction?.target && typeof entry.interaction.target === 'object'
+      ? entry.interaction.target
+      : {}
+    const attributes = []
+
+    if (target['data-id']) {
+      attributes.push(['data-id', target['data-id']])
+    } else {
+      for (const key of ['data-testid', 'id', 'name', 'text', 'aria-label']) {
+        const value = String(target[key] || '').trim()
+        if (value) {
+          attributes.push([key, value])
+        }
+      }
     }
 
-    if (entry.interaction.value != null) {
-      snippet.interaction.value = String(entry.interaction.value)
+    if (interactionType === 'click' && !target['data-id']) {
+      for (const key of ['text', 'aria-label']) {
+        const value = String(target[key] || '').trim()
+        if (value && !attributes.some(([existingKey]) => existingKey === key)) {
+          attributes.push([key, value])
+        }
+      }
     }
 
-    console.log(JSON.stringify(snippet, null, 2))
+    return attributes
+  }
+
+  function buildXmlSnippet(entry) {
+    const interactionType = String(entry?.interaction?.type || '').toLowerCase()
+    const tagName = toScenarioTagName(interactionType)
+    const attributes = buildScenarioAttributes(entry)
+    const renderedAttributes = attributes
+      .map(([key, value]) => `${key}="${escapeXml(value)}"`)
+      .join(' ')
+    const attributeSuffix = renderedAttributes ? ` ${renderedAttributes}` : ''
+    const rawValue = entry?.interaction?.value
+    const value = rawValue == null ? '' : String(rawValue)
+
+    if (interactionType === 'fill' || interactionType === 'select' || interactionType === 'upload') {
+      return `<${tagName}${attributeSuffix}>${escapeXml(value)}</${tagName}>`
+    }
+
+    return `<${tagName}${attributeSuffix}/>`
   }
 
   function recordInteraction(eventName, eventTarget, interactionType, options = {}) {
@@ -193,6 +258,17 @@
   document.addEventListener(
     'click',
     (event) => {
+      const target = event.target
+      if (target instanceof Element) {
+        const interactiveField = target.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]')
+        if (interactiveField) {
+          return
+        }
+        const uploadInput = target.closest('input[type="file"]')
+        if (uploadInput) {
+          return
+        }
+      }
       recordInteraction('click', event.target, 'click')
     },
     true
@@ -208,11 +284,22 @@
 
       const role = String(target.getAttribute('role') || '').toLowerCase()
       const tagName = String(target.tagName || '').toLowerCase()
+      const inputType = String(target.getAttribute('type') || '').toLowerCase()
+      const isFileUpload = tagName === 'input' && inputType === 'file'
       const isSelectLike =
         tagName === 'select' ||
         role === 'combobox' ||
         role === 'listbox' ||
         String(target.getAttribute('aria-haspopup') || '').toLowerCase() === 'listbox'
+
+      if (isFileUpload) {
+        recordInteraction('change', target, 'upload', {
+          readValue: true,
+          skipEmptyValue: true,
+          dedupeByValue: true
+        })
+        return
+      }
 
       if (!isSelectLike) {
         return
@@ -236,6 +323,10 @@
       }
 
       const tagName = String(target.tagName || '').toLowerCase()
+      const inputType = String(target.getAttribute('type') || '').toLowerCase()
+      if (tagName === 'input' && inputType === 'file') {
+        return
+      }
       const isFillable =
         tagName === 'input' ||
         tagName === 'textarea' ||
@@ -267,6 +358,12 @@
       const jsonText = JSON.stringify(interactions, null, 2)
       console.log(jsonText)
       return jsonText
+    },
+
+    exportXml() {
+      const xmlText = interactions.map((entry) => buildXmlSnippet(entry)).join('\n')
+      console.log(xmlText)
+      return xmlText
     }
   }
 
@@ -276,5 +373,6 @@ Verfügbare Befehle:
 __interactionRecorder.getAll()
 __interactionRecorder.clear()
 __interactionRecorder.exportJson()
+__interactionRecorder.exportXml()
 `)
 })()

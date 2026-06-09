@@ -1,0 +1,130 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<SzenarioScript id="login" szenario-version="1.0" status="Entwurf" neo-version-min="6.0" titel="Schüler*innen-Datensätze zusammenführen">
+  <Einstellungen>
+    <Gruppe name="video">
+      <Einstellung name="autoscroll_smooth" value="True"/>
+      <Einstellung name="wait_between_steps" value="1000"/>
+      <Gruppe name="resolution">
+        <Einstellung name="width" value="1280"/>
+        <Einstellung name="height" value="720"/>
+      </Gruppe>
+    </Gruppe>
+    <Gruppe name="presentation">
+      <Gruppe name="indicators">
+        <Gruppe name="click">
+          <Einstellung name="enabled" value="True"/>
+          <Einstellung name="before_ms" value="800"/>
+          <Einstellung name="after_ms" value="100"/>
+          <Einstellung name="fade_ms" value="50"/>
+        </Gruppe>
+      </Gruppe>
+    </Gruppe>
+  </Einstellungen>
+  <Daten>
+    <Datensatz name="runtime">
+      <Wert name="base_url" value="https://neo-test.de"/>
+    </Datensatz>
+    <Wert name="random" value="{{randomNumber()}}"/>
+    <Datensatz name="actor">
+      <Wert name="username" value="schule_05320_schulleitung"/>
+      <Wert name="password" value="!Neo-2405Neo!"/>
+    </Datensatz>
+    <Datensatz name="schueler">
+      <Wert name="vorname" value="Mark {{random}}"/>
+      <Wert name="nachname" value="Mustermann {{random}}"/>
+      <Wert name="geburtsdatum" value="01.01.2020"/>
+      <Wert name="geburtsort" value="Musterstadt"/>
+      <Wert name="adresseSuche" value="Fuchsbau 3 Emmerke"/>
+    </Datensatz>
+    <Datensatz name="schueler.ez1">
+      <Wert name="anrede" value="Frau"/>
+      <Wert name="vorname" value="Laura"/>
+      <Wert name="nachname" value="Mustermann"/>
+      <Wert name="geburtsdatum" value="01.01.1975"/>
+      <Wert name="geburtsort" value="Musterstadt"/>
+      <Wert name="adresseSuche" value="Fuchsbau 3 Emmerke"/>
+    </Datensatz>
+    <Datensatz name="schueler.ez2">
+      <Wert name="anrede" value="Herr"/>
+      <Wert name="vorname" value="Niklas"/>
+      <Wert name="nachname" value="Mustermann"/>
+      <Wert name="geburtsdatum" value="01.01.1970"/>
+      <Wert name="geburtsort" value="Musterstadt"/>
+      <Wert name="adresseSuche" value="Fuchsbau 3 Emmerke"/>
+    </Datensatz>
+  </Daten>
+  <Variablen>
+    <Variable name="random"/>
+  </Variablen>
+
+  <!-- Vorbereitung -->
+  <Gruppe>
+
+
+
+    <Folie>Dies ist eine Folie mit MK- und NEO-Logo</Folie>
+    <Kapitel>Dies ist ein KapitelLogin</Kapitel>
+    <Schritt>Einloggen</Schritt>
+
+    <!-- Login -->
+    <Fragment name="neo-login">
+      <Parameter name="url" value="{{runtime.base_url}}"/>
+      <Parameter name="username" value="{{actor.username}}"/>
+      <Parameter name="password" value="{{actor.password}}"/>
+    </Fragment>
+
+    <VideoStart/>
+
+    <Info typ="Erklärung">Diese Beschreibung sollte man hören, wenn man die Kapitel-Folie mit der Beschriftung - Lala-  sieht. </Info>
+    <Kapitel>Lala</Kapitel>
+    <Schritt>Navigiere zum Hauptmenü "Personalverwaltung"</Schritt>
+
+    <Info typ="Erklärung">Diese Beschreibung sollte erst starten, wenn die vorige Folie nicht mehr sichtbar ist - dafür aber NEO. Außerdem sollte es fertig sein, bevor der Clickweg beginnt.</Info>
+    <Fragment name="neo-hauptmenue-personal-personalverwaltung"/>
+
+  </Gruppe>
+
+  <Gruppe>
+    <Info typ="Erklärung" interaktion="währenddessen">Diese Beschreibung begleitet den folgenden Clickweg. Da sie länger als der Clickweg selbst ist, wird das Video am Ende ein Standbild zeigen bis die Beschreibung abgeschlossen ist. Erst dann wird der Clickweg fortgesetzt - Also Mein Profil geöffnet. Damit das deutlicher wird, erzähle ich an dieser Stelle gerne noch von der Heisenbergschen Unschärferelation. Keine Panik, das lassen wir lieber.</Info>
+
+    <Fragment name="neo-hauptmenue-sus-meldedaten"/>
+
+
+  </Gruppe>
+
+  <Gruppe>
+
+    <Fragment name="neo-hauptmenue-mein-profil"/>
+
+
+    <Info typ="Erklärung">
+    Für weitere Informationen und Hilfe nutzen Sie bitte dargebotenen Anleitungen und Videos innerhalb von NEO Niedersachsen.
+    </Info>
+
+    <Fragment name="neo-untermenue">
+      <Parameter name="hauptmenue-data-id" value="menu/item/hilfe/"/>
+
+      <Parameter name="untermenue-data-id" value="menu/link/hilfe/kurzanleitung/"/>
+    </Fragment>
+
+    <Info typ="Erklärung">
+    Wenn dies nicht weiterhilft, können Sie sich gerne an den NEO Support wenden. Sie erreichen am besten über das Kontaktformular, uns direkt hilfreiche Informationen zu Ihrem Anliegen - wie beispielsweise Ihre Browserverson - mitliefert.
+    </Info>
+
+    <Fragment name="neo-untermenue">
+      <Parameter name="hauptmenue-data-id" value="menu/item/hilfe/"/>
+
+      <Parameter name="untermenue-data-id" value="menu/link/hilfe/supportanfrage/"/>
+    </Fragment>
+
+    <Folie>Vielen Dank für die Aufmerksamkeit</Folie>
+
+    <VideoStop/>
+
+
+  </Gruppe>
+
+
+
+
+</SzenarioScript>

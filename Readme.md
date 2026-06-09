@@ -65,13 +65,13 @@ Exportierte Video-Artefakte:
 - `output/<name>/runs/<runId>/generated/...`
 - `output/<name>/runs/<runId>/report/...` (bei verbose-Checks)
 - `output/<name>/runs/<runId>/run-meta.json` (Status inkl. fehlgeschlagener/abgebrochener Laeufe)
-- `output/<scenario>_v<version>/tts/...`
+- `output/<scenario>/videogenerator/...`
 
 Manuelle Annotate-Video-Laeufe:
 
-- `output/<testname>/manual-runs/<runId>/artifacts/...`
-- `output/<testname>/manual-runs/<runId>/final/...`
-- `output/<testname>/manual-runs/<runId>/run-meta.json` (Status inkl. Fehlschlaegen)
+- `output/<scenario>/videogenerator/<runId>/artifacts/...`
+- `output/<scenario>/videogenerator/<runId>/final/...`
+- `output/<scenario>/videogenerator/<runId>/run-meta.json` (Status inkl. Fehlschlaegen)
 
 Timeline-Datei aus Testlauf:
 

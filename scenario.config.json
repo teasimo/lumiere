@@ -56,7 +56,9 @@
         "pauses": {
           "between_channels_ms": 200,
           "before_action_ms": 300,
-          "after_action_ms": 300
+          "after_action_ms": 300,
+          "narration_freeze_before_ms": 0,
+          "narration_freeze_after_ms": 0
         }
       }]
     }

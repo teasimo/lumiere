@@ -12,6 +12,7 @@ import {
 } from './templates/spec-template-base.mjs'
 import { getTestScriptConfig, loadCentralConfig } from '../shared/central-config.mjs'
 import { centralDataFunctions } from './central-data-functions.mjs'
+import { buildScenarioOutputFolderName, sanitizeScenarioOutputToken } from '../shared/scenario-output.mjs'
 
 const execFileAsync = promisify(execFile)
 
@@ -40,6 +41,7 @@ const INTERACTION_TAGS = new Set([
   'Click',
   'Eingabe',
   'Auswahl',
+  'Upload',
   'Anzeige',
   'Warten',
   'Oeffnen',
@@ -935,6 +937,18 @@ function mapInteractionElementToStep(element, makeStepId) {
     })
   }
 
+  if (tag === 'Upload') {
+    const value = trimmedText || String(attrs.text || '')
+    return withResolvedMeta({
+      id: makeStepId(element, 'upload'),
+      interaction: {
+        type: 'upload',
+        target: buildTargetFromAttributes(attrs, { includeText: false }),
+        value,
+      },
+    })
+  }
+
   if (tag === 'Anzeige') {
     return withResolvedMeta({
       id: makeStepId(element, 'show'),
@@ -1432,31 +1446,7 @@ async function writeScenarioSupportFiles({ specOutputPath, envFillStrategiesAbso
 }
 
 function sanitizeFileToken(value, fallback = 'scenario') {
-  return String(value || fallback)
-    .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, '-')
-    .replace(/^-+|-+$/g, '') || fallback
-}
-
-function normalizeScenarioVersionForFolder(value) {
-  let normalized = value
-
-  if (typeof normalized === 'number' && Number.isFinite(normalized)) {
-    if (Number.isInteger(normalized)) {
-      normalized = `${normalized}.0`
-    } else {
-      normalized = String(normalized)
-    }
-  }
-
-  const token = sanitizeFileToken(normalized || 'unknown', 'unknown')
-  return token.replace(/\./g, '_')
-}
-
-function buildScenarioOutputFolderName({ scenarioId, scenarioVersion }) {
-  const normalizedId = sanitizeFileToken(scenarioId || 'scenario', 'scenario')
-  const normalizedVersion = normalizeScenarioVersionForFolder(scenarioVersion || 'unknown')
-  return `${normalizedId}_v${normalizedVersion}`
+  return sanitizeScenarioOutputToken(value, fallback)
 }
 
 async function collectScenarioFiles(options) {
@@ -1553,7 +1543,6 @@ async function generateOne(scenarioFilePath, outDirPath, options, centralConfig)
 
   const scenarioFolderName = buildScenarioOutputFolderName({
     scenarioId: resolvedRoot.id,
-    scenarioVersion: resolvedRoot.version,
   })
   const scenarioOutputGeneratedDir = resolve(workspaceRoot, 'output', scenarioFolderName, 'generated')
   await mkdir(scenarioOutputGeneratedDir, { recursive: true })

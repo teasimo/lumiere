@@ -104,6 +104,7 @@ const RESOLVED_ID_RELEVANT_TAGS = new Set([
   'Click',
   'Eingabe',
   'Auswahl',
+  'Upload',
   'Anzeige',
   'Warten',
   'Oeffnen',

@@ -745,7 +745,7 @@ function hasUsableScrollTarget(target) {
 }
 
 function isInteractionTypeNeedingAutoScroll(interactionType) {
-  return ['click', 'fill', 'append', 'select', 'search-and-select'].includes(interactionType)
+  return ['click', 'fill', 'append', 'select', 'upload', 'search-and-select'].includes(interactionType)
 }
 
 function injectAutoScrollSteps(flowEntries, options = {}, path = []) {
@@ -1059,6 +1059,23 @@ function buildInteractionLines(step, options = {}) {
       const selectorType = target['data-id'] ? 'data-id' : 'id'
       const value = target['data-id'] || target.id
       lines.push(`await applySelectValueById(page, ${toLiteral(String(value))}, ${toLiteral(String(interaction.value || ''))}, ${toLiteral(selectorType)}, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true })`)
+    }
+  } else if (interactionType === 'upload') {
+    if (!target.testid && !target.id && !target['data-id'] && !buildGenericTargetSelector(target)) {
+      throw new Error(`Step "${step.id}" has interaction type "upload" but no usable target fields.`)
+    }
+    if (interaction.value == null || String(interaction.value).trim() === '') {
+      throw new Error(`Step "${step.id}" has interaction type "upload" but no file value. Use the XML text content to name the file in neo/assets.`)
+    }
+    const resolvedFileExpr = `resolveRuntimeTemplateString(${toLiteral(String(interaction.value || ''))}, runtimeVariables)`
+    if (target.testid) {
+      lines.push(`await applyUploadValue(page, ${toLiteral(String(target.testid))}, ${resolvedFileExpr}, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true })`)
+    } else if (buildGenericTargetSelector(target)) {
+      lines.push(`await applyUploadValueById(page, ${toLiteral(buildGenericTargetSelector(target))}, ${resolvedFileExpr}, "selector", { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true })`)
+    } else {
+      const selectorType = target['data-id'] ? 'data-id' : 'id'
+      const value = target['data-id'] || target.id
+      lines.push(`await applyUploadValueById(page, ${toLiteral(String(value))}, ${resolvedFileExpr}, ${toLiteral(selectorType)}, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true })`)
     }
   } else if (interactionType === 'scroll') {
     const focus = interaction.focus === true

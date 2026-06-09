@@ -1,8 +1,0 @@
-fragment:
-  id: neo-hauptmenue-home
-  
-  flow:
-    - id: neo-hauptmenue-home
-      fragment: neo-hauptmenue
-      with:
-        hauptmenue-data-id: "menu/link/"

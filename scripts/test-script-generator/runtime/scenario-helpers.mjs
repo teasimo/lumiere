@@ -1,7 +1,12 @@
-import { writeFile } from 'fs/promises'
+import { access, writeFile } from 'fs/promises'
+import { dirname, isAbsolute, join, resolve } from 'path'
+import { fileURLToPath } from 'url'
 import { centralFillStrategies } from "./central-fill-strategies.mjs"
 import { extractCodeFromPdf } from "./extract-pdf-code.mjs"
 export { createScenarioTimelineRuntime } from "./generated-scenario-runtime.js"
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const REPO_ROOT = resolve(__dirname, '../..')
 
 let envFillStrategiesImportPath = null
 let fillStrategiesCache
@@ -136,6 +141,50 @@ async function loadEnvFillStrategies() {
 
   fillStrategiesCache = strategies
   return fillStrategiesCache
+}
+
+async function resolveUploadAssetPath(rawPath) {
+  const requestedPath = String(rawPath ?? '').trim()
+  if (!requestedPath) {
+    throw new Error('Upload requires a non-empty file path.')
+  }
+
+  const candidatePaths = isAbsolute(requestedPath)
+    ? [requestedPath]
+    : [
+        resolve(REPO_ROOT, 'neo', 'assets', requestedPath),
+        resolve(REPO_ROOT, requestedPath),
+      ]
+
+  for (const candidatePath of candidatePaths) {
+    try {
+      await access(candidatePath)
+      return candidatePath
+    } catch {
+      // try next candidate
+    }
+  }
+
+  throw new Error(`Upload-Datei nicht gefunden: ${requestedPath}. Erwartet unter neo/assets oder als absoluter/relativer Pfad.`)
+}
+
+async function resolveUploadLocator(page, locator) {
+  const rootLocator = locator.first()
+  await rootLocator.waitFor({ state: 'attached' })
+
+  const isFileInput = await rootLocator.evaluate((el) => {
+    const tagName = String(el?.tagName || '').toLowerCase()
+    const inputType = String(el?.getAttribute?.('type') || '').toLowerCase()
+    return tagName === 'input' && inputType === 'file'
+  }).catch(() => false)
+
+  if (isFileInput) {
+    return rootLocator
+  }
+
+  const fileInputLocator = rootLocator.locator('input[type="file"]').first()
+  await fileInputLocator.waitFor({ state: 'attached' })
+  return fileInputLocator
 }
 
 export function resolveRuntimeTemplateString(value, runtimeVariables) {
@@ -869,6 +918,27 @@ export async function applySelectValueById(page, elementId, value, selectorType 
   }
 
   throw new Error(`No select strategy found for id="#${elementId}". Add a strategy to env/fill-strategies.mjs for this component.`)
+}
+
+export async function applyUploadValue(page, testId, value, options = {}) {
+  const rootLocator = page.getByTestId(testId).first()
+  await ensureLocatorScroll(page, rootLocator, options)
+  const fileLocator = await resolveUploadLocator(page, rootLocator)
+  const uploadPath = await resolveUploadAssetPath(value)
+  await fileLocator.setInputFiles(uploadPath)
+}
+
+export async function applyUploadValueById(page, elementId, value, selectorType = "id", options = {}) {
+  const selector = selectorType === "data-id"
+    ? `[data-id=${JSON.stringify(String(elementId))}]`
+    : selectorType === "selector"
+      ? String(elementId)
+      : `[id=${JSON.stringify(String(elementId))}]`
+  const rootLocator = page.locator(selector).first()
+  await ensureLocatorScroll(page, rootLocator, options)
+  const fileLocator = await resolveUploadLocator(page, rootLocator)
+  const uploadPath = await resolveUploadAssetPath(value)
+  await fileLocator.setInputFiles(uploadPath)
 }
 
 export async function applyAppendValue(page, testId, value) {

@@ -6,6 +6,7 @@ import { basename, dirname, extname, join, relative, resolve } from 'path'
 import { spawnSync } from 'child_process'
 import { XMLParser } from 'fast-xml-parser'
 import { getTestScriptConfig, loadCentralConfig } from '../shared/central-config.mjs'
+import { buildScenarioOutputRoot, sanitizeScenarioOutputToken } from '../shared/scenario-output.mjs'
 
 const workspaceRoot = process.cwd()
 const fallbackScenarioPath = 'neo/interactions/dubletten-aufloesen/FR1-case-sus-dubletten-zusammenfuehren.xml'
@@ -129,31 +130,7 @@ function normalizeWorkspaceRelativePath(pathValue) {
 }
 
 function sanitizeFileToken(value, fallback = 'unknown') {
-  return String(value || fallback)
-    .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, '-')
-    .replace(/^-+|-+$/g, '') || fallback
-}
-
-function normalizeScenarioVersionForFolder(value) {
-  let normalized = value
-
-  if (typeof normalized === 'number' && Number.isFinite(normalized)) {
-    if (Number.isInteger(normalized)) {
-      normalized = `${normalized}.0`
-    } else {
-      normalized = String(normalized)
-    }
-  }
-
-  const token = sanitizeFileToken(normalized || 'unknown', 'unknown')
-  return token.replace(/\./g, '_')
-}
-
-function buildScenarioOutputFolderName({ scenarioId, scenarioVersion }) {
-  const normalizedId = sanitizeFileToken(scenarioId || 'scenario', 'scenario')
-  const normalizedVersion = normalizeScenarioVersionForFolder(scenarioVersion || 'unknown')
-  return `${normalizedId}_v${normalizedVersion}`
+  return sanitizeScenarioOutputToken(value, fallback)
 }
 
 function readScenarioIdentity(scenarioAbsolutePath) {
@@ -189,7 +166,7 @@ function countRenderedFlowSteps(flowEntries) {
         && target[key] != null
       ))
     )
-    if (['click', 'fill', 'append', 'select', 'search-and-select'].includes(interactionType) && hasUsableScrollTarget) {
+    if (['click', 'fill', 'append', 'select', 'upload', 'search-and-select'].includes(interactionType) && hasUsableScrollTarget) {
       count += 1
     }
 
@@ -560,10 +537,9 @@ async function main() {
   })
 
   const scenarioAbsolutePath = resolve(workspaceRoot, options.scenarioPath)
-  const { scenarioId, scenarioVersion } = readScenarioIdentity(scenarioAbsolutePath)
-  const scenarioFolderName = buildScenarioOutputFolderName({ scenarioId, scenarioVersion })
+  const { scenarioId } = readScenarioIdentity(scenarioAbsolutePath)
   const scenarioRunId = buildScenarioRunId()
-  const scenarioRoot = resolve(workspaceRoot, 'output', scenarioFolderName)
+  const scenarioRoot = buildScenarioOutputRoot(workspaceRoot, scenarioId)
   const runRoot = join(scenarioRoot, 'runs', scenarioRunId)
   const artifactsDir = join(runRoot, 'artifacts')
   const reportDir = join(runRoot, 'report')

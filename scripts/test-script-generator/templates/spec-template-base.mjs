@@ -9,6 +9,8 @@ const SCENARIO_HELPER_EXPORT_NAMES = [
   'applyFillValueById',
   'applySelectValue',
   'applySelectValueById',
+  'applyUploadValue',
+  'applyUploadValueById',
   'assertElementValueById',
   'assertElementValueByTestId',
   'configureScenarioHelpers',

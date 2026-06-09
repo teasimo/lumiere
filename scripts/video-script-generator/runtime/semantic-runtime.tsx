@@ -111,6 +111,12 @@ export const VideoScript: React.FC<VideoScriptProps> = ({
       startMs,
     }
   })
+  const globalNarrations = planned.flatMap((step) =>
+    step.narrations.map((narration) => ({
+      ...narration,
+      stepStartMs: step.startMs,
+    }))
+  )
 
   return (
     <AbsoluteFill>
@@ -122,6 +128,15 @@ export const VideoScript: React.FC<VideoScriptProps> = ({
           <OffthreadVideo src={introVideo} />
         </Sequence>
       ) : null}
+      {globalNarrations.map((narration, index) => {
+        const absoluteAtMs = Math.max(0, Number(narration.atMs || 0))
+        const from = msToSequenceFromMs(absoluteAtMs + Math.max(0, Number(introDurationMs || 0)), fps)
+        return (
+          <Sequence key={narration.id || `global-narration-${index}`} from={from}>
+            <Audio src={narration.file} />
+          </Sequence>
+        )
+      })}
       {planned.map((step) => {
         const from = msToSequenceFromMs(step.startMs + Math.max(0, Number(introDurationMs || 0)), fps)
         const to = Math.max(
@@ -225,16 +240,6 @@ const StepRenderer: React.FC<StepRendererProps> = ({ sourceVideo, fps, step, ste
                 muted
               />
             </RemotionFreeze>
-          </Sequence>
-        )
-      })}
-
-      {step.narrations.map((narration, index) => {
-        const localAtMs = Math.max(0, Number(narration.atMs || 0) - stepStartMs)
-        const from = msToSequenceFromMs(localAtMs, fps)
-        return (
-          <Sequence key={narration.id || `narration-${index}`} from={from}>
-            <Audio src={narration.file} />
           </Sequence>
         )
       })}
@@ -365,13 +370,18 @@ function getCalloutLayerStyle({ isSlideCard, isStepOverlay, isChapterCard, textY
 
   if (isChapterCard) {
     return {
-      justifyContent: 'flex-start',
-      alignItems: 'stretch',
-      paddingTop: textYStart ?? 160,
-      paddingLeft: 32,
-      paddingRight: 32,
-      backgroundColor: 'rgb(38, 25, 223)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 48,
+      backgroundColor: 'rgb(255, 255, 255)',
       pointerEvents: 'none',
+      // justifyContent: 'flex-start',
+      // alignItems: 'stretch',
+      // paddingTop: textYStart ?? 160,
+      // paddingLeft: 32,
+      // paddingRight: 32,
+      // backgroundColor: 'rgb(38, 25, 223)',
+      // pointerEvents: 'none',
     }
   }
 
@@ -417,13 +427,27 @@ function getCalloutContentStyle({ callout, isSlideCard, isStepOverlay, isChapter
 
   if (isChapterCard) {
     return {
-      color: 'white',
+      // color: 'white',
+      // fontWeight: 700,
+      // fontSize: Number(callout.fontSize || 54),
+      // lineHeight: 1.2,
+      // textAlign: 'center',
+      // textShadow: '0 4px 18px rgba(0,0,0,0.45)',
+      // whiteSpace: 'pre-wrap',
+      color: 'black',
       fontWeight: 700,
-      fontSize: Number(callout.fontSize || 54),
+      fontFamily: 'DejaVu Sans, Arial, Helvetica, sans-serif',
+      fontSize: Number(callout.fontSize || 56),
       lineHeight: 1.2,
       textAlign: 'center',
-      textShadow: '0 4px 18px rgba(0,0,0,0.45)',
       whiteSpace: 'pre-wrap',
+      maxWidth: '84%',
+      width: '84%',
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'center',
+      alignItems: 'center',
+      minHeight: '62%',
     }
   }
 
@@ -561,7 +585,7 @@ function sourceToPlanOffsetMs(sourceMs: number, sourceStartMs: number, holds: Ho
   const clampedSourceMs = Math.max(sourceStartMs, Number(sourceMs || sourceStartMs))
   let offsetMs = Math.max(0, clampedSourceMs - sourceStartMs)
   for (const hold of holds) {
-    if (hold.atSourceMs <= clampedSourceMs) {
+    if (hold.atSourceMs < clampedSourceMs) {
       offsetMs += hold.durationMs
     }
   }
