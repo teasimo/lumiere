@@ -200,9 +200,10 @@ function buildNarrationGroups(adjustedAudioFiles) {
     if (!narrationsByStepId.has(stepId)) {
       narrationsByStepId.set(stepId, [])
     }
+    const rawFile = String(entry?.file || '').trim()
     narrationsByStepId.get(stepId).push({
       id: String(entry?.id || stepId),
-      file: resolve(String(entry?.file || '')),
+      file: rawFile ? resolve(rawFile) : null,
       atMs: Math.max(0, Math.floor(Number(entry?.finalOutputStartMs != null ? entry.finalOutputStartMs : entry?.startMs || 0))),
       channel: String(entry?.sourceChannel || '').trim() || undefined,
     })
@@ -325,7 +326,7 @@ function toSlideCallout(slide, slideDefaults = null) {
 function toStepOverlayCallout({ chapterTitle, stepTitle, durationMs, rowIndex }) {
   const chapter = String(chapterTitle || '').trim()
   const step = String(stepTitle || '').trim()
-  const text = [chapter, step].filter(Boolean).join('\n')
+  const text = [chapter, step].filter(Boolean).join(' :: ')
   if (!text) {
     return null
   }
@@ -1058,6 +1059,7 @@ export function buildSemanticRemotionTsx({ semanticPlan, outputFilePath, runtime
         lines.push(`          <Pause atSourceMs={${Math.max(0, Number(pause?.atSourceMs || 0))}} durationMs={${Math.max(1, Number(pause?.durationMs || 1))}} />`)
       }
       for (const narration of step.narrations || []) {
+        if (!narration.file) continue
         lines.push(`          <Narration id=${renderJsxText(narration.id)} file={__stagedAsset(${renderJsxText(narration.file)})} atMs={${Math.max(0, Number(narration?.atMs || 0))}} />`)
       }
       for (const callout of step.callouts || []) {
@@ -1115,11 +1117,13 @@ export function buildRemotionRenderPlan({ semanticPlan, outputVideo, adjustedAud
     fps,
     outputDurationSec: outputDurationMs / 1000,
     durationInFrames: Math.max(1, Math.ceil((outputDurationMs / 1000) * fps)),
-    narrations: allNarrations.map((entry) => ({
-      id: String(entry?.id || ''),
-      file: resolve(String(entry?.file || '')),
-      startMs: Math.max(0, Math.floor(Number(entry?.finalOutputStartMs != null ? entry.finalOutputStartMs : entry?.startMs || 0))),
-    })),
+    narrations: allNarrations
+      .filter((entry) => Boolean(String(entry?.file || '').trim()))
+      .map((entry) => ({
+        id: String(entry?.id || ''),
+        file: resolve(String(entry?.file || '')),
+        startMs: Math.max(0, Math.floor(Number(entry?.finalOutputStartMs != null ? entry.finalOutputStartMs : entry?.startMs || 0))),
+      })),
   }
 }
 

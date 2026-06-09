@@ -131,7 +131,7 @@ export const VideoScript: React.FC<VideoScriptProps> = ({
         const durationInFrames = Math.max(1, to - from)
         return (
           <Sequence key={`${step.chapterId}:${step.stepId}`} from={from} durationInFrames={durationInFrames}>
-            <StepRenderer sourceVideo={sourceVideo} fps={fps} step={step} debug={debug} />
+          <StepRenderer sourceVideo={sourceVideo} fps={fps} step={step} stepGlobalStartMs={step.startMs + Math.max(0, Number(introDurationMs || 0))} debug={debug} />
           </Sequence>
         )
       })}
@@ -153,10 +153,11 @@ type StepRendererProps = {
   sourceVideo: string
   fps: number
   step: StepPlan
+  stepGlobalStartMs: number
   debug: boolean
 }
 
-const StepRenderer: React.FC<StepRendererProps> = ({ sourceVideo, fps, step, debug }) => {
+const StepRenderer: React.FC<StepRendererProps> = ({ sourceVideo, fps, step, stepGlobalStartMs, debug }) => {
   const sourceStartMs = Math.max(0, Number(step.clip.sourceStartMs || 0))
   const sourceEndMs = Math.max(sourceStartMs + 1, Number(step.clip.sourceEndMs || sourceStartMs + 1))
   const holds = [...step.holds].sort((a, b) => a.atSourceMs - b.atSourceMs)
@@ -229,7 +230,8 @@ const StepRenderer: React.FC<StepRendererProps> = ({ sourceVideo, fps, step, deb
       })}
 
       {step.narrations.map((narration, index) => {
-        const from = msToFrameIndex(Math.max(0, Number(narration.atMs || 0)), fps)
+        const localAtMs = Math.max(0, Number(narration.atMs || 0) - stepGlobalStartMs)
+        const from = msToFrameIndex(localAtMs, fps)
         return (
           <Sequence key={narration.id || `narration-${index}`} from={from}>
             <Audio src={narration.file} />

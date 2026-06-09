@@ -52,7 +52,7 @@ function runCommand(command, args) {
   return Number(result.status ?? 1)
 }
 
-async function findLatestRemotionMuxMeta(ttsDir) {
+async function findLatestRemotionMuxMeta(ttsDir, { allowPlanOnly = false } = {}) {
   if (!existsSync(ttsDir)) {
     return null
   }
@@ -65,42 +65,29 @@ async function findLatestRemotionMuxMeta(ttsDir) {
     }
     const filePath = join(ttsDir, entry)
     const fileStat = await stat(filePath)
+    let isPlanOnly = false
+    try {
+      const metaRaw = await readFile(filePath, 'utf8')
+      isPlanOnly = JSON.parse(metaRaw)?.planOnly === true
+    } catch { /* ignore */ }
     candidates.push({
       filePath,
       mtimeMs: fileStat.mtimeMs,
+      isPlanOnly,
     })
   }
 
   candidates.sort((left, right) => right.mtimeMs - left.mtimeMs)
-  return candidates[0] || null
-}
-
-async function findLatestCompositionModel(ttsDir) {
-  if (!existsSync(ttsDir)) {
-    return null
-  }
-
-  const entries = await readdir(ttsDir)
-  const candidates = []
-  for (const entry of entries) {
-    if (!/\.composition-model\.json$/i.test(entry)) {
-      continue
-    }
-    const filePath = join(ttsDir, entry)
-    const fileStat = await stat(filePath)
-    candidates.push({
-      filePath,
-      mtimeMs: fileStat.mtimeMs,
-    })
-  }
-
-  candidates.sort((left, right) => right.mtimeMs - left.mtimeMs)
-  return candidates[0] || null
+  const fullRunCandidates = candidates.filter((c) => !c.isPlanOnly)
+  if (fullRunCandidates.length > 0) return fullRunCandidates[0]
+  if (allowPlanOnly) return candidates[0] || null
+  return null
 }
 
 async function main() {
   const argv = process.argv.slice(2)
   const keepTempProject = argv.includes('--keep-temp-project')
+  const verbose = argv.includes('--verbose')
   const scenarioPathArg = argv.find((arg) => !arg.startsWith('-'))
   const wantsHelp = argv.includes('--help') || argv.includes('-h')
   if (!scenarioPathArg || wantsHelp) {
@@ -128,41 +115,12 @@ async function main() {
   })
 
   const ttsOutputDir = join(OUTPUT_ROOT, scenarioFolderName, 'tts')
-  let latestMeta = await findLatestRemotionMuxMeta(ttsOutputDir)
-  let latestCompositionModel = await findLatestCompositionModel(ttsOutputDir)
-
-  const requiresPlanRefresh =
-    !latestMeta ||
-    (latestCompositionModel && latestCompositionModel.mtimeMs > latestMeta.mtimeMs)
-
-  if (requiresPlanRefresh) {
-    console.log('Vorbereitung: Erzeuge aktuellen Remotion-Plan (plan-only) ...')
-    const prepareExitCode = runCommand('node', [
-      'scripts/video-script-generator/run-annotated-video.mjs',
-      '--scenario-tts',
-      scenarioPathArg,
-      '--profile=all-channels',
-      '--remotion-plan-only',
-    ])
-    if (prepareExitCode !== 0) {
-      throw new Error(`Remotion-Plan-Vorbereitung fehlgeschlagen (Exit-Code ${prepareExitCode}).`)
-    }
-
-    latestMeta = await findLatestRemotionMuxMeta(ttsOutputDir)
-    latestCompositionModel = await findLatestCompositionModel(ttsOutputDir)
-  }
+  const latestMeta = await findLatestRemotionMuxMeta(ttsOutputDir)
 
   if (!latestMeta) {
     throw new Error([
-      `Keine Remotion-Render-Metadatei unter ${ttsOutputDir} gefunden.`,
-      'Auch nach plan-only Vorbereitung konnten keine Render-Artefakte ermittelt werden.',
-    ].join(' '))
-  }
-
-  if (latestCompositionModel && latestCompositionModel.mtimeMs > latestMeta.mtimeMs) {
-    throw new Error([
-      `Es existiert weiterhin ein neueres Kompositionsmodell ohne passende Render-Metadatei: ${latestCompositionModel.filePath}.`,
-      'Bitte den vorherigen Lauf pruefen (plan-only sollte Render-Plan und Metadatei erzeugen).',
+      `Keine vollstaendige Remotion-Render-Metadatei unter ${ttsOutputDir} gefunden.`,
+      'Bitte zuerst den vollen Pipeline-Lauf ausfuehren (ohne --remotion-plan-only), um TTS zu synthetisieren.',
     ].join(' '))
   }
 
@@ -188,6 +146,9 @@ async function main() {
   ]
   if (keepTempProject) {
     muxArgs.push('--keep-temp-project')
+  }
+  if (verbose) {
+    muxArgs.push('--verbose')
   }
 
   const exitCode = runCommand('node', muxArgs)

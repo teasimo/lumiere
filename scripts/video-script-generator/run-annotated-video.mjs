@@ -573,7 +573,7 @@ function findVideoScriptRangeAnchorsInResolvedXml(resolvedXmlRaw) {
       }
 
       if (tag === 'VideoStop') {
-        if (lastInteractionResolvedId && !stopResolvedId) {
+        if (lastInteractionResolvedId) {
           stopResolvedId = lastInteractionResolvedId
         }
         seenVideoStart = false
@@ -666,6 +666,10 @@ function annotateScenarioPresentationFromResolvedXml(scenarioRoot, resolvedXmlRa
   const pendingSlides = []
   let pendingChapter = ''
   let currentStepTitle = ''
+  // Tracks <Info> tags pending assignment to the next interaction step
+  const pendingInfoQueue = [] // { typ, text, interaktion }
+  // Last interaction step seen (for interaktion="vorige"/"danach")
+  let lastInteractionStep = null
 
   function visitNodes(nodes) {
     for (const node of nodes || []) {
@@ -690,6 +694,25 @@ function annotateScenarioPresentationFromResolvedXml(scenarioRoot, resolvedXmlRa
         currentStepTitle = text
       } else if (tag === 'Folie' && text) {
         pendingSlides.push(text)
+      } else if (tag === 'Info' && text) {
+        const attrs = node[':@'] || {}
+        const typ = String(attrs['@_typ'] || '').trim()
+        const interaktion = String(attrs['@_interaktion'] || '').trim().toLowerCase()
+        if (typ) {
+          const entry = { typ, text, interaktion: interaktion || null }
+          if (interaktion === 'vorige' || interaktion === 'danach') {
+            // Attach to the preceding interaction step
+            if (lastInteractionStep) {
+              if (!Array.isArray(lastInteractionStep.infoAnnotations)) {
+                lastInteractionStep.infoAnnotations = []
+              }
+              lastInteractionStep.infoAnnotations.push(entry)
+            }
+          } else {
+            // Defer to the next interaction step (währenddessen or no interaktion)
+            pendingInfoQueue.push(entry)
+          }
+        }
       } else if (interactionTags.has(tag)) {
         const attrs = node[':@'] || {}
         const resolvedId = String(attrs['@_resolved-id'] || '').trim()
@@ -705,6 +728,14 @@ function annotateScenarioPresentationFromResolvedXml(scenarioRoot, resolvedXmlRa
           if (pendingSlides.length > 0 && (!step.slide || typeof step.slide !== 'object')) {
             step.slide = { text: pendingSlides.shift() }
           }
+          // Assign pending Info annotations (before/währenddessen) to this step
+          if (pendingInfoQueue.length > 0) {
+            if (!Array.isArray(step.infoAnnotations)) {
+              step.infoAnnotations = []
+            }
+            step.infoAnnotations.push(...pendingInfoQueue.splice(0))
+          }
+          lastInteractionStep = step
         }
       }
 
@@ -1371,6 +1402,11 @@ function buildNarrationsFromScenarioTimeline({ scenarioRoot, timelineReport, pro
   }
 
   const flattenedFlowStepEntries = flattenFlowSteps(flow)
+  // Secondary lookup by resolvedId for annotation-based narrations (Info tags).
+  // The timeline uses resolvedIds (e.g. "R0107") while flattenFlowSteps uses
+  // human-readable step ids, so resolveScenarioStepMatchForTimelineStep may not
+  // find a match. Fall back to the resolvedId index for infoAnnotations access.
+  const flowStepByResolvedId = buildFlowStepIndexByResolvedId(flow)
   const channelsConfig = profile?.channels && typeof profile.channels === 'object' ? profile.channels : {}
   const timing = profile?.timing && typeof profile.timing === 'object' ? profile.timing : {}
   const beforeChannels = Array.isArray(timing.before_step) ? timing.before_step.map(String) : []
@@ -1439,6 +1475,10 @@ function buildNarrationsFromScenarioTimeline({ scenarioRoot, timelineReport, pro
     const stepMatch = resolveScenarioStepMatchForTimelineStep(stepId, flattenedFlowStepEntries)
     const matchedStepId = String(stepMatch?.id || '').trim()
     let stepEntry = stepMatch?.step || null
+
+    // Fallback: resolve step by resolvedId for infoAnnotations (timeline uses resolvedIds
+    // but flattenFlowSteps in this file uses human-readable ids which don't match).
+    const stepEntryByResolvedId = flowStepByResolvedId.get(stepId) || null
 
     if (matchedStepId && stepMatch?.matchKind === 'prefix') {
       if (consumedPrefixDidacticsStepIds.has(matchedStepId)) {
@@ -1519,6 +1559,55 @@ function buildNarrationsFromScenarioTimeline({ scenarioRoot, timelineReport, pro
       channelList: afterChannels,
       baseMs: stepEndMs + afterActionMs,
     })
+
+    // Process <Info> annotations with explicit interaktion placement.
+    // Use stepEntryByResolvedId as primary source since infoAnnotations are keyed
+    // to flow steps via resolvedId (the same id used by the timeline).
+    const infoAnnotations = Array.isArray(stepEntryByResolvedId?.infoAnnotations)
+      ? stepEntryByResolvedId.infoAnnotations
+      : Array.isArray(stepEntry?.infoAnnotations) ? stepEntry.infoAnnotations : []
+    for (const info of infoAnnotations) {
+      const typ = String(info?.typ || '').trim()
+      const interaktion = String(info?.interaktion || '').trim().toLowerCase()
+      const infoText = String(info?.text || '').trim()
+      if (!typ || !infoText) continue
+
+      const channelConfig = channelsConfig[typ]
+      if (!channelConfig || channelConfig.enabled !== true) continue
+
+      const prefix = typeof channelConfig.prefix === 'string' ? channelConfig.prefix.trim() : ''
+      const spokenText = prefix ? `${prefix} ${infoText}` : infoText
+
+      let baseMs
+      let anchor
+      if (interaktion === 'vorige' || interaktion === 'danach') {
+        // Play after this step ends, with freeze on last frame
+        baseMs = stepEndMs + afterActionMs
+        anchor = 'info-after'
+      } else if (interaktion === 'währenddessen') {
+        // Play during the step video, no freeze
+        baseMs = stepStartMs
+        anchor = 'info-during'
+      } else {
+        // Play before this step starts (pending info assigned to next step)
+        baseMs = Math.max(0, stepStartMs - beforeActionMs)
+        anchor = 'info-before'
+      }
+
+      const startMs = Math.max(0, Math.floor(baseMs))
+      const endMs = Math.max(startMs + 1, Math.floor(startMs + minWindowMs))
+
+      narrations.push({
+        id: `${narrationStepId}-${anchor}-${typ}`,
+        startMs,
+        endMs,
+        text: spokenText,
+        sourceTimelineStepId: narrationStepId,
+        sourceScenarioStepId: matchedStepId || stepId,
+        sourceAnchor: anchor,
+        voice: voiceOverride || profileVoice || undefined,
+      })
+    }
   }
 
   narrations.sort((left, right) => left.startMs - right.startMs)
@@ -2411,7 +2500,27 @@ function getMediaMetadata(filePath) {
     '});',
   ].join('')
 
-  const output = runCommandWithOutput('node', ['-e', script, resolvedFilePath]).trim()
+  let output = null
+  try {
+    output = runCommandWithOutput('node', ['-e', script, resolvedFilePath]).trim()
+  } catch (err) {
+    const errMsg = String(err?.message || '')
+    if (errMsg.includes('No video stream found') || errMsg.includes('no video stream')) {
+      // Audio-only file (e.g. MP3): fall back to ffprobe for duration
+      const ffprobeOutput = runCommandWithOutput('ffprobe', [
+        '-v', 'quiet',
+        '-show_entries', 'format=duration',
+        '-of', 'default=noprint_wrappers=1:nokey=1',
+        resolvedFilePath,
+      ]).trim()
+      const durationInSeconds = Number(ffprobeOutput) || 0
+      const fallback = { durationInSeconds, width: 0, height: 0, fps: 0, hasAudio: true }
+      mediaMetadataCache.set(resolvedFilePath, fallback)
+      return fallback
+    }
+    throw err
+  }
+
   let parsed = null
   try {
     parsed = JSON.parse(output)
@@ -3842,6 +3951,7 @@ async function runScenarioTtsMode({ scenarioPath, profileName, outputVideo, ttsV
   if (muxMeta?.remotionRenderPlanPath || muxMeta?.remotionRenderScriptTsxPath) {
     const remotionMuxMetaPath = join(ttsOutputDir, `scenario-tts-remotion-render-${profileToken}-${runId}.json`)
     await writeFile(remotionMuxMetaPath, JSON.stringify({
+      planOnly: remotionPlanOnly ? true : undefined,
       compositionModelPath: muxMeta?.remotionCompositionModelPath || null,
       renderPlanPath: muxMeta?.remotionRenderPlanPath || null,
       semanticVideoPlanPath: muxMeta?.remotionSemanticPlanPath || null,

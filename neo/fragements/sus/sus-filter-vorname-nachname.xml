@@ -12,12 +12,14 @@
 		<Wenn data-id="filters/basic/choose" text="Vornamen" status="nicht-sichtbar">
 			<Anzeige data-id="filters/basic/choose" text="Vornamen"/>
 		</Wenn>
+		<!-- das ist ggf. stabiler: -->
+		<!-- <Click data-id="filters/basic/choose" /> -->
+		<!-- <Click data-id="filters/basic/choose/vornamen" /> -->
 		<Auswahl data-id="filters/basic/choose" text="Vornamen"/>
 		<Eingabe data-id="filters/basic/1" text="{{vorname}}"/>
-		<Wenn data-id="filters/basic/choose" text="Familienname" status="nicht-sichtbar">
-			<Anzeige data-id="filters/basic/choose" text="Familienname"/>
-		</Wenn>
-		<Auswahl data-id="filters/basic/choose" text="Familienname"/>
+		
+		<Click data-id="filters/basic/choose" />
+		<Click data-id="filters/basic/choose/familienname"/>
 		<Eingabe data-id="filters/basic/2" text="{{nachname}}"/>
 		<Click data-id="filters/apply"/>
 

@@ -22,7 +22,7 @@
   </Einstellungen>
   <Daten>
     <Datensatz name="runtime">
-      <Wert name="base_url" value="https://neo-test.de"/>
+      <Wert name="base_url" value="https://neo-integration.de"/>
     </Datensatz>
     <Wert name="random" value="{{randomNumber()}}"/>
     <Datensatz name="actor">
@@ -172,7 +172,6 @@ Wirkung: Datenübernahme und Vormerkung zur Löschung</Folie>
     <Click data-id="controlBtn/action-detaillink"/>
     <Click text="Einstellungen"/>
 
-    <VideoStop/>
 
     <Schritt>Nachrangigen Datensatz identifizieren</Schritt>
     <!-- 2) Nachrangigen Datensatz identifizieren -->
@@ -191,13 +190,15 @@ Wirkung: Datenübernahme und Vormerkung zur Löschung</Folie>
     <Info typ="Erklärung">Der nachrangige Datensatz, der in den führenden Datensatz übernommen wurde, ist in der Standard-Filterung nun ausgeblendet.</Info>
     <Fragment name="neo-hauptmenue-sus-schuelerinnen"/>
     <Info typ="Zweck" interaktion="vorige">Die als nachrangig markierten sowie die bereits aufgelösten Datensätze können in der Liste der Schüler*innen bis zur Löschung weiterhin eingesehen werden.</Info>
-    
+  </Gruppe>
 
 
+  <!-- 4) Aufgelöste Datensätze anzeigen -->
+  <Gruppe>
     <Folie>Zusammengeführte Datensätze prüfen</Folie>
     <Kapitel>Zusammengeführte Datensätze prüfen</Kapitel>
     <Schritt>Aufgelöste Datensätze anzeigen</Schritt>
-    <!-- 4) Aufgelöste Datensätze anzeigen -->
+
     <Info typ="Erklärung" interaktion="währenddessen">Hierzu muss die Standard-Filterung angepasst werden, dass diese angezeigt werden.</Info>
     <Click data-id="filters"/>
     <Click data-id="filters/basic/0" aria-label="Schüler*in-Markierung"/>
@@ -207,8 +208,10 @@ Wirkung: Datenübernahme und Vormerkung zur Löschung</Folie>
     <Click data-id="markierung/markierung/option/1" text="Dublette"/>
     <Click data-id="filters/apply"/>
 
-    <VideoStop/>
+      <VideoStop/>
   </Gruppe>
+
+
 
 
 

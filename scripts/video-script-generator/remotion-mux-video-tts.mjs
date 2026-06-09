@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { existsSync } from 'fs'
-import { copyFile, mkdir, readFile, rm, writeFile } from 'fs/promises'
+import { copyFile, mkdir, readFile, rm, stat, writeFile } from 'fs/promises'
 import { basename, dirname, extname, join, relative, resolve } from 'path'
 import { tmpdir } from 'os'
 
@@ -9,6 +9,7 @@ function parseArgs(argv) {
   let planPath = null
   let tsxPath = null
   let keepTempProject = false
+  let verbose = false
   for (const arg of argv) {
     if (arg.startsWith('--plan=')) {
       planPath = arg.slice('--plan='.length).trim()
@@ -20,6 +21,10 @@ function parseArgs(argv) {
     }
     if (arg === '--keep-temp-project') {
       keepTempProject = true
+      continue
+    }
+    if (arg === '--verbose') {
+      verbose = true
       continue
     }
     if (!planPath && !arg.startsWith('-')) {
@@ -39,6 +44,7 @@ function parseArgs(argv) {
     planPath: resolve(planPath),
     tsxPath: tsxPath ? resolve(tsxPath) : null,
     keepTempProject,
+    verbose,
   }
 }
 
@@ -222,6 +228,7 @@ async function stageExtraAssetsFromTsx({ tsxPath, publicDir }) {
     const absolutePath = resolve(String(candidate || ''))
     if (!absolutePath.startsWith('/')) continue
     if (!existsSync(absolutePath)) continue
+    try { if ((await stat(absolutePath)).isDirectory()) continue } catch { continue }
     if (seen.has(absolutePath)) continue
     seen.add(absolutePath)
     absoluteAssets.push(absolutePath)
@@ -358,7 +365,7 @@ async function createRemotionProjectFromTsx({ workDir, tsxPath, plan }) {
 }
 
 async function main() {
-  const { planPath, tsxPath, keepTempProject } = parseArgs(process.argv.slice(2))
+  const { planPath, tsxPath, keepTempProject, verbose } = parseArgs(process.argv.slice(2))
   const formatTimestamp = () => new Date().toISOString().replace(/\.\d{3}Z$/, '')
   const logWithTimestamp = (message) => {
     console.log(`[${formatTimestamp()}] ${message}`)
@@ -413,14 +420,30 @@ async function main() {
     })
     logWithTimestamp('[render] Composition selected, rendering media...')
 
+    let lastProgressPct = -1
     await renderMedia({
       composition,
       serveUrl,
       codec: 'h264',
       audioCodec: 'aac',
       outputLocation: outputVideo,
+      logLevel: verbose ? 'verbose' : 'info',
       chromiumOptions: {
         gl: 'swangle',
+      },
+      onBrowserLog: verbose
+        ? (log) => {
+            const prefix = `[browser:${log.type}]`
+            const text = String(log.text ?? '')
+            logWithTimestamp(`${prefix} ${text}`)
+          }
+        : undefined,
+      onProgress: ({ progress, renderedFrames, encodedFrames }) => {
+        const pct = Math.floor(progress * 100)
+        if (pct !== lastProgressPct && (verbose || pct % 10 === 0)) {
+          logWithTimestamp(`[render] ${pct}% (rendered=${renderedFrames}, encoded=${encodedFrames})`)
+          lastProgressPct = pct
+        }
       },
     })
     logWithTimestamp('[render] Render complete')
