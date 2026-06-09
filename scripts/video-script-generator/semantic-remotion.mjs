@@ -205,7 +205,22 @@ function buildNarrationGroups(adjustedAudioFiles) {
       id: String(entry?.id || stepId),
       file: rawFile ? resolve(rawFile) : null,
       atMs: Math.max(0, Math.floor(Number(entry?.finalOutputStartMs != null ? entry.finalOutputStartMs : entry?.startMs || 0))),
+      endMs: Math.max(
+        0,
+        Math.floor(
+          Number(
+            entry?.finalOutputEndMs != null
+              ? entry.finalOutputEndMs
+              : entry?.endMs != null
+                ? entry.endMs
+                : entry?.finalOutputStartMs != null
+                  ? entry.finalOutputStartMs
+                  : entry?.startMs || 0,
+          ),
+        ),
+      ),
       channel: String(entry?.sourceChannel || '').trim() || undefined,
+      sourceAnchor: String(entry?.sourceAnchor || '').trim().toLowerCase() || undefined,
     })
 
     const overflowMs = Math.max(0, Math.floor(Number(entry?.overflowMs || 0)))
@@ -249,6 +264,66 @@ function groupClickMarkersByStep(stepWindowById, clickMarkers, markerSourceOffse
   }
 
   return clickMarkersByStepId
+}
+
+function splitNarrationsForSlide(stepNarrations) {
+  const slideNarrations = []
+  const interactionNarrations = []
+
+  for (const narration of Array.isArray(stepNarrations) ? stepNarrations : []) {
+    if (String(narration?.sourceAnchor || '').trim().toLowerCase() === 'info-before') {
+      slideNarrations.push(narration)
+      continue
+    }
+    interactionNarrations.push(narration)
+  }
+
+  return { slideNarrations, interactionNarrations }
+}
+
+function extendPausesForNarrations({ clip, pauses, narrations }) {
+  const safeClip = clip && typeof clip === 'object' ? clip : { sourceStartMs: 0, sourceEndMs: 1 }
+  const safePauses = Array.isArray(pauses) ? pauses.map((pause) => ({ ...pause })) : []
+  const blockingNarrations = (Array.isArray(narrations) ? narrations : []).filter(
+    (narration) => String(narration?.sourceAnchor || '').trim().toLowerCase() !== 'info-during',
+  )
+
+  if (blockingNarrations.length === 0) {
+    return safePauses
+  }
+
+  const startValues = blockingNarrations
+    .map((narration) => Number(narration?.atMs))
+    .filter((value) => Number.isFinite(value))
+  const endValues = blockingNarrations
+    .map((narration) => Number(narration?.endMs))
+    .filter((value) => Number.isFinite(value))
+
+  if (startValues.length === 0 || endValues.length === 0) {
+    return safePauses
+  }
+
+  const narrationWindowDurationMs = Math.max(1, Math.floor(Math.max(...endValues) - Math.min(...startValues)))
+  const clipDurationMs = Math.max(
+    1,
+    Math.floor(
+      Math.max(1, Number(safeClip?.sourceEndMs || 1)) - Math.max(0, Number(safeClip?.sourceStartMs || 0)),
+    ),
+  )
+  const pauseDurationMs = safePauses.reduce((sum, pause) => sum + Math.max(0, Number(pause?.durationMs || 0)), 0)
+  const currentDurationMs = clipDurationMs + pauseDurationMs
+  const extraPauseMs = Math.max(0, narrationWindowDurationMs - currentDurationMs)
+
+  if (extraPauseMs <= 0) {
+    return safePauses
+  }
+
+  safePauses.push({
+    atSourceMs: Math.max(0, Math.floor(Number(safeClip?.sourceStartMs || 0))),
+    durationMs: extraPauseMs,
+  })
+
+  return safePauses
 }
 
 function buildStepTagMap(stepWindowById, stepSegments) {
@@ -883,17 +958,22 @@ export function buildSemanticVideoPlan({
       const chapterPauses = pausesByStepId.get(stepId) || []
       const chapterWindow = stepWindowById.get(stepId) || null
       if (chapterCard || chapterNarrations.length > 0) {
+        const chapterClip = {
+          sourceStartMs: Math.max(0, Number(chapterWindow?.sourceStartMs || 0)),
+          sourceEndMs: Math.max(1, Number(chapterWindow?.sourceStartMs || 0) + 1000),
+        }
         currentChapter.steps.push({
           id: `${stepId}--intro`,
           title: currentChapter.title,
           'row-index': flowEntry?.step?.['row-index'] ?? chapterCard?.['row-index'] ?? null,
           tags: [],
-          clip: {
-            sourceStartMs: Math.max(0, Number(chapterWindow?.sourceStartMs || 0)),
-            sourceEndMs: Math.max(1, Number(chapterWindow?.sourceStartMs || 0) + 1000),
-          },
+          clip: chapterClip,
           freezes: [],
-          pauses: chapterPauses,
+          pauses: extendPausesForNarrations({
+            clip: chapterClip,
+            pauses: chapterPauses,
+            narrations: chapterNarrations,
+          }),
           narrations: chapterNarrations,
           callouts: toChapterCardCallout(chapterCard, slideDefaults),
           clickMarkers: [],
@@ -939,23 +1019,35 @@ export function buildSemanticVideoPlan({
       'row-index': marker?.['row-index'] ?? rowIndex,
     }))
 
+    const stepNarrations = narrationsByStepId.get(stepId) || []
     const slideCallout = toSlideCallout(flowEntry?.step?.slide, slideDefaults)
+    const {
+      slideNarrations,
+      interactionNarrations,
+    } = slideCallout
+      ? splitNarrationsForSlide(stepNarrations)
+      : { slideNarrations: [], interactionNarrations: stepNarrations }
     if (slideCallout) {
+      const slideClip = {
+        sourceStartMs: window.sourceStartMs,
+        sourceEndMs: Math.max(window.sourceStartMs + 1, window.sourceStartMs + 1),
+      }
       currentChapter.steps.push({
         id: `${stepId}--slide`,
         title: slideCallout.text,
         'row-index': slideCallout['row-index'] ?? rowIndex,
         tags: [],
-        clip: {
-          sourceStartMs: window.sourceStartMs,
-          sourceEndMs: Math.max(window.sourceStartMs + 1, window.sourceStartMs + 1),
-        },
+        clip: slideClip,
         freezes: [],
-        pauses: [{
-          atSourceMs: window.sourceStartMs,
-          durationMs: slideCallout.durationMs,
-        }],
-        narrations: [],
+        pauses: extendPausesForNarrations({
+          clip: slideClip,
+          pauses: [{
+            atSourceMs: window.sourceStartMs,
+            durationMs: slideCallout.durationMs,
+          }],
+          narrations: slideNarrations,
+        }),
+        narrations: slideNarrations,
         callouts: [slideCallout],
         clickMarkers: [],
       })
@@ -985,7 +1077,7 @@ export function buildSemanticVideoPlan({
       },
       freezes: [],
       pauses: basePauses,
-      narrations: narrationsByStepId.get(stepId) || [],
+      narrations: interactionNarrations,
       callouts: stepOverlay ? [stepOverlay] : [],
       clickMarkers: markersWithRowIndex,
     })

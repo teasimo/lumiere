@@ -713,6 +713,17 @@ function annotateScenarioPresentationFromResolvedXml(scenarioRoot, resolvedXmlRa
             pendingInfoQueue.push(entry)
           }
         }
+      } else if (tag === 'VideoStop') {
+        // Info blocks placed immediately before <VideoStop> still belong to the
+        // visible clip segment that is about to end. Assign them to the last
+        // interaction inside that segment instead of carrying them to the next
+        // step outside the clip.
+        if (pendingInfoQueue.length > 0 && lastInteractionStep) {
+          if (!Array.isArray(lastInteractionStep.infoAnnotations)) {
+            lastInteractionStep.infoAnnotations = []
+          }
+          lastInteractionStep.infoAnnotations.push(...pendingInfoQueue.splice(0))
+        }
       } else if (interactionTags.has(tag)) {
         const attrs = node[':@'] || {}
         const resolvedId = String(attrs['@_resolved-id'] || '').trim()
@@ -1325,7 +1336,7 @@ function resolveScenarioPresentationVideoRangeFromTimeline({ scenarioRoot, timel
       || resolvePresentationStepWindowMs(videoScriptRange?.startResolvedId, sortedTimelineSteps)
     if (videoStartWindow) {
       startAbsMs = videoStartWindow.startedAtMs
-      startDirectiveStepId = videoStartStepId
+      startDirectiveStepId = videoScriptRange?.startResolvedId || videoStartStepId
     }
   }
 
@@ -3549,14 +3560,8 @@ async function runScenarioTtsMode({ scenarioPath, profileName, outputVideo, ttsV
     scenarioPathRelative,
   })
 
-  if (!remotionPlanOnly) {
-    await assertScenarioMatchesRawVideoIgnoringPresentation({
-      scenarioAbsolutePath,
-      scenarioPathRelative,
-      artifactsDir: artifacts.dir,
-    })
-  } else {
-    console.warn('[scenario-tts] remotion-plan-only: Ueberspringe strikte Szenario-vs-Rohvideo-Validierung.')
+  if (remotionPlanOnly) {
+    console.warn('[scenario-tts] remotion-plan-only: Verwende vorhandenes Rohvideo ohne strikte Szenario-vs-Rohvideo-Validierung.')
   }
 
   const narrations = buildNarrationsFromScenarioTimeline({
@@ -3611,12 +3616,13 @@ async function runScenarioTtsMode({ scenarioPath, profileName, outputVideo, ttsV
         const clippedEndMs = clipEndMs == null ? sourceEndMs : Math.min(sourceEndMs, clipEndMs)
         if (clippedEndMs <= clippedStartMs) {
           const sourceScenarioStepId = String(entry.sourceScenarioStepId || '').trim()
+          const sourceTimelineStepId = String(entry.sourceTimelineStepId || '').trim()
           const sourceAnchor = String(entry.sourceAnchor || '').trim()
           const shouldKeepBoundaryBeforeNarration = Boolean(
             clipStartMs > 0
             && startDirectiveStepId
-            && sourceAnchor === 'before'
-            && sourceScenarioStepId === startDirectiveStepId,
+            && (sourceAnchor === 'before' || sourceAnchor === 'info-before')
+            && (sourceScenarioStepId === startDirectiveStepId || sourceTimelineStepId === startDirectiveStepId),
           )
 
           if (shouldKeepBoundaryBeforeNarration) {

@@ -123,7 +123,7 @@ export const VideoScript: React.FC<VideoScriptProps> = ({
         </Sequence>
       ) : null}
       {planned.map((step) => {
-        const from = msToFrameStart(step.startMs + Math.max(0, Number(introDurationMs || 0)), fps)
+        const from = msToSequenceFromMs(step.startMs + Math.max(0, Number(introDurationMs || 0)), fps)
         const to = Math.max(
           from + 1,
           msToFrameEndExclusive(step.startMs + step.durationMs + Math.max(0, Number(introDurationMs || 0)), fps),
@@ -131,7 +131,7 @@ export const VideoScript: React.FC<VideoScriptProps> = ({
         const durationInFrames = Math.max(1, to - from)
         return (
           <Sequence key={`${step.chapterId}:${step.stepId}`} from={from} durationInFrames={durationInFrames}>
-          <StepRenderer sourceVideo={sourceVideo} fps={fps} step={step} stepGlobalStartMs={step.startMs + Math.max(0, Number(introDurationMs || 0))} debug={debug} />
+          <StepRenderer sourceVideo={sourceVideo} fps={fps} step={step} stepStartMs={step.startMs} debug={debug} />
           </Sequence>
         )
       })}
@@ -153,11 +153,11 @@ type StepRendererProps = {
   sourceVideo: string
   fps: number
   step: StepPlan
-  stepGlobalStartMs: number
+  stepStartMs: number
   debug: boolean
 }
 
-const StepRenderer: React.FC<StepRendererProps> = ({ sourceVideo, fps, step, stepGlobalStartMs, debug }) => {
+const StepRenderer: React.FC<StepRendererProps> = ({ sourceVideo, fps, step, stepStartMs, debug }) => {
   const sourceStartMs = Math.max(0, Number(step.clip.sourceStartMs || 0))
   const sourceEndMs = Math.max(sourceStartMs + 1, Number(step.clip.sourceEndMs || sourceStartMs + 1))
   const holds = [...step.holds].sort((a, b) => a.atSourceMs - b.atSourceMs)
@@ -199,7 +199,7 @@ const StepRenderer: React.FC<StepRendererProps> = ({ sourceVideo, fps, step, ste
   return (
     <AbsoluteFill>
       {sourceSegments.map((segment, index) => {
-        const from = msToFrameStart(segment.planStartMs, fps)
+        const from = msToSequenceFromMs(segment.planStartMs, fps)
         const segmentDurationMs = segment.endMs - segment.startMs
         const startFromFrame = msToFrameStart(segment.startMs, fps)
         const endAtFrame = Math.max(startFromFrame + 1, msToFrameEndExclusive(segment.endMs, fps))
@@ -213,7 +213,7 @@ const StepRenderer: React.FC<StepRendererProps> = ({ sourceVideo, fps, step, ste
       })}
 
       {holdSegments.map((hold, index) => {
-        const from = msToFrameStart(hold.planStartMs, fps)
+        const from = msToSequenceFromMs(hold.planStartMs, fps)
         const durationInFrames = msToDurationFramesCeil(hold.durationMs, fps)
         const holdFrame = msToFrameStart(hold.holdSourceMs, fps)
         return (
@@ -230,8 +230,8 @@ const StepRenderer: React.FC<StepRendererProps> = ({ sourceVideo, fps, step, ste
       })}
 
       {step.narrations.map((narration, index) => {
-        const localAtMs = Math.max(0, Number(narration.atMs || 0) - stepGlobalStartMs)
-        const from = msToFrameIndex(localAtMs, fps)
+        const localAtMs = Math.max(0, Number(narration.atMs || 0) - stepStartMs)
+        const from = msToSequenceFromMs(localAtMs, fps)
         return (
           <Sequence key={narration.id || `narration-${index}`} from={from}>
             <Audio src={narration.file} />
@@ -240,7 +240,7 @@ const StepRenderer: React.FC<StepRendererProps> = ({ sourceVideo, fps, step, ste
       })}
 
       {step.callouts.map((callout, index) => {
-        const from = msToFrameIndex(Math.max(0, Number(callout.atMs || 0)), fps)
+        const from = msToSequenceFromMs(Math.max(0, Number(callout.atMs || 0)), fps)
         const durationInFrames = msToDurationFrames(Math.max(1, Number(callout.durationMs || 1200)), fps)
         const isChapterCard = callout.variant === 'chapter-card'
         const isSlideCard = callout.variant === 'slide-card'
@@ -310,7 +310,7 @@ const StepRenderer: React.FC<StepRendererProps> = ({ sourceVideo, fps, step, ste
 
       {step.clickMarkers.map((marker, index) => {
         const markerPlanMs = sourceToPlanOffsetMs(marker.atSourceMs, sourceStartMs, holds)
-        const from = msToFrameIndex(markerPlanMs, fps)
+        const from = msToSequenceFromMs(markerPlanMs, fps)
         const durationInFrames = msToDurationFrames(Math.max(1, Number(marker.durationMs || 900)), fps)
         return (
           <Sequence key={`click-${index}`} from={from} durationInFrames={durationInFrames}>
@@ -572,16 +572,16 @@ function msToFrameStart(ms: number, fps: number): number {
   return Math.max(0, Math.floor((Math.max(0, Number(ms || 0)) / 1000) * fps))
 }
 
+function msToSequenceFromMs(ms: number, fps: number): number {
+  return msToFrameStart(ms, fps)
+}
+
 function msToFrameEndExclusive(ms: number, fps: number): number {
   return Math.max(1, Math.ceil((Math.max(0, Number(ms || 0)) / 1000) * fps))
 }
 
 function msToDurationFramesCeil(ms: number, fps: number): number {
   return Math.max(1, Math.ceil((Math.max(0, Number(ms || 0)) / 1000) * fps))
-}
-
-function msToFrameIndex(ms: number, fps: number): number {
-  return Math.max(0, Math.round((Math.max(0, Number(ms || 0)) / 1000) * fps))
 }
 
 function msToDurationFrames(ms: number, fps: number): number {

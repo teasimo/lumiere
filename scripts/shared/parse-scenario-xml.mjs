@@ -65,6 +65,32 @@ function loadFragmentLibrary() {
   return JSON.parse(readFileSync(FRAGMENT_LIBRARY_PATH, 'utf8'))
 }
 
+function chooseFragmentPath(fragmentName, fragmentLibrary) {
+  const normalizedName = String(fragmentName || '').trim()
+  if (!normalizedName) {
+    return null
+  }
+
+  if (fragmentLibrary[normalizedName]) {
+    return fragmentLibrary[normalizedName]
+  }
+
+  const suffix = normalizedName.includes('-')
+    ? normalizedName.split('-').filter(Boolean).slice(-1)[0]
+    : ''
+
+  if (!suffix) {
+    return null
+  }
+
+  const suffixCandidates = Object.entries(fragmentLibrary)
+    .filter(([fragmentId]) => fragmentId === suffix)
+    .map(([, fragmentPath]) => fragmentPath)
+    .sort((left, right) => left.localeCompare(right))
+
+  return suffixCandidates[0] || null
+}
+
 // ── XML-Parser ───────────────────────────────────────────────────────────────
 
 const PARSER = new XMLParser({
@@ -74,8 +100,55 @@ const PARSER = new XMLParser({
   trimValues: false,
 })
 
+const RESOLVED_ID_RELEVANT_TAGS = new Set([
+  'Click',
+  'Eingabe',
+  'Auswahl',
+  'Anzeige',
+  'Warten',
+  'Oeffnen',
+  'SucheAuswahl',
+])
+
 function parseRawXml(rawXml) {
   return PARSER.parse(rawXml)
+}
+
+function isTestRelevantStep(node) {
+  return Boolean(node && typeof node === 'object' && RESOLVED_ID_RELEVANT_TAGS.has(String(node._tag || '').trim()))
+}
+
+export function addTeststepNumber(json) {
+  let sequence = 0
+
+  function visit(node) {
+    if (!node || typeof node !== 'object') {
+      return
+    }
+
+    if (Array.isArray(node)) {
+      for (const entry of node) {
+        visit(entry)
+      }
+      return
+    }
+
+    if (isTestRelevantStep(node)) {
+      sequence += 1
+      node['teststep-number'] = sequence
+    }
+
+    if (Array.isArray(node._children)) {
+      visit(node._children)
+    }
+
+    if (Array.isArray(node._resolved)) {
+      visit(node._resolved)
+    }
+  }
+
+  visit(json)
+  return json
 }
 
 // ── Kern-Transformation ──────────────────────────────────────────────────────
@@ -159,7 +232,7 @@ function walkNodes(orderedNodes, tagPositions, cursor, opts) {
 
     // Fragment auflösen
     if (tagName === 'Fragment' && attrs.name) {
-      const fragmentRelPath = fragmentLibrary[attrs.name]
+      const fragmentRelPath = chooseFragmentPath(attrs.name, fragmentLibrary)
       if (fragmentRelPath) {
         const absFragmentPath = resolve(REPO_ROOT, fragmentRelPath)
         if (existsSync(absFragmentPath) && !visitedPaths.has(absFragmentPath)) {
@@ -264,9 +337,12 @@ export function parseScenarioXml(xmlFilePath) {
     visitedPaths,
   })
 
+  const tree = nodes.length === 1 ? nodes[0] : nodes
+  addTeststepNumber(tree)
+
   return {
     valid: true,
     errors: null,
-    tree: nodes.length === 1 ? nodes[0] : nodes,
+    tree,
   }
 }

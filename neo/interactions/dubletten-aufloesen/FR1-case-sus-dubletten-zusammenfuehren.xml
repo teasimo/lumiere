@@ -130,16 +130,16 @@
 
     <!-- Intro -->
 
-    <!-- <Info typ="Erklärung">Folgende Funktionalität ermöglicht Ihnen das Zusammenführen von doppelten Schüler*innen-Datensätzen.</Info>
+    <!-- 
     <Folie>Zweck: Ein Datensatz pro Schüler*in</Folie>
-    <Info typ="Erklärung">In NEO Niedersachsen sollte für jede Schüler*in immer nur genau ein Datensatz vorliegen, um keine widersprüchlichen Daten zu erzeugen. Ist dies nicht der Fall, sollte man die Daten der verschiedenen Datensätze zusammenführen.</Info>
+    
     <Folie>Zweck: Ein Datensatz pro Schüler*in
 Auslöser: Immer nutzbar</Folie>
     <Info typ="Erklärung">Diese Funktionalität ist zu jedem Zeitpunkt in NEO Niedersachsen nutzbar.</Info>
     <Folie>Zweck: Ein Datensatz pro Schüler*in
 Auslöser: Immer nutzbar
 Berechtigung: Datenpflege der Funktion Schulleitung</Folie>
-    <Info typ="Erklärung">Sie benötigen für diese Funktionalität die Berechtigung mit dem Namen - Datenpflege -, die in der Funktion - Schulleitung - enthalten ist.</Info>
+    
     <Folie>Zweck: Ein Datensatz pro Schüler*in
 Auslöser: Immer nutzbar
 Berechtigung: Datenpflege der Funktion Schulleitung
@@ -147,9 +147,13 @@ Wirkung: Datenübernahme und Vormerkung zur Löschung</Folie>
     <Info typ="Erklärung">Das Ergebnis ist, dass bei Bedarf Daten aus dem nachrangigen Datensatz in den führenden Datensatz übernommen wurden und der nachrangige Datensatz ausgeblendet und für die Löschung vorgemerkt ist.</Info> -->
 
     <VideoStart/>
+    <Info typ="Erklärung">Folgende Funktionalität ermöglicht Ihnen das Zusammenführen von doppelten Schüler*innen-Datensätzen.</Info>
+    <Info typ="Erklärung">In NEO Niedersachsen sollte für jede Schüler*in immer nur genau ein Datensatz vorliegen, um keine widersprüchlichen Daten zu erzeugen. Ist dies nicht der Fall, kann man die Daten der verschiedenen Datensätze zusammenführen.</Info>
+    <Info typ="Erklärung">Sie benötigen für diese Funktionalität die Berechtigung mit dem Namen - Datenpflege -, die in der Funktion - Schulleitung - enthalten ist.</Info>
     <Folie>Schüler*innen-Datensätze zusammenführen</Folie>
     <Kapitel>Schüler*innen-Datensätze zusammenführen</Kapitel>
     <Schritt>Doppelte Datensätze identifizieren</Schritt>
+
 
     <!-- Ausgangslage -->
     <Fragment name="neo-hauptmenue-sus-schuelerinnen"/>
@@ -165,12 +169,13 @@ Wirkung: Datenübernahme und Vormerkung zur Löschung</Folie>
 
 
 
-
     <Schritt>Führenden Datensatz öffnen</Schritt>
     <!-- 1) Führenden Datensatz öffnen -->
-    <Info typ="Zweck">Um den nachrangigen Datensatz aufzulösen, muss der führende Datensatz geöffnet werden.</Info>
+    <Info typ="Erklärung">Um den nachrangigen Datensatz aufzulösen, muss der führende Datensatz geöffnet werden.</Info>
     <Click data-id="controlBtn/action-detaillink"/>
     <Click text="Einstellungen"/>
+
+    <VideoStop/>
 
 
     <Schritt>Nachrangigen Datensatz identifizieren</Schritt>
@@ -208,7 +213,7 @@ Wirkung: Datenübernahme und Vormerkung zur Löschung</Folie>
     <Click data-id="markierung/markierung/option/1" text="Dublette"/>
     <Click data-id="filters/apply"/>
 
-      <VideoStop/>
+
   </Gruppe>
 
 
