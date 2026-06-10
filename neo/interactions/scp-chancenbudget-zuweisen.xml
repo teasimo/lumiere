@@ -1,0 +1,65 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<SzenarioScript id="scp-chancenbudget-zuweisen" szenario-version="1.0" status="Entwurf" neo-version-min="6.0">	
+	<Daten>
+		<Datensatz name="runtime">
+			<Wert name="base_url" value="https://neo-integration.de"/>
+		</Datensatz>
+		<Wert name="random" value="{{randomNumber()}}"/>
+		<Datensatz name="actor">
+			<Wert name="username" value="mbatzu5719"/>
+			<Wert name="password" value="!Neo-2405Neo!"/>
+		</Datensatz>		
+	</Daten>
+	<Variablen>
+		<Variable name="random"/>
+	</Variablen>
+
+	<!-- Vorbereitung -->
+	<Gruppe>
+		
+		
+		<!-- Login -->
+		<Fragment name="neo-login">
+			<Parameter name="url" value="{{runtime.base_url}}"/>
+			<Parameter name="username" value="{{actor.username}}"/>
+			<Parameter name="password" value="{{actor.password}}"/>
+		</Fragment>
+
+
+    <VideoStart/>
+    <Info typ="Erklärung">
+      Hierzu benötigen Sie die Berechtigung "Chancenbudgetzuweisung" die in der Funktion Fachbereichsleitung SCP im RLSB Lüneburg liegt.
+    </Info>
+    <Kapitel>Chancenbudget zuweisen</Kapitel>
+		
+
+		<Info typ="Erklärung">Damit man Schulen im Start-Chancen-Programm Geld ausgeben können, muss Ihnen Budget zugewiesen sein.</Info>
+<Click data-id="button/menu-toggle"/>
+<Click data-id="menu/item/startchancen-programm/"/>
+<Click data-id="button/user-menu-toggle"/>
+<Click data-id="button/menu-toggle"/>
+<Click data-id="menu/item/startchancen-programm/"/>
+<Click data-id="menu/link/startchancen-programm/massnahmen-verwalten/"/>
+<Click data-id="button/menu-toggle"/>
+<Click data-id="button/user-menu-toggle"/>
+<Click data-id="button/menu-toggle"/>
+<Click data-id="menu/item/startchancen-programm/"/>
+<Click data-id="menu/link/startchancen-programm/uebersicht/"/>
+<Eingabe data-id="control/infopanel"></Eingabe>
+<Eingabe data-id="control/infopanel">05320</Eingabe>
+<Click data-id="control/infopanel"/>
+<Click data-id="controlBtn/action-detaillink"/>
+<Click data-id="g_chancenbudgetermittlung/btn/action-insert-scope"/>
+<Eingabe data-id="g_budget_content/g_budget/haushaltsjahr"></Eingabe>
+<Click data-id="g_budget_content/g_budget/haushaltsjahr/option/1701_004"/>
+<Eingabe data-id="g_budget_content/g_budget/haushaltsjahr">2027</Eingabe>
+<Eingabe data-id="g_budget_content/g_budget/budget_beschreibung">Geld</Eingabe>
+<Eingabe data-id="g_budget_content/g_budget/sockelbetrag">10.000</Eingabe>
+<Eingabe data-id="g_budget_content/g_budget/schuelerbezogeneranteil">20.000</Eingabe>
+<Eingabe data-id="g_budget_content/g_budget/uebertrag">15.000</Eingabe>
+<Eingabe data-id="g_budget_content/g_budget/zuweisungstext">Dies und das</Eingabe>
+<Click data-id="btn/action-save"/>
+
+		<VideoStop/>
+	</Gruppe>
+</SzenarioScript>
