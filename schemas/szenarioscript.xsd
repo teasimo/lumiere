@@ -13,7 +13,9 @@
             <xs:element name="Gruppe" type="GruppeType" minOccurs="0" maxOccurs="unbounded"/>
         </xs:sequence>
         <xs:attribute name="id" type="xs:ID" use="required"/>
-        <xs:attribute name="szenario-version" type="xs:string" use="required"/>
+        <xs:attribute name="testscript-version" type="xs:string" use="required"/>
+        <xs:attribute name="videoscript-version" type="xs:string" use="required"/>
+        <xs:attribute name="confluence-page-id" type="xs:string" use="optional"/>
         <xs:attribute name="status" type="StatusType" use="required"/>
         <xs:attribute name="neo-version-min" type="xs:string" use="required"/>
         <xs:attribute name="neo-version-max" type="xs:string" use="optional"/>

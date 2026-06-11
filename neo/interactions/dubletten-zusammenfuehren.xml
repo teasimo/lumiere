@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<SzenarioScript id="sus-dublette-zusammenfuehren" szenario-version="1.0" status="Entwurf" neo-version-min="6.0" titel="Schüler*innen-Datensätze zusammenführen">
+<SzenarioScript id="sus-dublette-zusammenfuehren" testscript-version="1" videoscript-version="1" confluence-page-id="2101411841" status="Entwurf" neo-version-min="6.0" titel="Schüler*innen-Datensätze zusammenführen">
   <Einstellungen>
     <Gruppe name="video">
       <Einstellung name="autoscroll_smooth" value="True"/>
@@ -175,7 +175,7 @@ Wirkung: Datenübernahme und Vormerkung zur Löschung</Folie>
     <Click data-id="controlBtn/action-detaillink"/>
     <Click text="Einstellungen"/>
 
-    <VideoStop/>
+    
 
 
     <Schritt>Nachrangigen Datensatz identifizieren</Schritt>
@@ -214,6 +214,7 @@ Wirkung: Datenübernahme und Vormerkung zur Löschung</Folie>
     <Click data-id="filters/apply"/>
 
 
+<VideoStop/>
   </Gruppe>
 
 

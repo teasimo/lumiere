@@ -744,6 +744,90 @@ function hasUsableScrollTarget(target) {
   return Boolean(buildGenericTargetSelector(target))
 }
 
+function buildScrollTargetSummary(target) {
+  if (!target || typeof target !== 'object') {
+    return ''
+  }
+
+  const fields = ['testid', 'data-id', 'id', 'role', 'text', 'label', 'aria-label']
+  const parts = []
+
+  for (const field of fields) {
+    const value = target[field]
+    if (value == null) {
+      continue
+    }
+
+    const text = String(value).replace(/\s+/g, ' ').trim()
+    if (!text) {
+      continue
+    }
+
+    parts.push(`${field}=${text}`)
+  }
+
+  const selector = buildGenericTargetSelector(target)
+  if (selector) {
+    parts.push(`selector=${selector}`)
+  }
+
+  return parts.join(' | ')
+}
+
+function buildInjectedAutoScrollResolvedTitle(step) {
+  const interaction = step?.interaction || {}
+  const targetSummary = buildScrollTargetSummary(interaction.target)
+  const sourceTitle = String(step?.resolvedTitle || '').replace(/\s+/g, ' ').trim()
+  const sourceStepId = String(step?.resolvedId || step?.id || '').trim()
+  const parts = ['Scroll']
+
+  if (targetSummary) {
+    parts.push(targetSummary)
+  }
+  if (sourceStepId) {
+    parts.push(`origin=${sourceStepId}`)
+  }
+  if (sourceTitle) {
+    parts.push(`source=${sourceTitle}`)
+  }
+
+  const title = parts.join(' | ')
+  return title.length > 220 ? `${title.slice(0, 217)}...` : title
+}
+
+function buildScrollLocatorExpression(target) {
+  if (!target || typeof target !== 'object') {
+    return null
+  }
+
+  if (target.text) {
+    if (target.role) {
+      return `page.getByRole(${toLiteral(String(target.role))}, { name: ${toLiteral(String(target.text))}, exact: true }).first()`
+    }
+    return `page.getByText(${toLiteral(String(target.text))}, { exact: true }).first()`
+  }
+
+  if (target.testid) {
+    return `page.getByTestId(${toLiteral(String(target.testid))}).first()`
+  }
+
+  const genericSelector = buildGenericTargetSelector(target)
+  if (genericSelector) {
+    return `page.locator(${toLiteral(genericSelector)}).first()`
+  }
+
+  if (target['data-id'] || target.id) {
+    const selectorType = target['data-id'] ? 'data-id' : 'id'
+    const value = target['data-id'] || target.id
+    const selector = selectorType === 'data-id'
+      ? `[data-id=${JSON.stringify(String(value))}]`
+      : `[id=${JSON.stringify(String(value))}]`
+    return `page.locator(${toLiteral(selector)}).first()`
+  }
+
+  return null
+}
+
 function isInteractionTypeNeedingAutoScroll(interactionType) {
   return ['click', 'fill', 'append', 'select', 'upload', 'search-and-select'].includes(interactionType)
 }
@@ -761,8 +845,13 @@ function injectAutoScrollSteps(flowEntries, options = {}, path = []) {
 
     if (enabled && isInteractionTypeNeedingAutoScroll(interactionType) && hasUsableScrollTarget(interaction.target)) {
       const onlyIfNotVisible = interactionType === 'select' ? false : true
+      const injectedResolvedId = step?.resolvedId
+        ? `${String(step.resolvedId).trim()}__autoscroll`
+        : `${stepId}__autoscroll`
       injected.push({
         id: `${stepId}__autoscroll`,
+        resolvedId: injectedResolvedId,
+        resolvedTitle: buildInjectedAutoScrollResolvedTitle(step),
         if: step?.if,
         ifnot: step?.ifnot,
         interaction: {
@@ -1083,25 +1172,8 @@ function buildInteractionLines(step, options = {}) {
     if (!target.testid && !target.id && !target['data-id'] && !target.text && !buildGenericTargetSelector(target)) {
       throw new Error(`Step "${step.id}" has interaction type "scroll" but no usable target fields.`)
     }
-
-    if (target.text) {
-      if (target.role) {
-        lines.push(`const __scenarioScrollResult = await scrollToLocator(page, page.getByRole(${toLiteral(String(target.role))}, { name: ${toLiteral(String(target.text))}, exact: true }).first(), { stepDelayMs: ${scrollDelayRef}, focus: ${focus ? 'true' : 'false'}, onlyIfNotVisible: ${onlyIfNotVisible ? 'true' : 'false'} })`)
-      } else {
-        lines.push(`const __scenarioScrollResult = await scrollToLocator(page, page.getByText(${toLiteral(String(target.text))}, { exact: true }).first(), { stepDelayMs: ${scrollDelayRef}, focus: ${focus ? 'true' : 'false'}, onlyIfNotVisible: ${onlyIfNotVisible ? 'true' : 'false'} })`)
-      }
-    } else if (target.testid) {
-      lines.push(`const __scenarioScrollResult = await scrollToLocator(page, page.getByTestId(${toLiteral(String(target.testid))}).first(), { stepDelayMs: ${scrollDelayRef}, focus: ${focus ? 'true' : 'false'}, onlyIfNotVisible: ${onlyIfNotVisible ? 'true' : 'false'} })`)
-    } else if (buildGenericTargetSelector(target)) {
-      lines.push(`const __scenarioScrollResult = await scrollToLocator(page, page.locator(${toLiteral(buildGenericTargetSelector(target))}).first(), { stepDelayMs: ${scrollDelayRef}, focus: ${focus ? 'true' : 'false'}, onlyIfNotVisible: ${onlyIfNotVisible ? 'true' : 'false'} })`)
-    } else {
-      const selectorType = target['data-id'] ? 'data-id' : 'id'
-      const value = target['data-id'] || target.id
-      const selector = selectorType === 'data-id'
-        ? `[data-id=${JSON.stringify(String(value))}]`
-        : `[id=${JSON.stringify(String(value))}]`
-      lines.push(`const __scenarioScrollResult = await scrollToLocator(page, page.locator(${toLiteral(selector)}).first(), { stepDelayMs: ${scrollDelayRef}, focus: ${focus ? 'true' : 'false'}, onlyIfNotVisible: ${onlyIfNotVisible ? 'true' : 'false'} })`)
-    }
+    const locatorExpression = buildScrollLocatorExpression(target)
+    lines.push(`const __scenarioScrollResult = await scrollToLocator(page, ${locatorExpression}, { stepDelayMs: ${scrollDelayRef}, focus: ${focus ? 'true' : 'false'}, onlyIfNotVisible: ${onlyIfNotVisible ? 'true' : 'false'} })`)
     lines.push('if (!__scenarioScrollResult.didScroll) {')
     lines.push(`  return { __scenarioStepStatus: 'noop', reason: 'scroll target already in view' }`)
     lines.push('}')
@@ -1286,12 +1358,16 @@ export function renderScenarioSpecTemplate({
       const purposeText = typeof stepDidactics?.purpose?.text === 'string'
         ? String(stepDidactics.purpose.text).replace(/\s+/g, ' ').trim()
         : ''
-      
-
+      const interaction = step?.interaction || {}
+      const interactionType = String(interaction.type || '').trim().toLowerCase()
       const stepId = typeof step?.resolvedId === 'string' ? step.resolvedId.trim() : '';
       const stepTitle = typeof step?.resolvedTitle === 'string' ? step.resolvedTitle.trim() : ''
-      
-      
+      const shouldGuardAutoScrollTimelineStep = interactionType === 'scroll'
+        && interaction.only_if_not_visible === true
+        && String(step?.id || '').trim().endsWith('__autoscroll')
+      const autoScrollLocatorExpression = shouldGuardAutoScrollTimelineStep
+        ? buildScrollLocatorExpression(interaction.target)
+        : null
 
       const conditionalCondition = step?.condition && typeof step.condition === 'object' ? step.condition : null
       const conditionalThenFlow = Array.isArray(step?.flow) ? step.flow : []
@@ -1304,6 +1380,9 @@ export function renderScenarioSpecTemplate({
       const ifConditions = toConditionList(step.if, 'if', stepId)
       const ifNotConditions = toConditionList(step.ifnot, 'ifnot', stepId)
 
+      if (shouldGuardAutoScrollTimelineStep) {
+        parts.push(`${indent}if (!(await isLocatorInViewport(page, ${autoScrollLocatorExpression}))) {`)
+      }
       parts.push(`${indent}await timelineRuntime.runStep(${toLiteral(stepId)},${toLiteral(stepTitle)} ,async () => {`)
       if (stepId || stepTitle) {
         parts.push(`${indent}  // ${[stepId, stepTitle].filter(Boolean).join(' | ')}`)
@@ -1357,6 +1436,9 @@ export function renderScenarioSpecTemplate({
 
       parts.push(`${indent}  await stepIdentifierLogger.capture(${toLiteral(stepId)}, "after")`)
       parts.push(`${indent}})`)
+      if (shouldGuardAutoScrollTimelineStep) {
+        parts.push(`${indent}}`)
+      }
       parts.push('')
     }
   }

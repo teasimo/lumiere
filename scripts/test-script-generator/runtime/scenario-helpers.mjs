@@ -706,6 +706,17 @@ export async function scrollToLocator(page, locator, options = {}) {
   return { didScroll: Boolean(scrollResult.moved || !scrollResult.reachedTarget) }
 }
 
+export async function isLocatorInViewport(page, locator) {
+  await locator.waitFor({ state: "attached" })
+  return locator.evaluate((element) => {
+    const rect = element.getBoundingClientRect()
+    if (!rect || rect.width <= 0 || rect.height <= 0) {
+      return false
+    }
+    return rect.bottom > 0 && rect.right > 0 && rect.top < window.innerHeight && rect.left < window.innerWidth
+  })
+}
+
 async function ensureLocatorScroll(page, locator, options = {}) {
   const skipAutoScroll = options && options.skipAutoScroll === true
   if (skipAutoScroll) {
