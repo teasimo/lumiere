@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<SzenarioScript id="berechtigungen-delegieren" szenario-version="1.0" status="Entwurf" neo-version-min="6.0" titel="Berechtigungen delegieren">
+<SzenarioScript id="berechtigungen-delegieren" testscript-version="1" videoscript-version="1" confluence-page-id="2101673985" status="Entwurf" neo-version-min="6.0" 
+neo-version-max="7.0" titel="Berechtigungen delegieren">
 
 	<Einstellungen>
 		<Gruppe name="video">
@@ -39,6 +40,7 @@
 	<Gruppe>
 
 		<Fragment name="neo-login">
+			<Parameter name="url" value="{{runtime.base_url}}"/>
 			<Parameter name="username" value="{{actor.username}}"/>
 			<Parameter name="password" value="{{actor.password}}"/>
 		</Fragment>
@@ -58,13 +60,10 @@
 
 		<Gruppe id="navigate_mein_profil">
 			<VideoStart/>
-			<Info typ="Zweck" ausgabe="gruppe">
-                Datenqualität ist in der Verwaltung sehr wichtig, um immer auf Basis der richtigen Informationen zu entscheiden. Wichtig hierfür ist, dass pro Schüler*in immer genau nur ein Datensatz mit allen bekannten Informationen vorliegt.
-                Daher zeigen wir Ihnen im zum Einen wie NEO Niedersachsen Sie dabei unterstützt, dass keine doppelten Datensätze angelegt werden. Zum anderen wird Ihnen demonstriert, wie doppelte Datensätze, die dennoch entstanden sind, zu einem Datensatz zusammengeführt werden können.
-			</Info>
-			<Info typ="Erklärung" ausgabe="gruppe">
-                Es gibt für Schüler zwei Stellen an denen Schüler-Datensätze entstehen können. Dies ist zum einen der Bereich der Meldedaten.
-			</Info>
+			
+		<Info typ="Erklärung">Personen mit einer Leitungsfunktion können ihren Mitarbeiter*innen Berechtigungen delegieren. </Info>
+		<Kapitel>Berechtigungen delegieren</Kapitel>
+		<Schritt>Personaldatensatz öffnen</Schritt>
 			<Fragment name="neo-hauptmenue-mein-profil"/>
 		</Gruppe>
 
@@ -90,7 +89,9 @@
 
 		<Click text="Ja"/>
 
-		<Click data-id="g_prp_org_delegate/$data0/prp_name"/>
+		<VideoStop/>
+
+		<Click text="delete"/>
 
 		<Click text="Ja"/>
 

@@ -1699,7 +1699,8 @@ function buildNarrationsFromScenarioTimeline({ scenarioRoot, timelineReport, pro
         startMs: groupStartMs,
         endMs: groupEndMs,
         text: spokenText,
-        sourceTimelineStepId: String(groupWindow?.lastStepId || narrationStepId).trim() || narrationStepId,
+        sourceTimelineStepId: String(groupWindow?.firstStepId || narrationStepId).trim() || narrationStepId,
+        sourcePauseTimelineStepId: String(groupWindow?.lastStepId || narrationStepId).trim() || narrationStepId,
         sourceScenarioStepId: matchedStepId || stepId,
         sourceAnchor: 'info-during',
         voice: voiceOverride || profileVoice || undefined,
@@ -2163,6 +2164,7 @@ function applyNarrationTimingToAudioFiles(audioFiles, narrations) {
       sourceAnchor: timing.sourceAnchor,
       sourceScenarioStepId: timing.sourceScenarioStepId,
       sourceTimelineStepId: timing.sourceTimelineStepId,
+      sourcePauseTimelineStepId: timing.sourcePauseTimelineStepId,
       sourceKind: timing.sourceKind,
       sourceChannel: timing.sourceChannel,
     }

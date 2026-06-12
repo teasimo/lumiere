@@ -10,7 +10,6 @@
     <Gruppe id="element_open_first">
 
         <Click
-            id="datensatz_oeffnen"
             data-id="controlBtn/action-detaillink"/>
 
     </Gruppe>

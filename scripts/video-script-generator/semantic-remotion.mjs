@@ -192,17 +192,17 @@ function buildNarrationGroups(adjustedAudioFiles) {
   const pausesByStepId = new Map()
 
   for (const entry of Array.isArray(adjustedAudioFiles) ? adjustedAudioFiles : []) {
-    const stepId = String(entry?.sourceTimelineStepId || entry?.sourceScenarioStepId || '').trim()
-    if (!stepId) {
+    const narrationStepId = String(entry?.sourceTimelineStepId || entry?.sourceScenarioStepId || '').trim()
+    if (!narrationStepId) {
       continue
     }
 
-    if (!narrationsByStepId.has(stepId)) {
-      narrationsByStepId.set(stepId, [])
+    if (!narrationsByStepId.has(narrationStepId)) {
+      narrationsByStepId.set(narrationStepId, [])
     }
     const rawFile = String(entry?.file || '').trim()
-    narrationsByStepId.get(stepId).push({
-      id: String(entry?.id || stepId),
+    narrationsByStepId.get(narrationStepId).push({
+      id: String(entry?.id || narrationStepId),
       file: rawFile ? resolve(rawFile) : null,
       atMs: Math.max(0, Math.floor(Number(entry?.finalOutputStartMs != null ? entry.finalOutputStartMs : entry?.startMs || 0))),
       endMs: Math.max(
@@ -229,12 +229,18 @@ function buildNarrationGroups(adjustedAudioFiles) {
       continue
     }
 
-    if (!pausesByStepId.has(stepId)) {
-      pausesByStepId.set(stepId, [])
+    const pauseStepId = String(entry?.sourcePauseTimelineStepId || narrationStepId).trim()
+    if (!pauseStepId) {
+      continue
     }
-    pausesByStepId.get(stepId).push({
+
+    if (!pausesByStepId.has(pauseStepId)) {
+      pausesByStepId.set(pauseStepId, [])
+    }
+    pausesByStepId.get(pauseStepId).push({
       atSourceMs: Math.max(0, Math.floor(pauseAtMs)),
       durationMs: overflowMs,
+      sourceAnchor: String(entry?.sourceAnchor || '').trim().toLowerCase() || undefined,
     })
   }
 
@@ -392,6 +398,110 @@ function extendIntroCalloutDurations(callouts, narrations) {
         Math.max(1, Math.floor(Number(entry?.durationMs || 1))),
         presentationNarrationEndMs,
       ),
+    }
+  })
+}
+
+function normalizePauseAnchorForClip(pause, clip) {
+  const clipStartMs = Math.max(0, Math.floor(Number(clip?.sourceStartMs || 0)))
+  const clipEndMs = Math.max(clipStartMs, Math.floor(Number(clip?.sourceEndMs || clipStartMs)))
+  const anchor = String(pause?.sourceAnchor || '').trim().toLowerCase()
+
+  if (anchor === 'before' || anchor === 'info-before' || anchor === 'info-presentation') {
+    return clipStartMs
+  }
+
+  if (anchor === 'after' || anchor === 'info-after' || anchor === 'info-during') {
+    return clipEndMs
+  }
+
+  const rawAtSourceMs = Math.max(0, Math.floor(Number(pause?.atSourceMs || 0)))
+  if (rawAtSourceMs < clipStartMs) {
+    return clipStartMs
+  }
+  if (rawAtSourceMs > clipEndMs) {
+    return clipEndMs
+  }
+  return rawAtSourceMs
+}
+
+function normalizePausesForClip(pauses, clip) {
+  return (Array.isArray(pauses) ? pauses : []).map((pause) => ({
+    ...pause,
+    atSourceMs: normalizePauseAnchorForClip(pause, clip),
+  }))
+}
+
+function enforceInfoDuringBlockingOnSteps(chapters, adjustedAudioFiles) {
+  const requiredEndByPauseStepId = new Map()
+
+  for (const entry of Array.isArray(adjustedAudioFiles) ? adjustedAudioFiles : []) {
+    const anchor = String(entry?.sourceAnchor || '').trim().toLowerCase()
+    if (anchor !== 'info-during') {
+      continue
+    }
+
+    const pauseStepId = String(entry?.sourcePauseTimelineStepId || entry?.sourceTimelineStepId || '').trim()
+    if (!pauseStepId) {
+      continue
+    }
+
+    const requiredEndMs = Math.max(
+      0,
+      Math.floor(
+        Number(
+          entry?.finalOutputEndMs != null
+            ? entry.finalOutputEndMs
+            : entry?.endMs != null
+              ? entry.endMs
+              : entry?.startMs || 0,
+        ),
+      ),
+    )
+    requiredEndByPauseStepId.set(
+      pauseStepId,
+      Math.max(requiredEndByPauseStepId.get(pauseStepId) || 0, requiredEndMs),
+    )
+  }
+
+  if (requiredEndByPauseStepId.size === 0) {
+    return chapters
+  }
+
+  let planCursorMs = 0
+  return chapters.map((chapter) => {
+    const steps = (chapter?.steps || []).map((step) => {
+      const clipDurationMs = Math.max(
+        1,
+        Math.floor(
+          Math.max(1, Number(step?.clip?.sourceEndMs || 1)) - Math.max(0, Number(step?.clip?.sourceStartMs || 0)),
+        ),
+      )
+      const pauses = Array.isArray(step?.pauses) ? step.pauses.map((pause) => ({ ...pause })) : []
+      const pauseDurationMs = pauses.reduce((sum, pause) => sum + Math.max(0, Number(pause?.durationMs || 0)), 0)
+      const currentStepDurationMs = clipDurationMs + pauseDurationMs
+      const currentStepEndMs = planCursorMs + currentStepDurationMs
+      const requiredEndMs = requiredEndByPauseStepId.get(String(step?.id || '').trim()) || 0
+
+      if (requiredEndMs > currentStepEndMs) {
+        pauses.push({
+          atSourceMs: Math.max(0, Math.floor(Number(step?.clip?.sourceEndMs || step?.clip?.sourceStartMs || 0))),
+          durationMs: requiredEndMs - currentStepEndMs,
+        })
+      }
+
+      const finalPauseDurationMs = pauses.reduce((sum, pause) => sum + Math.max(0, Number(pause?.durationMs || 0)), 0)
+      planCursorMs += clipDurationMs + finalPauseDurationMs
+
+      return {
+        ...step,
+        pauses,
+      }
+    })
+
+    return {
+      ...chapter,
+      steps,
     }
   })
 }
@@ -560,11 +670,11 @@ export function buildSemanticVideoPlan({
           // the slide card and any blocking narration are shown.
           sourceEndMs: introSourceStartMs + 1,
         }
-        const introPauses = [...chapterPauses]
-        if (chapterCard?.durationMs) {
-          introPauses.unshift({
-            atSourceMs: introSourceStartMs,
-            durationMs: Math.max(1, Math.floor(Number(chapterCard.durationMs) || 1)),
+      const introPauses = [...chapterPauses]
+      if (chapterCard?.durationMs) {
+        introPauses.unshift({
+          atSourceMs: introSourceStartMs,
+          durationMs: Math.max(1, Math.floor(Number(chapterCard.durationMs) || 1)),
           })
         }
         currentChapter.steps.push({
@@ -574,11 +684,11 @@ export function buildSemanticVideoPlan({
           tags: [],
           clip: chapterClip,
           freezes: [],
-          pauses: extendPausesForNarrations({
-            clip: chapterClip,
-            pauses: introPauses,
-            narrations: chapterNarrations,
-          }),
+        pauses: extendPausesForNarrations({
+          clip: chapterClip,
+          pauses: normalizePausesForClip(introPauses, chapterClip),
+          narrations: chapterNarrations,
+        }),
           narrations: chapterNarrations,
           callouts: extendIntroCalloutDurations(
             toChapterCardCallout(chapterCard, slideDefaults),
@@ -597,7 +707,11 @@ export function buildSemanticVideoPlan({
 
     ensureCurrentChapter()
     const interactionType = String(flowEntry?.step?.interaction?.type || '').trim().toLowerCase()
-    const basePauses = [...(pausesByStepId.get(stepId) || [])]
+    const stepClip = {
+      sourceStartMs: window.sourceStartMs,
+      sourceEndMs: window.sourceEndMs,
+    }
+    const basePauses = normalizePausesForClip(pausesByStepId.get(stepId) || [], stepClip)
     const baseMarkers = [...(clickMarkersByStepId.get(stepId) || [])]
 
     const holdDurationMs = clickPresentation.freezeBeforeMs + clickPresentation.highlightDurationMs + clickPresentation.afterMs
@@ -679,10 +793,7 @@ export function buildSemanticVideoPlan({
       title: stepTitle,
       'row-index': rowIndex,
       tags: tagMap.get(stepId) || [],
-      clip: {
-        sourceStartMs: window.sourceStartMs,
-        sourceEndMs: window.sourceEndMs,
-      },
+      clip: stepClip,
       freezes: [],
       pauses: basePauses,
       narrations: interactionNarrations,
@@ -692,6 +803,7 @@ export function buildSemanticVideoPlan({
   }
 
   const filteredChapters = chapters.filter((chapter) => Array.isArray(chapter.steps) && chapter.steps.length > 0)
+  const chaptersWithInfoDuringBlocking = enforceInfoDuringBlockingOnSteps(filteredChapters, adjustedAudioFiles)
 
   return {
     planVersion: '1.0',
@@ -710,7 +822,7 @@ export function buildSemanticVideoPlan({
       width: Number(width) || 1280,
       height: Number(height) || 720,
     },
-    chapters: filteredChapters,
+    chapters: chaptersWithInfoDuringBlocking,
   }
 }
 

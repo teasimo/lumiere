@@ -65,9 +65,6 @@
 
 		<Eingabe data-id="g_gesver_person/tabs_gesver/vornamen" text="{{schueler.ez2.vorname}}"/>
 
-		<!-- Unnötig -->
-		<Click data-id="g_gesver_person"/>
-
 		<Auswahl data-id="g_gesver_person/tabs_gesver/anrede" text="{{schueler.ez2.anrede}}"/>
 
 		<SucheAuswahl data-id="g_adresse/g_gesver_adr/adresseingabe" suchwert="{{schueler.ez2.adresseSuche}}" treffer-index="0"/>

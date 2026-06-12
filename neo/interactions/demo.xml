@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<SzenarioScript id="login" testscript-version="1" videoscript-version="1" confluence-page-id="2100887553" status="Entwurf" neo-version-min="6.0" titel="Schüler*innen-Datensätze zusammenführen">
+<SzenarioScript id="demo" testscript-version="1" videoscript-version="1" confluence-page-id="2100887553" status="Entwurf" neo-version-min="6.0" titel="Schüler*innen-Datensätze zusammenführen">
   <Einstellungen>
     <Gruppe name="video">
       <Einstellung name="autoscroll_smooth" value="True"/>
@@ -97,6 +97,7 @@
     <Fragment name="neo-hauptmenue-mein-profil"/>
 
 
+    <Kapitel>Anleitungen</Kapitel>
     <Info typ="Erklärung">
     Für weitere Informationen und Hilfe nutzen Sie bitte dargebotenen Anleitungen und Videos innerhalb von NEO Niedersachsen.
     </Info>
@@ -107,8 +108,9 @@
       <Parameter name="untermenue-data-id" value="menu/link/hilfe/kurzanleitung/"/>
     </Fragment>
 
+    <Kapitel>Anleitungen</Kapitel>
     <Info typ="Erklärung">
-    Wenn dies nicht weiterhilft, können Sie sich gerne an den NEO Support wenden. Sie erreichen am besten über das Kontaktformular, uns direkt hilfreiche Informationen zu Ihrem Anliegen - wie beispielsweise Ihre Browserverson - mitliefert.
+    Wenn dies nicht weiterhilft, können Sie sich gerne an den NEO Support wenden. Sie erreichen am besten über das Kontaktformular, uns direkt hilfreiche Informationen zu Ihrem Anliegen - wie beispielsweise Ihre Browserversion - mitliefert.
     </Info>
 
     <Fragment name="neo-untermenue">

@@ -17,6 +17,8 @@
 	<!-- Vorbereitung -->
 	<Gruppe>
 		
+
+	<VideoStart/>
 		
 		<!-- Login -->
 		<Fragment name="neo-login">
@@ -26,7 +28,7 @@
 		</Fragment>
 
 
-    <VideoStart/>
+    
     <Info typ="Erklärung">
       Hierzu benötigen Sie die Berechtigung "Chancenbudgetzuweisung" die in der Funktion Fachbereichsleitung SCP im RLSB Lüneburg liegt.
     </Info>
