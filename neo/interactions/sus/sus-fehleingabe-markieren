@@ -1,0 +1,72 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<SzenarioScript lunettes-id="14" id="sus-fehleingabe-deklarieren" testscript-version="1" videoscript-version="1"  neo-version-min="6.0" titel="SuS-Datensatz als Fehleingabe deklarieren">
+  <Einstellungen>
+    <Gruppe name="video">
+      <Einstellung name="autoscroll_smooth" value="True"/>
+      <Einstellung name="wait_between_steps" value="1000"/>
+      <Gruppe name="resolution">
+        <Einstellung name="width" value="1280"/>
+        <Einstellung name="height" value="720"/>
+      </Gruppe>
+    </Gruppe>
+    <Gruppe name="presentation">
+      <Gruppe name="indicators">
+        <Gruppe name="click">
+          <Einstellung name="enabled" value="True"/>
+          <Einstellung name="before_ms" value="800"/>
+          <Einstellung name="after_ms" value="100"/>
+          <Einstellung name="fade_ms" value="50"/>
+        </Gruppe>
+      </Gruppe>
+    </Gruppe>
+  </Einstellungen>
+  <Daten>
+    <Datensatz name="runtime">
+      <Wert name="base_url" value="https://neo-integration.de"/>
+    </Datensatz>
+    <Wert name="random" value="{{randomNumber()}}"/>
+    <Datensatz name="actor">
+      <Wert name="username" value="schule_05320_schulleitung"/>
+      <Wert name="password" value="!Neo-2405Neo!"/>
+    </Datensatz>
+    <Datensatz name="schueler">
+      <Wert name="vorname" value="Mark {{random}}"/>
+      <Wert name="nachname" value="Mustermann {{random}}"/>
+      <Wert name="geburtsdatum" value="01.01.2020"/>
+      <Wert name="geburtsort" value="Musterstadt"/>
+      <Wert name="adresseSuche" value="Fuchsbau 3 Emmerke"/>
+    </Datensatz>
+    <Datensatz name="schueler.ez1">
+      <Wert name="anrede" value="Frau"/>
+      <Wert name="vorname" value="Laura"/>
+      <Wert name="nachname" value="Mustermann"/>
+      <Wert name="geburtsdatum" value="01.01.1975"/>
+      <Wert name="geburtsort" value="Musterstadt"/>
+      <Wert name="adresseSuche" value="Fuchsbau 3 Emmerke"/>
+    </Datensatz>
+    <Datensatz name="schueler.ez2">
+      <Wert name="anrede" value="Herr"/>
+      <Wert name="vorname" value="Niklas"/>
+      <Wert name="nachname" value="Mustermann"/>
+      <Wert name="geburtsdatum" value="01.01.1970"/>
+      <Wert name="geburtsort" value="Musterstadt"/>
+      <Wert name="adresseSuche" value="Fuchsbau 3 Emmerke"/>
+    </Datensatz>
+  </Daten>
+  <Variablen>
+    <Variable name="random"/>
+  </Variablen>
+
+
+<Click data-id="button/menu-toggle"/>
+<Click data-id="menu/item/schueler/"/>
+<Click data-id="menu/link/schueler/schueler/"/>
+<Eingabe data-id="pin-erforderlich/input/pin">2308</Eingabe>
+
+
+<Click data-id="list-item/3/toggleDetails"/>
+<Click data-id="controlBtn3//action-detaillinkwtitle"/>
+<Click data-id="controlBtn/actions"/>
+<Click text="Als Fehlmarkierung deklarieren"/>
+<Eingabe aria-label="Begründung (optional)">Der Datensatz ist quatsch</Eingabe>
+<Click text="Ja">
