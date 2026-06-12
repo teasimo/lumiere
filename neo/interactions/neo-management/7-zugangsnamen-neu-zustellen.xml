@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<SzenarioScript id="passwort-zuruecksetzen" testscript-version="1" videoscript-version="1" confluence-page-id="2104459278" status="Entwurf" neo-version-min="6.0" neo-version-max="7.0" titel="Passwort zurücksetzen">
+<SzenarioScript lunettes-id="7" id="zugangsnamen-neu-zustellen" testscript-version="1" videoscript-version="1"  neo-version-min="6.0" neo-version-max="7.0" titel="Zugangsnamen neu zustellen">
 
 
 	<Einstellungen>
@@ -42,16 +42,17 @@
 		</Fragment>
 	</Gruppe>
 	<Gruppe>
-		<VideoStart/>
-		<Info typ="Erklärung">Personen mit einer Leitungsfunktion können für die Mitarbeiter*innen ihrer Organisation das Passwort zurücksetzen. </Info>
-		<Kapitel>Passwort zurücksetzen</Kapitel>
+
+	<VideoStart/>
+		<Info typ="Erklärung">Personen mit einer Leitungsfunktion können für die Mitarbeiter*innen ihrer Organisation den Zugangsnamen neu zustellen lassen. </Info>
+		<Kapitel>Zugangsnamen neu zustellen</Kapitel>
 		<Schritt>Personaldatensatz öffnen</Schritt>
 
 
 		<Info typ="Erklärung">Zugangskonten sind in NEO Niedersachsen immer an einen Personaldatensatz gebunden. Daher muss im ersten Schritt ein entsprechender Personaldatensatz ausgewählt werden.</Info>
 
-		
 		<Fragment name="neo-hauptmenue-personal-personalverwaltung"/>
+
 
 		<Info typ="Erklärung">In diesem Beispiel filtern wir nur die Personaldatensätze, die bereits ein Zugangskonto haben und öffnen den ersten Eintrag.</Info>
 
@@ -61,21 +62,25 @@
 		<Click data-id="filters/basic/choose/b_exists"/>
 		<Click data-id="b_exists/b_exists" />
 		<Click data-id="filters/apply"/>
+	
 		
 
 		<!-- erstes elememt öffnen -->
 		<Click data-id="list-item/0/toggleDetails"/>		
 		<Click data-id="controlBtn/action-detaillinkwtitle"/>
 
+		
+
+		<Schritt>Erneute Zustellung des Zugangsnamens auslösen</Schritt>
+		
 		<!-- Einstellungen öffnen zur Sichtbarkeit, dass nich kein Konto da ist-->
 		<Click text="Einstellungen"/>
 		
-		<Schritt>Rücksetzung des Passworts auslösen</Schritt>
 
 		<!-- zugangskonto erstellen -->
 		<Click data-id="controlBtn/actions"/>
-		<Click text="Passwort zurücksetzen"/>
-		<Click text="Versenden"/>		
+		<Click text="Zugangsnamen erneut zustellen"/>		
+		<Click text="Ja"/>		
 
 
 	</Gruppe>

@@ -797,6 +797,13 @@ function buildTargetFromAttributes(attrs, { includeText = true, includeUrl = fal
     target.url = attrs.url
   }
 
+  if (attrs.number != null && String(attrs.number).trim() !== '') {
+    const numberValue = Number(attrs.number)
+    target.number = Number.isInteger(numberValue) && numberValue >= 0
+      ? numberValue
+      : String(attrs.number)
+  }
+
   return target
 }
 

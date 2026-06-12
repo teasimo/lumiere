@@ -8,6 +8,9 @@ const DEFAULTS = {
       scenario_dir: 'neo/interactions',
       output_dir: 'temp/testfiles',
     },
+    lunettes_api: {
+      base_url: '',
+    },
     video: {
       wait_between_steps: 0,
       scroll_delay_ms: 35,

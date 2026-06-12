@@ -6,6 +6,9 @@
         "scenario_dir": "neo/interactions",
         "output_dir": "temp/testfiles"
       },
+      "lunettes_api": {
+        "base_url": "https://exigences-h9c6b9fweraub4eg.swedencentral-01.azurewebsites.net/"
+      },
       "video": {
         "wait_between_steps": 0,
         "scroll_delay_ms": 35,

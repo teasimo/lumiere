@@ -142,10 +142,73 @@ function readScenarioIdentity(scenarioAbsolutePath) {
     const root = parsed?.SzenarioScript || {}
     const scenarioId = sanitizeFileToken(root['@_id'] || fallbackId, fallbackId)
     const scenarioVersion = root['@_szenario-version'] ?? 'unknown'
-    return { scenarioId, scenarioVersion }
+    const lunettesId = String(root['@_lunettes-id'] || '').trim()
+    return { scenarioId, scenarioVersion, lunettesId }
   } catch {
-    return { scenarioId: fallbackId, scenarioVersion: 'unknown' }
+    return { scenarioId: fallbackId, scenarioVersion: 'unknown', lunettesId: '' }
   }
+}
+
+function normalizeBaseUrl(value) {
+  return String(value || '').trim().replace(/\/+$/, '')
+}
+
+function buildBasicAuthHeader(username, password) {
+  const token = Buffer.from(`${username}:${password}`, 'utf8').toString('base64')
+  return `Basic ${token}`
+}
+
+async function notifyLunettesTestscriptSuccess({
+  scenarioPath,
+  centralConfig,
+}) {
+  const lunettesApiConfig = centralConfig?.['test-script']?.lunettes_api || {}
+  const baseUrl = normalizeBaseUrl(lunettesApiConfig.base_url)
+  if (!baseUrl) {
+    return
+  }
+
+  const scenarioAbsolutePath = resolve(workspaceRoot, scenarioPath)
+  const { scenarioId, lunettesId } = readScenarioIdentity(scenarioAbsolutePath)
+  if (!lunettesId) {
+    throw new Error(
+      `Lunettes API callback configured, but XML ${relative(workspaceRoot, scenarioAbsolutePath)} is missing "lunettes-id".`
+    )
+  }
+
+  const username = String(process.env.LUNETTES_API_USERNAME || '').trim()
+  const password = String(process.env.LUNETTES_API_PASSWORD || '')
+  if (!username || !password) {
+    throw new Error('Lunettes API callback configured, but LUNETTES_API_USERNAME or LUNETTES_API_PASSWORD is missing.')
+  }
+
+  const endpoint = `${baseUrl}/api/anfo/szenario/${encodeURIComponent(lunettesId)}/testscript-erfolgreich`
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      Authorization: buildBasicAuthHeader(username, password),
+    },
+  })
+
+  let responsePayload = null
+  let responseText = ''
+  try {
+    responseText = await response.text()
+    responsePayload = responseText ? JSON.parse(responseText) : null
+  } catch {
+    responsePayload = responseText || null
+  }
+
+  if (!response.ok) {
+    const details = responsePayload ? ` Response: ${JSON.stringify(responsePayload)}` : ''
+    throw new Error(
+      `Lunettes API callback failed for scenario ${scenarioId} (lunettes-id=${lunettesId}) with HTTP ${response.status}.${details}`
+    )
+  }
+
+  console.log(
+    `[scenario-runner] Lunettes callback sent: ${relative(workspaceRoot, scenarioAbsolutePath)} -> ${endpoint}`
+  )
 }
 
 function countRenderedFlowSteps(flowEntries) {
@@ -162,7 +225,7 @@ function countRenderedFlowSteps(flowEntries) {
     const target = step?.interaction?.target || {}
     const hasUsableScrollTarget = Boolean(
       target?.testid || target?.id || target?.['data-id'] || target?.text || Object.keys(target || {}).some((key) => (
-        !['testid', 'id', 'data-id', 'text', 'role', 'url', 'state', 'click_child_selector'].includes(key)
+        !['testid', 'id', 'data-id', 'text', 'role', 'url', 'state', 'click_child_selector', 'number'].includes(key)
         && target[key] != null
       ))
     )
@@ -582,6 +645,11 @@ async function main() {
   if (runResult.exitCode !== 0) {
     throw new Error('Playwright test execution failed.')
   }
+
+  await notifyLunettesTestscriptSuccess({
+    scenarioPath: options.scenarioPath,
+    centralConfig: central.config,
+  })
 }
 
 main().catch((error) => {

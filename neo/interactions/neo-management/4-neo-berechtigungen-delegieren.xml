@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<SzenarioScript id="berechtigungen-delegieren" testscript-version="1" videoscript-version="1" confluence-page-id="2101673985" status="Entwurf" neo-version-min="6.0" 
+<SzenarioScript lunettes-id="4" id="berechtigungen-delegieren" testscript-version="1" videoscript-version="1"  neo-version-min="6.0" 
 neo-version-max="7.0" titel="Berechtigungen delegieren">
 
 	<Einstellungen>

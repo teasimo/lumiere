@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<SzenarioScript id="scp-chancenbudget-zuweisen" szenario-version="1.0" status="Entwurf" neo-version-min="6.0">	
+<SzenarioScript lunettes-id="11" id="scp-chancenbudget-zuweisen" szenario-version="1.0" neo-version-min="6.0">	
 	<Daten>
 		<Datensatz name="runtime">
 			<Wert name="base_url" value="https://neo-integration.de"/>

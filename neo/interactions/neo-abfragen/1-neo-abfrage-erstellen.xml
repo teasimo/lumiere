@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<SzenarioScript lunettes-id="1" id="neo-abfrage-erstellen" testscript-version="1" videoscript-version="1"  neo-version-min="6.0" neo-version-max="7.0" titel="NEO Abfrage erstellen">
+
+	<Einstellungen>
+		<Gruppe name="video">
+			<Einstellung name="autoscroll_smooth" value="false"/>
+			<Einstellung name="wait_between_steps" value="1000"/>
+			<Gruppe name="resolution">
+				<Einstellung name="width" value="1280"/>
+				<Einstellung name="height" value="720"/>
+			</Gruppe>
+		</Gruppe>
+		<Gruppe name="presentation">
+			<Gruppe name="indicators">
+				<Gruppe name="click">
+					<Einstellung name="enabled" value="true"/>
+					<Einstellung name="before_ms" value="100"/>
+					<Einstellung name="after_ms" value="100"/>
+					<Einstellung name="fade_ms" value="50"/>
+				</Gruppe>
+			</Gruppe>
+		</Gruppe>
+	</Einstellungen>
+
+	<Daten>
+		<Datensatz name="runtime">
+			<Wert name="base_url" value="https://neo-test.de"/>
+		</Datensatz>
+		<Datensatz name="actor">
+			<Wert name="username" value="ealles"/>
+			<Wert name="password" value="!Neo-2405Neo!"/>
+		</Datensatz>
+		<Datensatz name="moderator">
+			<Wert name="name" value="Bauer, Moritz (Dezernat 4)"/>
+			<!-- Zugangsname: vedize7115 -->
+		</Datensatz>
+	</Daten>
+
+	<Gruppe>
+
+		<Fragment name="neo-login">
+			<Parameter name="url" value="{{runtime.base_url}}"/>
+			<Parameter name="username" value="{{actor.username}}"/>
+			<Parameter name="password" value="{{actor.password}}"/>
+		</Fragment>
+		<!-- Organisationsauswahl nach dem Login -->
+		<Click id="confirm-organization-click" data-id="login/context/button/submit"/>
+	</Gruppe>
+	<Gruppe>
+		<VideoStart/>
+		<Kapitel>NEO Abfrage erstellen</Kapitel>
+		<Schritt>NEO Abfragen öffnen</Schritt>
+		<Click data-id="button/menu-toggle"/>
+		<Click data-id="menu/item/erhebungen/"/>
+		<Click data-id="menu/link/erhebungen/neo-abfrage/"/>
+
+		<Schritt>NEO Abfragen erstellen</Schritt>
+		<Click data-id="btn/create"/>
+		<Click data-id="btn/action-expandcollapseall"/>
+
+		<Schritt>Abfrage planen</Schritt>
+		<Eingabe data-id="abhoc_abfrage/alg/abfragetitel">Das ist eine neue Abfrage</Eingabe>
+		<Eingabe data-id="abhoc_abfrage/alg/beschreibung">Ich würde mich interessieren, ob Sie NEO toll finden.</Eingabe>
+		<Eingabe data-id="abhoc_abfrage/alg/bearbeitungsnotiz">Falls jemand Nein sagt, bitte die Antworten vor der Einreichung korrigieren</Eingabe>
+
+		<Eingabe data-id="individ_zyklen/$data0/beginn">12.06.2026</Eingabe>
+		<Eingabe data-id="individ_zyklen/$data0/ende">30.06.2027</Eingabe>
+		<Eingabe data-id="individ_zyklen/$data0/stichtag">12.06.2026</Eingabe>
+
+		<Click data-id="individ_zyklen~3/btn/action-insert-scope"/>
+		<Eingabe data-id="individ_zyklen/$data1/beginn">19.06.2026</Eingabe>
+		<Eingabe data-id="individ_zyklen/$data1/ende">01.08.2026</Eingabe>
+		<Eingabe data-id="individ_zyklen/$data1/stichtag">19.06.2026</Eingabe>
+
+		<Schritt>Moderator und zu moderierende Schulen festlegen</Schritt>
+		<Click data-id="infog_infob_group/btn/action-insert-scope"/>
+		<!-- <Click text="Bauer, Moritz (Dezernat 4)"/> -->
+		<Auswahl data-id="infobeschaffer-container/infog_infob_group/infobeschaffer">{{moderator.name}}</Auswahl>
+		<Click data-id="infobeschaffer-container/infog_infob_group/ag_schulen"/>
+		<Click data-id="@root/btn/action-CommonSelectAllAction"/>
+		<Click data-id="infobeschaffer-container/infog_infob_group/ag_schulen/uebernehmen"/>
+
+		<Schritt>Frage mit Auswahlmöglichkeiten erstellen</Schritt>
+		<Click data-id="frage_group/btn/action-insert-scope"/>
+		<Eingabe data-id="frage_group/$data0/fragestellung">Wie finden Sie NEO?</Eingabe>
+		<Eingabe data-id="frage_group/$data0/ausfuellhilfe">Bitte eine schmeichelhafte Antwort auswählen.</Eingabe>
+		<Click data-id="frage_group/$data0/antwortmoeglichkeiten"/>
+		<Click data-id="frage_group/$data0/antwortmoeglichkeiten/option/select"/>
+		<Click data-id="antwm_checkboxes/antwm_checkboxes~4/freitext_alternative"/>
+		<Click text="Wert hinzufügen"/>
+		<Eingabe aria-label="undefined" number="0">Super</Eingabe>
+		<Click text="Wert hinzufügen"/>
+		<Eingabe aria-label="undefined" number="1">Richtig Super</Eingabe>
+		<Click text="Wert hinzufügen"/>
+		<Eingabe aria-label="undefined" number="2">Genial</Eingabe>
+		<Click text="Wert hinzufügen"/>
+		<Eingabe aria-label="undefined" number="3">Gut</Eingabe>
+
+		<Schritt>Frage mit Text-einzeilig erstellen</Schritt>
+		<Click data-id="frage_group/btn/action-insert-scope"/>
+		<Eingabe data-id="frage_group/$data1/fragestellung">Eine Frage mit Textantwortmöglichgkeit</Eingabe>
+		<Click data-id="frage_group/$data1/antwortmoeglichkeiten"/>
+		<Click data-id="frage_group/$data1/antwortmoeglichkeiten/option/input"/>
+
+		<Schritt>Frage mit Text-mehrzeilig erstellen</Schritt>
+		<Click data-id="frage_group/btn/action-insert-scope"/>
+		<Eingabe data-id="frage_group/$data2/fragestellung">mehrzeilige frage</Eingabe>
+		<Click data-id="frage_group/$data2/antwortmoeglichkeiten"/>
+		<Click data-id="frage_group/$data2/antwortmoeglichkeiten/option/textarea"/>
+
+		<Schritt>Frage mit Ja/Nein erstellen</Schritt>
+		<Click data-id="frage_group/btn/action-insert-scope"/>
+		<Eingabe data-id="frage_group/$data3/fragestellung">keine ahnung, was da kommt</Eingabe>
+		<Click data-id="frage_group/$data3/antwortmoeglichkeiten"/>
+		<Click data-id="frage_group/$data3/antwortmoeglichkeiten/option/janein"/>
+
+		<Schritt>Frage mit Zahleingabe erstellen</Schritt>
+		<Click data-id="frage_group/btn/action-insert-scope"/>
+		<Eingabe data-id="frage_group/$data4/fragestellung">wieder was</Eingabe>
+		<Click data-id="frage_group/$data4/antwortmoeglichkeiten"/>
+		<Click data-id="frage_group/$data4/antwortmoeglichkeiten/option/number"/>
+
+		<Schritt>Frage mit Datumsangabe erstellen</Schritt>
+		<Click data-id="frage_group/btn/action-insert-scope"/>
+		<Eingabe data-id="frage_group/$data5/fragestellung">noch was</Eingabe>
+		<Click data-id="frage_group/$data5/antwortmoeglichkeiten"/>
+		<Click data-id="frage_group/$data5/antwortmoeglichkeiten/option/date"/>
+
+		<Schritt>Abfrage zur Prüfung geben</Schritt>
+		<Click data-id="btn/action-save"/>
+		<Click data-id="controlBtn/actions"/>
+		<Click text="Abfrage zur Prüfung geben"/>
+		<Click text="Ja"/>
+
+		<VideoStop/>
+	</Gruppe>
+</SzenarioScript>

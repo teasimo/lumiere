@@ -240,7 +240,7 @@ function buildGeneratedStepTitle(node) {
   const tag = String(node?.tag || 'Step')
   const attrs = node?.attrs || {}
   const parts = [tag]
-  const preferredAttrs = ['data-id', 'id', 'testid', 'text', 'aria-label', 'label', 'url']
+  const preferredAttrs = ['data-id', 'id', 'testid', 'text', 'aria-label', 'label', 'number', 'url']
   const sensitiveStep = isSensitiveStep(node)
 
   for (const attrName of preferredAttrs) {
@@ -749,7 +749,7 @@ function buildScrollTargetSummary(target) {
     return ''
   }
 
-  const fields = ['testid', 'data-id', 'id', 'role', 'text', 'label', 'aria-label']
+  const fields = ['testid', 'data-id', 'id', 'role', 'text', 'label', 'aria-label', 'number']
   const parts = []
 
   for (const field of fields) {
@@ -802,18 +802,24 @@ function buildScrollLocatorExpression(target) {
 
   if (target.text) {
     if (target.role) {
-      return `page.getByRole(${toLiteral(String(target.role))}, { name: ${toLiteral(String(target.text))}, exact: true }).first()`
+      return buildIndexedLocatorExpression(
+        `page.getByRole(${toLiteral(String(target.role))}, { name: ${toLiteral(String(target.text))}, exact: true })`,
+        target,
+      )
     }
-    return `page.getByText(${toLiteral(String(target.text))}, { exact: true }).first()`
+    return buildIndexedLocatorExpression(
+      `page.getByText(${toLiteral(String(target.text))}, { exact: true })`,
+      target,
+    )
   }
 
   if (target.testid) {
-    return `page.getByTestId(${toLiteral(String(target.testid))}).first()`
+    return buildIndexedLocatorExpression(`page.getByTestId(${toLiteral(String(target.testid))})`, target)
   }
 
   const genericSelector = buildGenericTargetSelector(target)
   if (genericSelector) {
-    return `page.locator(${toLiteral(genericSelector)}).first()`
+    return buildIndexedLocatorExpression(`page.locator(${toLiteral(genericSelector)})`, target)
   }
 
   if (target['data-id'] || target.id) {
@@ -822,7 +828,7 @@ function buildScrollLocatorExpression(target) {
     const selector = selectorType === 'data-id'
       ? `[data-id=${JSON.stringify(String(value))}]`
       : `[id=${JSON.stringify(String(value))}]`
-    return `page.locator(${toLiteral(selector)}).first()`
+    return buildIndexedLocatorExpression(`page.locator(${toLiteral(selector)})`, target)
   }
 
   return null
@@ -904,7 +910,7 @@ function toConditionList(value, keyName, stepId) {
 }
 
 function buildGenericTargetSelector(target) {
-  const reservedKeys = new Set(['testid', 'id', 'data-id', 'text', 'role', 'url', 'state', 'click_child_selector'])
+  const reservedKeys = new Set(['testid', 'id', 'data-id', 'text', 'role', 'url', 'state', 'click_child_selector', 'number'])
   const entries = Object.entries(target || {}).filter(([, value]) => value != null)
   const selectorParts = []
 
@@ -919,6 +925,16 @@ function buildGenericTargetSelector(target) {
   return selectorParts.length > 0 ? selectorParts.join('') : null
 }
 
+function getTargetIndex(target) {
+  const numberValue = Number(target?.number)
+  return Number.isInteger(numberValue) && numberValue >= 0 ? numberValue : null
+}
+
+function buildIndexedLocatorExpression(baseExpression, target) {
+  const index = getTargetIndex(target)
+  return `${baseExpression}.${index == null ? 'first()' : `nth(${index})`}`
+}
+
 function buildExpectedResultAssertions(expectedResults) {
   const lines = []
 
@@ -929,7 +945,7 @@ function buildExpectedResultAssertions(expectedResults) {
 
     if (target.testid) {
       const testId = String(target.testid)
-      const locator = `page.getByTestId(${toLiteral(testId)}).first()`
+      const locator = buildIndexedLocatorExpression(`page.getByTestId(${toLiteral(testId)})`, target)
 
       if (state.visible === true) {
         lines.push(`await expect(${locator}).toBeVisible()`)
@@ -948,8 +964,8 @@ function buildExpectedResultAssertions(expectedResults) {
       }
     } else if (target.text) {
       const locator = target.role
-        ? `page.getByRole(${toLiteral(String(target.role))}, { name: ${toLiteral(String(target.text))}, exact: true }).first()`
-        : `page.getByText(${toLiteral(String(target.text))}, { exact: true }).first()`
+        ? buildIndexedLocatorExpression(`page.getByRole(${toLiteral(String(target.role))}, { name: ${toLiteral(String(target.text))}, exact: true })`, target)
+        : buildIndexedLocatorExpression(`page.getByText(${toLiteral(String(target.text))}, { exact: true })`, target)
 
       if (state.visible === true) {
         lines.push(`await expect(${locator}).toBeVisible()`)
@@ -969,7 +985,7 @@ function buildExpectedResultAssertions(expectedResults) {
     } else {
       const genericSelector = buildGenericTargetSelector(target)
       if (genericSelector) {
-        const locator = `page.locator(${toLiteral(genericSelector)}).first()`
+        const locator = buildIndexedLocatorExpression(`page.locator(${toLiteral(genericSelector)})`, target)
 
         if (state.visible === true) {
           lines.push(`await expect(${locator}).toBeVisible()`)
@@ -991,7 +1007,7 @@ function buildExpectedResultAssertions(expectedResults) {
 
     if (target.id) {
       const id = String(target.id)
-      const locator = `page.locator(${toLiteral(`[id=${JSON.stringify(id)}]`)}).first()`
+      const locator = buildIndexedLocatorExpression(`page.locator(${toLiteral(`[id=${JSON.stringify(id)}]`)})`, target)
 
       if (state.visible === true) {
         lines.push(`await expect(${locator}).toBeVisible()`)
@@ -1012,7 +1028,7 @@ function buildExpectedResultAssertions(expectedResults) {
 
     if (target['data-id']) {
       const dataId = String(target['data-id'])
-      const locator = `page.locator(${toLiteral(`[data-id=${JSON.stringify(dataId)}]`)}).first()`
+      const locator = buildIndexedLocatorExpression(`page.locator(${toLiteral(`[data-id=${JSON.stringify(dataId)}]`)})`, target)
 
       if (state.visible === true) {
         lines.push(`await expect(${locator}).toBeVisible()`)
@@ -1072,17 +1088,17 @@ function buildInteractionLines(step, options = {}) {
       )
     }
     if (target.testid) {
-      lines.push(`await applyFillValue(page, ${toLiteral(String(target.testid))}, resolveRuntimeTemplateString(${toLiteral(String(interaction.value || ''))}, runtimeVariables), { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true })`)
+      lines.push(`await applyFillValue(page, ${toLiteral(String(target.testid))}, resolveRuntimeTemplateString(${toLiteral(String(interaction.value || ''))}, runtimeVariables), { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true, targetIndex: ${getTargetIndex(target) ?? 'undefined'} })`)
     } else if (target.text) {
       // Fill by visible text (first matching input/textarea/select)
-      lines.push(`await page.getByLabel(resolveRuntimeTemplateString(${toLiteral(String(target.text))}, runtimeVariables), { exact: true }).fill(resolveRuntimeTemplateString(${toLiteral(String(interaction.value || ''))}, runtimeVariables))`)
+      lines.push(`await ${buildIndexedLocatorExpression(`page.getByLabel(resolveRuntimeTemplateString(${toLiteral(String(target.text))}, runtimeVariables), { exact: true })`, target)}.fill(resolveRuntimeTemplateString(${toLiteral(String(interaction.value || ''))}, runtimeVariables))`)
     } else if (buildGenericTargetSelector(target)) {
       // Fill by generic selector
-      lines.push(`await page.locator(resolveRuntimeTemplateString(${toLiteral(buildGenericTargetSelector(target))}, runtimeVariables)).first().fill(resolveRuntimeTemplateString(${toLiteral(String(interaction.value || ''))}, runtimeVariables))`)
+      lines.push(`await ${buildIndexedLocatorExpression(`page.locator(resolveRuntimeTemplateString(${toLiteral(buildGenericTargetSelector(target))}, runtimeVariables))`, target)}.fill(resolveRuntimeTemplateString(${toLiteral(String(interaction.value || ''))}, runtimeVariables))`)
     } else if (target.id || target['data-id']) {
       const selectorType = target['data-id'] ? 'data-id' : 'id'
       const value = target['data-id'] || target.id
-      lines.push(`await applyFillValueById(page, ${toLiteral(String(value))}, resolveRuntimeTemplateString(${toLiteral(String(interaction.value || ''))}, runtimeVariables), ${toLiteral(selectorType)}, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true })`)
+      lines.push(`await applyFillValueById(page, ${toLiteral(String(value))}, resolveRuntimeTemplateString(${toLiteral(String(interaction.value || ''))}, runtimeVariables), ${toLiteral(selectorType)}, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true, targetIndex: ${getTargetIndex(target) ?? 'undefined'} })`)
     } else {
       throw new Error(`Step "${step.id}" has interaction type "fill" but no usable target fields.`)
     }
@@ -1096,11 +1112,11 @@ function buildInteractionLines(step, options = {}) {
       )
     }
     if (target.testid) {
-      lines.push(`await applyAppendValue(page, ${toLiteral(String(target.testid))}, ${toLiteral(String(interaction.value || ''))})`)
+      lines.push(`await applyAppendValue(page, ${toLiteral(String(target.testid))}, ${toLiteral(String(interaction.value || ''))}, { targetIndex: ${getTargetIndex(target) ?? 'undefined'} })`)
     } else {
       const selectorType = target['data-id'] ? 'data-id' : 'id'
       const value = target['data-id'] || target.id
-      lines.push(`await applyAppendValueById(page, ${toLiteral(String(value))}, ${toLiteral(String(interaction.value || ''))}, ${toLiteral(selectorType)})`)
+      lines.push(`await applyAppendValueById(page, ${toLiteral(String(value))}, ${toLiteral(String(interaction.value || ''))}, ${toLiteral(selectorType)}, { targetIndex: ${getTargetIndex(target) ?? 'undefined'} })`)
     }
   } else if (interactionType === 'click') {
     if (!target.testid && !target.id && !target['data-id'] && !target.text && !buildGenericTargetSelector(target)) {
@@ -1109,14 +1125,14 @@ function buildInteractionLines(step, options = {}) {
     if (target.text) {
       const textValue = toLiteral(String(target.text))
       if (target.role) {
-        const baseLocator = `page.getByRole(${toLiteral(String(target.role))}, { name: ${textValue}, exact: true }).first()`
+        const baseLocator = buildIndexedLocatorExpression(`page.getByRole(${toLiteral(String(target.role))}, { name: ${textValue}, exact: true })`, target)
         if (target.click_child_selector) {
           lines.push(`await ${baseLocator}.locator(${toLiteral(String(target.click_child_selector))}).first().click()`)
         } else {
           lines.push(`await ${baseLocator}.click()`)
         }
       } else {
-        const baseLocator = `page.getByText(${textValue}, { exact: true }).first()`
+        const baseLocator = buildIndexedLocatorExpression(`page.getByText(${textValue}, { exact: true })`, target)
         if (target.click_child_selector) {
           lines.push(`await ${baseLocator}.locator(${toLiteral(String(target.click_child_selector))}).first().click()`)
         } else {
@@ -1124,14 +1140,14 @@ function buildInteractionLines(step, options = {}) {
         }
       }
     } else if (target.testid) {
-      lines.push(`const __scenarioClickLocator = page.getByTestId(${toLiteral(String(target.testid))}).first()`)
+      lines.push(`const __scenarioClickLocator = ${buildIndexedLocatorExpression(`page.getByTestId(${toLiteral(String(target.testid))})`, target)}`)
       lines.push('await __scenarioClickLocator.click()')
     } else if (buildGenericTargetSelector(target)) {
-      lines.push(`await applyClickValueBySelector(page, ${toLiteral(buildGenericTargetSelector(target))}, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true })`)
+      lines.push(`await applyClickValueBySelector(page, ${toLiteral(buildGenericTargetSelector(target))}, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true, targetIndex: ${getTargetIndex(target) ?? 'undefined'} })`)
     } else {
       const selectorType = target['data-id'] ? 'data-id' : 'id'
       const value = target['data-id'] || target.id
-      lines.push(`await applyClickValueById(page, ${toLiteral(String(value))}, ${toLiteral(selectorType)}, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true })`)
+      lines.push(`await applyClickValueById(page, ${toLiteral(String(value))}, ${toLiteral(selectorType)}, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true, targetIndex: ${getTargetIndex(target) ?? 'undefined'} })`)
     }
   } else if (interactionType === 'select') {
     if (!target.testid && !target.id && !target['data-id']) {
@@ -1143,11 +1159,11 @@ function buildInteractionLines(step, options = {}) {
       )
     }
     if (target.testid) {
-      lines.push(`await applySelectValue(page, ${toLiteral(String(target.testid))}, ${toLiteral(String(interaction.value || ''))}, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true })`)
+      lines.push(`await applySelectValue(page, ${toLiteral(String(target.testid))}, ${toLiteral(String(interaction.value || ''))}, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true, targetIndex: ${getTargetIndex(target) ?? 'undefined'} })`)
     } else {
       const selectorType = target['data-id'] ? 'data-id' : 'id'
       const value = target['data-id'] || target.id
-      lines.push(`await applySelectValueById(page, ${toLiteral(String(value))}, ${toLiteral(String(interaction.value || ''))}, ${toLiteral(selectorType)}, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true })`)
+      lines.push(`await applySelectValueById(page, ${toLiteral(String(value))}, ${toLiteral(String(interaction.value || ''))}, ${toLiteral(selectorType)}, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true, targetIndex: ${getTargetIndex(target) ?? 'undefined'} })`)
     }
   } else if (interactionType === 'upload') {
     if (!target.testid && !target.id && !target['data-id'] && !buildGenericTargetSelector(target)) {
@@ -1158,13 +1174,13 @@ function buildInteractionLines(step, options = {}) {
     }
     const resolvedFileExpr = `resolveRuntimeTemplateString(${toLiteral(String(interaction.value || ''))}, runtimeVariables)`
     if (target.testid) {
-      lines.push(`await applyUploadValue(page, ${toLiteral(String(target.testid))}, ${resolvedFileExpr}, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true })`)
+      lines.push(`await applyUploadValue(page, ${toLiteral(String(target.testid))}, ${resolvedFileExpr}, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true, targetIndex: ${getTargetIndex(target) ?? 'undefined'} })`)
     } else if (buildGenericTargetSelector(target)) {
-      lines.push(`await applyUploadValueById(page, ${toLiteral(buildGenericTargetSelector(target))}, ${resolvedFileExpr}, "selector", { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true })`)
+      lines.push(`await applyUploadValueById(page, ${toLiteral(buildGenericTargetSelector(target))}, ${resolvedFileExpr}, "selector", { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true, targetIndex: ${getTargetIndex(target) ?? 'undefined'} })`)
     } else {
       const selectorType = target['data-id'] ? 'data-id' : 'id'
       const value = target['data-id'] || target.id
-      lines.push(`await applyUploadValueById(page, ${toLiteral(String(value))}, ${resolvedFileExpr}, ${toLiteral(selectorType)}, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true })`)
+      lines.push(`await applyUploadValueById(page, ${toLiteral(String(value))}, ${resolvedFileExpr}, ${toLiteral(selectorType)}, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true, targetIndex: ${getTargetIndex(target) ?? 'undefined'} })`)
     }
   } else if (interactionType === 'scroll') {
     const focus = interaction.focus === true
@@ -1231,11 +1247,11 @@ function buildInteractionLines(step, options = {}) {
 
       const expectedValue = interaction.value ?? ''
       if (target.testid) {
-        lines.push(`await assertElementValueByTestId(page, ${toLiteral(String(target.testid))}, ${toLiteral(String(expectedValue))})`)
+        lines.push(`await assertElementValueByTestId(page, ${toLiteral(String(target.testid))}, ${toLiteral(String(expectedValue))}, { targetIndex: ${getTargetIndex(target) ?? 'undefined'} })`)
       } else {
         const selectorType = target['data-id'] ? 'data-id' : 'id'
         const value = target['data-id'] || target.id
-        lines.push(`await assertElementValueById(page, ${toLiteral(String(value))}, ${toLiteral(String(expectedValue))}, ${toLiteral(selectorType)})`)
+        lines.push(`await assertElementValueById(page, ${toLiteral(String(value))}, ${toLiteral(String(expectedValue))}, ${toLiteral(selectorType)}, { targetIndex: ${getTargetIndex(target) ?? 'undefined'} })`)
       }
     }
   } else if (interactionType === 'search-and-select') {

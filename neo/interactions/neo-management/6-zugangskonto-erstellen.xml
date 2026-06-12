@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<SzenarioScript id="zugangsnamen-neu-zustellen" testscript-version="1" videoscript-version="1" confluence-page-id="2104459270" status="Entwurf" neo-version-min="6.0" neo-version-max="7.0" titel="Zugangsnamen neu zustellen">
+<SzenarioScript lunettes-id="6" id="zugangskonto-erstellen" testscript-version="1" videoscript-version="1"  neo-version-min="6.0" neo-version-max="7.0" titel="Zugangskonto erstellen">
 
 
 	<Einstellungen>
@@ -42,45 +42,37 @@
 		</Fragment>
 	</Gruppe>
 	<Gruppe>
-
-	<VideoStart/>
-		<Info typ="Erklärung">Personen mit einer Leitungsfunktion können für die Mitarbeiter*innen ihrer Organisation den Zugangsnamen neu zustellen lassen. </Info>
-		<Kapitel>Zugangsnamen neu zustellen</Kapitel>
+		<VideoStart/>
+		<Info typ="Erklärung">Personen mit einer Leitungsfunktion können für die Mitarbeiter*innen ihrer Organisation Zugangskonten erstellen. </Info>
+		<Kapitel>Zugangskonto erstellen</Kapitel>
 		<Schritt>Personaldatensatz öffnen</Schritt>
 
 
-		<Info typ="Erklärung">Zugangskonten sind in NEO Niedersachsen immer an einen Personaldatensatz gebunden. Daher muss im ersten Schritt ein entsprechender Personaldatensatz ausgewählt werden.</Info>
-
+		<Info typ="Erklärung">Zugangskonten werden immer auf Basis der vorliegenden Personaldaten erstellt. Daher muss im ersten Schritt ein entsprechender Personaldatensatz ausgewählt werden.</Info>
 		<Fragment name="neo-hauptmenue-personal-personalverwaltung"/>
 
+		<Info typ="Erklärung">In diesem Beispiel filtern wir nur die Personaldatensätze, die noch kein Zugangskonto haben und öffnen den ersten Eintrag.</Info>
 
-		<Info typ="Erklärung">In diesem Beispiel filtern wir nur die Personaldatensätze, die bereits ein Zugangskonto haben und öffnen den ersten Eintrag.</Info>
-
-		<!-- Nur Personaldatensätze mit Konten anzeigen -->
 		<Click data-id="filters"/>
 		<Click data-id="filters/basic/choose"/>
 		<Click data-id="filters/basic/choose/b_exists"/>
-		<Click data-id="b_exists/b_exists" />
 		<Click data-id="filters/apply"/>
-	
-		
-
-		<!-- erstes elememt öffnen -->
+					
+		<!-- erstes Element öffnen -->
 		<Click data-id="list-item/0/toggleDetails"/>		
 		<Click data-id="controlBtn/action-detaillinkwtitle"/>
 
-		
-
-		<Schritt>Erneute Zustellung des Zugangsnamens auslösen</Schritt>
-		
-		<!-- Einstellungen öffnen zur Sichtbarkeit, dass nich kein Konto da ist-->
+		<Schritt>Zugangskontoerstellung auslösen</Schritt>
+		<!-- Einstellungen öffnen zur Sichtbarkeit, dass noch kein Konto da ist-->
 		<Click text="Einstellungen"/>
-		
+			
 
 		<!-- zugangskonto erstellen -->
 		<Click data-id="controlBtn/actions"/>
-		<Click text="Zugangsnamen erneut zustellen"/>		
-		<Click text="Ja"/>		
+		<Click text="Zugangskonto anlegen"/>
+		<Info typ="Erklärung">Die Zustellung der Zugangsdaten erfolgt über ein Zwei-Wege-Prinzip. Zum einen wird der Zugangsname über ein Funktionspostfach der Organisation übermittelt und zum anderen wird ein persönlicher Brief mit einem initialen Passwort über den Postweg über die Anschrift der Dienststelle zugestellt. Falls für die Person mehrere Dienststellen vorliegen, kann an dieser Stelle die adressierte Dienstelle ausgewählt werden.</Info>
+		<Click text="Ja"/>
+		<Info typ="Erklärung">Sobald beide Informationen der Person vorliegen, kann das Zugangskonto aktiviert werden.</Info>
 
 
 	</Gruppe>

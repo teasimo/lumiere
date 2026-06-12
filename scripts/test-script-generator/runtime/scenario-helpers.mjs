@@ -387,14 +387,25 @@ async function assertComparableValue(locator, targetLabel, expectedValue) {
   }
 }
 
-export async function assertElementValueByTestId(page, testId, expectedValue) {
-  const locator = page.getByTestId(testId).first()
+function resolveTargetIndex(options = {}) {
+  const rawIndex = options?.targetIndex ?? options?.index ?? options?.number
+  const index = Number(rawIndex)
+  return Number.isInteger(index) && index >= 0 ? index : null
+}
+
+function pickLocator(locator, options = {}) {
+  const index = resolveTargetIndex(options)
+  return index == null ? locator.first() : locator.nth(index)
+}
+
+export async function assertElementValueByTestId(page, testId, expectedValue, options = {}) {
+  const locator = pickLocator(page.getByTestId(testId), options)
   await assertComparableValue(locator, `data-testid="${testId}"`, expectedValue)
 }
 
-export async function assertElementValueById(page, elementId, expectedValue, selectorType = "id") {
+export async function assertElementValueById(page, elementId, expectedValue, selectorType = "id", options = {}) {
   const selector = selectorType === "data-id" ? `[data-id=${JSON.stringify(String(elementId))}]` : `[id=${JSON.stringify(String(elementId))}]`
-  const locator = page.locator(selector).first()
+  const locator = pickLocator(page.locator(selector), options)
   const targetLabel = selectorType === "data-id" ? `data-id="${elementId}"` : `id="#${elementId}"`
   await assertComparableValue(locator, targetLabel, expectedValue)
 }
@@ -429,16 +440,16 @@ async function evaluateSingleCondition(page, rawCondition) {
   let locator = null
 
   if (target.testid) {
-    locator = page.getByTestId(String(target.testid)).first()
+    locator = pickLocator(page.getByTestId(String(target.testid)), target)
   } else if (target.id) {
-    locator = page.locator(`[id=${JSON.stringify(String(target.id))}]`).first()
+    locator = pickLocator(page.locator(`[id=${JSON.stringify(String(target.id))}]`), target)
   } else if (target["data-id"]) {
-    locator = page.locator(`[data-id=${JSON.stringify(String(target["data-id"]))}]`).first()
+    locator = pickLocator(page.locator(`[data-id=${JSON.stringify(String(target["data-id"]))}]`), target)
   } else if (target.text) {
     if (target.role) {
-      locator = page.getByRole(String(target.role), { name: String(target.text), exact: true }).first()
+      locator = pickLocator(page.getByRole(String(target.role), { name: String(target.text), exact: true }), target)
     } else {
-      locator = page.getByText(String(target.text), { exact: true }).first()
+      locator = pickLocator(page.getByText(String(target.text), { exact: true }), target)
     }
   } else {
     throw new Error("Condition target must contain one of target.testid, target.id, target.data-id, target.text, or target.url.")
@@ -772,7 +783,7 @@ async function applyDefaultFillStrategy(page, locator, expectedValue, elementInf
 }
 
 export async function applyFillValue(page, testId, value, options = {}) {
-  const locator = page.getByTestId(testId).first()
+  const locator = pickLocator(page.getByTestId(testId), options)
   await ensureLocatorScroll(page, locator, options)
 
   const elementInfo = await locator.evaluate((el) => ({
@@ -815,7 +826,7 @@ export async function applyFillValue(page, testId, value, options = {}) {
 
 export async function applyFillValueById(page, elementId, value, selectorType = "id", options = {}) {
   const selector = selectorType === "data-id" ? `[data-id=${JSON.stringify(String(elementId))}]` : `[id=${JSON.stringify(String(elementId))}]`
-  const locator = page.locator(selector).first()
+  const locator = pickLocator(page.locator(selector), options)
   await ensureLocatorScroll(page, locator, options)
 
   const elementInfo = await locator.evaluate((el) => ({
@@ -857,7 +868,7 @@ export async function applyFillValueById(page, elementId, value, selectorType = 
 }
 
 export async function applySelectValue(page, testId, value, options = {}) {
-  const locator = page.getByTestId(testId).first()
+  const locator = pickLocator(page.getByTestId(testId), options)
   await ensureLocatorScroll(page, locator, options)
 
   const elementInfo = await locator.evaluate((el) => ({
@@ -895,7 +906,7 @@ export async function applySelectValue(page, testId, value, options = {}) {
 
 export async function applySelectValueById(page, elementId, value, selectorType = "id", options = {}) {
   const selector = selectorType === "data-id" ? `[data-id=${JSON.stringify(String(elementId))}]` : `[id=${JSON.stringify(String(elementId))}]`
-  const locator = page.locator(selector).first()
+  const locator = pickLocator(page.locator(selector), options)
   await ensureLocatorScroll(page, locator, options)
 
   const elementInfo = await locator.evaluate((el) => ({
@@ -932,7 +943,7 @@ export async function applySelectValueById(page, elementId, value, selectorType 
 }
 
 export async function applyUploadValue(page, testId, value, options = {}) {
-  const rootLocator = page.getByTestId(testId).first()
+  const rootLocator = pickLocator(page.getByTestId(testId), options)
   await ensureLocatorScroll(page, rootLocator, options)
   const fileLocator = await resolveUploadLocator(page, rootLocator)
   const uploadPath = await resolveUploadAssetPath(value)
@@ -945,15 +956,15 @@ export async function applyUploadValueById(page, elementId, value, selectorType 
     : selectorType === "selector"
       ? String(elementId)
       : `[id=${JSON.stringify(String(elementId))}]`
-  const rootLocator = page.locator(selector).first()
+  const rootLocator = pickLocator(page.locator(selector), options)
   await ensureLocatorScroll(page, rootLocator, options)
   const fileLocator = await resolveUploadLocator(page, rootLocator)
   const uploadPath = await resolveUploadAssetPath(value)
   await fileLocator.setInputFiles(uploadPath)
 }
 
-export async function applyAppendValue(page, testId, value) {
-  const locator = page.getByTestId(testId).first()
+export async function applyAppendValue(page, testId, value, options = {}) {
+  const locator = pickLocator(page.getByTestId(testId), options)
   await locator.waitFor({ state: 'visible' })
 
   const elementInfo = await locator.evaluate((el) => ({
@@ -994,9 +1005,9 @@ export async function applyAppendValue(page, testId, value) {
   await applyDefaultFillStrategy(page, locator, expectedValue, elementInfo, testId, "append")
 }
 
-export async function applyAppendValueById(page, elementId, value, selectorType = "id") {
+export async function applyAppendValueById(page, elementId, value, selectorType = "id", options = {}) {
   const selector = selectorType === "data-id" ? `[data-id=${JSON.stringify(String(elementId))}]` : `[id=${JSON.stringify(String(elementId))}]`
-  const locator = page.locator(selector).first()
+  const locator = pickLocator(page.locator(selector), options)
   await locator.waitFor({ state: 'visible' })
 
   const elementInfo = await locator.evaluate((el) => ({
@@ -1046,7 +1057,7 @@ async function assertAppendPersisted(locator, elementInfo, testId, appendedValue
 
 export async function applyClickValueById(page, elementId, selectorType = "id", options = {}) {
   const selector = selectorType === "data-id" ? `[data-id=${JSON.stringify(String(elementId))}]` : `[id=${JSON.stringify(String(elementId))}]`
-  const locator = page.locator(selector).first()
+  const locator = pickLocator(page.locator(selector), options)
   const elementHandle = await locator.elementHandle({ timeout: 2500 }).catch(() => null)
   if (!elementHandle) {
     await clickWithOverlayRecovery(page, locator, options)
@@ -1085,7 +1096,7 @@ export async function applyClickValueById(page, elementId, selectorType = "id", 
 }
 
 export async function applyClickValueBySelector(page, selector, options = {}) {
-  const locator = page.locator(selector).first()
+  const locator = pickLocator(page.locator(selector), options)
   const elementHandle = await locator.elementHandle({ timeout: 2500 }).catch(() => null)
   if (!elementHandle) {
     await clickWithOverlayRecovery(page, locator, options)

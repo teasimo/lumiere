@@ -92,6 +92,9 @@ Beispiel:
         "scenario_dir": "neo/interactions",
         "output_dir": "temp/testfiles"
       },
+      "lunettes_api": {
+        "base_url": "https://<lunettes-host>"
+      },
       "video": {
         "wait_between_steps": 0,
         "scroll_delay_ms": 35,
@@ -132,6 +135,19 @@ Beispiele:
 
 - `--out-dir` gewinnt immer gegen `scenario.config.json`
 - wenn kein Szenario uebergeben wird, wird `scenario.config.json > scenario["test-script"].defaults.scenario_path_xml` bzw. `scenario_path` verwendet
+
+### 1b. Lunettes Rueckmeldung nach erfolgreichem Testscript
+
+Wenn `scenario.config.json > scenario["test-script"].lunettes_api.base_url` gesetzt ist, meldet `scripts/test-script-generator/run-generated-testfile.mjs` nach einem erfolgreichen Playwright-Lauf automatisch an:
+
+- `POST {base_url}/api/anfo/szenario/{lunettes-id}/testscript-erfolgreich`
+
+Voraussetzungen:
+
+- das XML-Wurzelelement `<SzenarioScript>` hat ein Attribut `lunettes-id`
+- `LUNETTES_API_USERNAME` und `LUNETTES_API_PASSWORD` sind als Umgebungsvariablen gesetzt
+
+Ist die API konfiguriert, aber ID, Credentials oder der POST fehlen bzw. schlagen fehl, beendet das Script den Lauf mit Fehler.
 
 ### 2. Video-bezogene Szenario-Einstellungen
 
