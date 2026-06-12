@@ -44,29 +44,24 @@
       <Wert name="geburtsort" value="Musterstadt"/>
       <Wert name="adresseSuche" value="Fuchsbau 3 Emmerke"/>
     </Datensatz>
-    <Datensatz name="schueler.ez2">
-      <Wert name="anrede" value="Herr"/>
-      <Wert name="vorname" value="Niklas"/>
-      <Wert name="nachname" value="Mustermann"/>
-      <Wert name="geburtsdatum" value="01.01.1970"/>
-      <Wert name="geburtsort" value="Musterstadt"/>
-      <Wert name="adresseSuche" value="Fuchsbau 3 Emmerke"/>
-    </Datensatz>
   </Daten>
   <Variablen>
     <Variable name="random"/>
   </Variablen>
 
+  <Gruppe>
+    <Fragment name="neo-hauptmenue-sus-schuelerinnen"/>
 
-<Click data-id="button/menu-toggle"/>
-<Click data-id="menu/item/schueler/"/>
-<Click data-id="menu/link/schueler/schueler/"/>
-<Eingabe data-id="pin-erforderlich/input/pin">2308</Eingabe>
+    <Fragment name="sus-filter-vorname-nachname">
+      <Parameter name="vorname" value="{{schueler.vorname}}"/>
+      <Parameter name="nachname" value="{{schueler.nachname}}"/>
+    </Fragment>
 
-
-<Click data-id="list-item/3/toggleDetails"/>
-<Click data-id="controlBtn3//action-detaillinkwtitle"/>
-<Click data-id="controlBtn/actions"/>
-<Click text="Als Fehlmarkierung deklarieren"/>
-<Eingabe aria-label="Begründung (optional)">Der Datensatz ist quatsch</Eingabe>
-<Click text="Ja">
+    <Click data-id="list-item/0/toggleDetails"/>		
+    <Click data-id="controlBtn0//action-detaillinkwtitle"/>
+    <Click data-id="controlBtn/actions"/>
+    <Click text="Als Fehlmarkierung deklarieren"/>
+    <Eingabe aria-label="Begründung (optional)">Der Datensatz wurde ausversehen erfasst.</Eingabe>
+    <Click text="Ja">
+  </Gruppe>
+</SzenarioScript>
