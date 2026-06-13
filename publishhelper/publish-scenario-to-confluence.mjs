@@ -6,7 +6,6 @@ import { basename, extname, join, resolve } from 'path'
 import { Buffer } from 'buffer'
 import { XMLParser } from 'fast-xml-parser'
 import { buildScenarioOutputFolderName } from '../scripts/shared/scenario-output.mjs'
-import { getTestScriptConfig, loadCentralConfig } from '../scripts/shared/central-config.mjs'
 
 const CREDENTIALS_ENV_NAME = 'CONFLUENCE_PUBLISHHELPER_CREDENTIALS'
 const MANAGED_BLOCK_START = '<!-- lumiere-publishhelper:start -->'
@@ -14,13 +13,11 @@ const MANAGED_BLOCK_END = '<!-- lumiere-publishhelper:end -->'
 
 function printUsage() {
   console.log(`Verwendung:
-  node publishhelper/publish-scenario-to-confluence.mjs <szenarioscript.xml>
+  node publishhelper/publish-scenario-to-confluence.mjs <szenarioscript.xml> <confluence-page-id> --scenario-id=<id>
 
 Voraussetzungen:
-  - Das XML enthaelt ein Attribut lunettes-id
   - Es existiert ein erfolgreich gerendertes Remotion-Video im output/.../videogenerator Ordner
   - ${CREDENTIALS_ENV_NAME} ist gesetzt
-  - scenario.config.json > scenario["test-script"].lunettes_api.base_url ist gesetzt
 `)
 }
 
@@ -43,46 +40,10 @@ function parseScenarioScript(xmlRaw) {
     throw new Error('Ungueltiges Szenarioscript: Wurzelknoten <SzenarioScript> fehlt.')
   }
 
-  const scenarioId = String(root['@_id'] || '').trim()
-  const lunettesId = String(root['@_lunettes-id'] || '').trim()
-  const title = String(root['@_titel'] || scenarioId || '').trim()
-
-  if (!scenarioId) {
-    throw new Error('Im Szenarioscript fehlt das Attribut "id".')
-  }
+  const title = String(root['@_titel'] || '').trim()
 
   return {
-    scenarioId,
-    lunettesId,
     title,
-  }
-}
-
-function normalizeBaseUrl(value) {
-  return String(value || '').trim().replace(/\/+$/, '')
-}
-
-function buildBasicAuthHeader(username, password) {
-  return `Basic ${Buffer.from(`${username}:${password}`, 'utf8').toString('base64')}`
-}
-
-function getLunettesApiContext(workspaceRoot) {
-  const central = loadCentralConfig(workspaceRoot)
-  const testScriptConfig = getTestScriptConfig(central.config)
-  const baseUrl = normalizeBaseUrl(testScriptConfig?.lunettes_api?.base_url)
-  if (!baseUrl) {
-    throw new Error('Lunettes API ist nicht konfiguriert. Erwartet: scenario.config.json > scenario["test-script"].lunettes_api.base_url')
-  }
-
-  const username = String(process.env.LUNETTES_API_USERNAME || '').trim()
-  const password = String(process.env.LUNETTES_API_PASSWORD || '')
-  if (!username || !password) {
-    throw new Error('Lunettes API ist nicht konfiguriert, weil LUNETTES_API_USERNAME oder LUNETTES_API_PASSWORD fehlt.')
-  }
-
-  return {
-    baseUrl,
-    authHeader: buildBasicAuthHeader(username, password),
   }
 }
 
@@ -331,79 +292,39 @@ async function updatePageBody({ pageApiBaseUrl, authHeader, pageId, title, curre
   }, `Confluence-Seite ${pageId} konnte nicht aktualisiert werden`)
 }
 
-async function fetchLunettesScenario({ lunettesApiContext, scenario }) {
-  if (!scenario.lunettesId) {
-    throw new Error('Im XML fehlt das Attribut "lunettes-id".')
-  }
-
-  const endpoint = `${lunettesApiContext.baseUrl}/api/anfo/szenario/${encodeURIComponent(scenario.lunettesId)}`
-  const response = await fetch(endpoint, {
-    method: 'GET',
-    headers: {
-      Accept: 'application/json',
-      Authorization: lunettesApiContext.authHeader,
-    },
-  })
-
-  const responseText = await response.text()
-  let responsePayload = null
-  try {
-    responsePayload = responseText ? JSON.parse(responseText) : null
-  } catch {
-    responsePayload = responseText || null
-  }
-
-  if (!response.ok) {
-    const details = responsePayload ? ` Response: ${JSON.stringify(responsePayload)}` : ''
-    throw new Error(
-      `Lunettes-Szenario ${scenario.lunettesId} konnte nicht geladen werden (HTTP ${response.status}).${details}`
-    )
-  }
-
-  const pageId = String(responsePayload?.confluence_page_id || '').trim()
+function parseConfluencePageId(value) {
+  const pageId = String(value || '').trim()
   if (!pageId) {
-    throw new Error(`Lunettes-Szenario ${scenario.lunettesId} hat keine confluence_page_id.`)
+    throw new Error('Confluence-Page-ID fehlt. Erwartet als zweiter CLI-Parameter.')
   }
-
-  return {
-    pageId,
-    payload: responsePayload,
-  }
+  return pageId
 }
 
-async function notifyLunettesConfluencePublished({ lunettesApiContext, scenario }) {
-  if (!scenario.lunettesId) {
-    throw new Error('Lunettes API callback konfiguriert, aber im XML fehlt das Attribut "lunettes-id".')
-  }
-
-  const endpoint = `${lunettesApiContext.baseUrl}/api/anfo/szenario/${encodeURIComponent(scenario.lunettesId)}/confluence-veroeffentlicht`
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      Authorization: lunettesApiContext.authHeader,
-    },
+function parseRequiredScenarioId(argv) {
+  const token = argv.find((entry) => entry.startsWith('--scenario-id='))
+  const scenarioId = buildScenarioOutputFolderName({
+    scenarioId: token ? token.slice('--scenario-id='.length) : '',
+    fallbackName: '',
   })
-
-  const responseText = await response.text()
-  let responsePayload = null
-  try {
-    responsePayload = responseText ? JSON.parse(responseText) : null
-  } catch {
-    responsePayload = responseText || null
+  if (!scenarioId) {
+    throw new Error('Scenario-ID fehlt. Erwartet: --scenario-id=<id>')
   }
+  return scenarioId
+}
 
-  if (!response.ok) {
-    const details = responsePayload ? ` Response: ${JSON.stringify(responsePayload)}` : ''
-    throw new Error(
-      `Lunettes API callback fuer Szenario ${scenario.scenarioId} (lunettes-id=${scenario.lunettesId}) schlug mit HTTP ${response.status} fehl.${details}`
-    )
-  }
+function parseOptionalScenarioTitle(argv) {
+  const token = argv.find((entry) => entry.startsWith('--scenario-title='))
+  return String(token ? token.slice('--scenario-title='.length) : '').trim()
+}
 
-  console.log(`Lunettes-Rueckmeldung gesendet: ${endpoint}`)
+function buildConfluencePageTitle({ scenarioTitle, scenarioId }) {
+  return `[Szenario] ${String(scenarioTitle || scenarioId || '').trim()}`
 }
 
 async function main() {
-  const scenarioPath = process.argv[2]
+  const argv = process.argv.slice(2)
+  const scenarioPath = argv[0]
+  const pageIdArg = argv[1]
   if (!scenarioPath || scenarioPath === '--help' || scenarioPath === '-h') {
     printUsage()
     process.exit(scenarioPath ? 0 : 1)
@@ -421,26 +342,24 @@ async function main() {
   try {
     const credentials = parseCredentialsFromEnv()
     const apiContext = buildApiContext(credentials)
-    const lunettesApiContext = getLunettesApiContext(process.cwd())
+    const pageId = parseConfluencePageId(pageIdArg)
+    const scenarioId = parseRequiredScenarioId(argv)
+    const scenarioTitleOverride = parseOptionalScenarioTitle(argv)
     const scenarioScriptRaw = await readFile(scenarioAbsolutePath, 'utf8')
     const scenario = parseScenarioScript(scenarioScriptRaw)
-    const lunettesScenario = await fetchLunettesScenario({
-      lunettesApiContext,
-      scenario,
-    })
 
-    const latestRender = await findLatestSuccessfulRender({ scenarioId: scenario.scenarioId })
+    const latestRender = await findLatestSuccessfulRender({ scenarioId })
     const page = await fetchPage({
       pageApiBaseUrl: apiContext.pageApiBaseUrl,
       authHeader: apiContext.authHeader,
-      pageId: lunettesScenario.pageId,
+      pageId,
     })
 
     const attachmentName = `${basename(scenarioAbsolutePath, extname(scenarioAbsolutePath))}-remotion${extname(latestRender.videoPath) || '.mp4'}`
     await uploadAttachment({
       attachmentApiBaseUrl: apiContext.attachmentApiBaseUrl,
       authHeader: apiContext.authHeader,
-      pageId: lunettesScenario.pageId,
+      pageId,
       attachmentName,
       videoPath: latestRender.videoPath,
     })
@@ -450,25 +369,23 @@ async function main() {
       scenarioScriptRaw,
     })
     const nextBody = mergeManagedBlock(page.bodyStorage, managedBlock)
+    const nextTitle = buildConfluencePageTitle({
+      scenarioTitle: scenarioTitleOverride || scenario.title,
+      scenarioId,
+    })
 
     await updatePageBody({
       pageApiBaseUrl: apiContext.pageApiBaseUrl,
       authHeader: apiContext.authHeader,
-      pageId: lunettesScenario.pageId,
-      title: page.title,
+      pageId,
+      title: nextTitle,
       currentVersion: page.versionNumber,
       bodyStorage: nextBody,
     })
 
-    await notifyLunettesConfluencePublished({
-      lunettesApiContext,
-      scenario,
-    })
-
-    console.log(`Confluence-Seite aktualisiert: ${lunettesScenario.pageId}`)
-    console.log(`Titel: ${page.title}`)
+    console.log(`Confluence-Seite aktualisiert: ${pageId}`)
+    console.log(`Titel: ${nextTitle}`)
     console.log(`Auth-Modus: ${apiContext.authModeLabel}`)
-    console.log(`Lunettes-Szenario: ${scenario.lunettesId}`)
     console.log(`Video: ${latestRender.videoPath}`)
     console.log(`Anhang: ${attachmentName}`)
   } catch (error) {

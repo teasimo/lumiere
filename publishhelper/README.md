@@ -4,20 +4,17 @@ Dieses Verzeichnis enthaelt ein Script, das ein Szenarioscript auf eine Confluen
 
 ## Was das Script macht
 
-Das Script erwartet ein XML-Szenarioscript als Parameter.
+Das Script erwartet ein XML-Szenarioscript als ersten Parameter und die Confluence-Page-ID als zweiten Parameter.
 
 Es prueft:
 
-- ob das XML eine `lunettes-id` hat
 - ob ein erfolgreich gerendertes Remotion-Video fuer dieses Szenario existiert
 - ob die Confluence-Credentials in einer Umgebungsvariable vorhanden sind
-- ob das Lunettes-Szenario per API geladen werden kann und eine `confluence_page_id` liefert
 
 Wenn alles vorhanden ist, dann:
 
 - wird das letzte erfolgreich gerenderte Video als Attachment auf die Confluence-Seite hochgeladen
 - wird auf der Confluence-Seite ein verwalteter Block geschrieben oder aktualisiert
-- wird optional zusaetzlich an Lunettes gemeldet, dass das Szenario auf Confluence veroeffentlicht wurde
 
 Der Seiteninhalt hat diesen Aufbau:
 
@@ -80,39 +77,24 @@ Fuer die Video-Einbettung verwendet das Script trotzdem die normale Tenant-URL u
 Direkt:
 
 ```bash
-node publishhelper/publish-scenario-to-confluence.mjs neo/interactions/demo.xml
+node publishhelper/publish-scenario-to-confluence.mjs neo/interactions/demo.xml 2105671681 --scenario-id=1
 ```
 
 Oder ueber `npm`:
 
 ```bash
-npm run publish:scenario:confluence -- neo/interactions/demo.xml
+npm run publish:scenario:confluence -- neo/interactions/demo.xml 2105671681 --scenario-id=1
 ```
 
 ## Voraussetzungen
 
 - Node.js 20 oder neuer
-- gueltige `lunettes-id` im Wurzelknoten `<SzenarioScript>`
 - ein erfolgreich erzeugtes Remotion-Video unter `output/<szenario>/videogenerator`
+- Confluence-Page-ID als CLI-Parameter
+- Scenario-ID als CLI-Parameter `--scenario-id=<id>`
 - Confluence Cloud API-Zugriff
 - entweder `baseUrl` plus `cloudId` und `accessToken`
 - oder `baseUrl` plus `email` und `apiToken`
-- `scenario.config.json > scenario["test-script"].lunettes_api.base_url`
-- `LUNETTES_API_USERNAME` und `LUNETTES_API_PASSWORD`
-
-## Lunettes-Integration
-
-Das Publish-Script laedt vor dem Confluence-Publish zuerst das Szenario aus Lunettes:
-
-- `GET {base_url}/api/anfo/szenario/{lunettes-id}`
-
-Aus der Antwort wird `confluence_page_id` gelesen und als Zielseite fuer den Confluence-Publish verwendet.
-
-Nach erfolgreichem Confluence-Update sendet das Script anschliessend:
-
-- `POST {base_url}/api/anfo/szenario/{lunettes-id}/confluence-veroeffentlicht`
-
-Wenn Lunettes-Konfiguration, `lunettes-id`, Credentials, `confluence_page_id` oder einer der Requests fehlen bzw. fehlschlagen, beendet das Script den Publish-Lauf mit Fehler.
 
 ## Hinweis zur Video-Auswahl
 

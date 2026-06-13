@@ -9,9 +9,9 @@
 	</Notizen>
 
 	<Variablen>
-		<Variable name="url"/>
-		<Variable name="username"/>
-		<Variable name="password"/>
+		<Variable name="url" default="https://neo-test.de" />
+		<Variable name="username" default="ealles" />
+		<Variable name="password" default="!Neo-2305Neo!"/>
 	</Variablen>
 
 	<Gruppe>

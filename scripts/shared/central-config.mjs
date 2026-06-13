@@ -28,6 +28,14 @@ const DEFAULTS = {
       path: 'neo/assets/video-intro.mp4',
     },
     presentation: {
+      indicators: {
+        click: {
+          enabled: true,
+          before_ms: 100,
+          after_ms: 100,
+          fade_ms: 50,
+        },
+      },
       slide: {
         default_duration_ms: 2000,
         inline_default_duration_ms: 3000,

@@ -1277,15 +1277,17 @@ function buildInteractionLines(step, options = {}) {
 
   } else if (interactionType === 'extract-pdf-code') {
     // Custom interaction: extract code from PDF and assign to variable
-    const pdfPath = interaction.pdfPath
     const regex = interaction.regex
     const output = interaction.output || 'extractedCode'
-    if (!pdfPath || !regex) {
-      throw new Error(`Step "${step.id}" with type extract-pdf-code requires pdfPath and regex.`)
+    if (!regex) {
+      throw new Error(`Step "${step.id}" with type extract-pdf-code requires regex.`)
     }
+    const pdfPathExpression = interaction.pdfPath
+      ? `resolveRuntimeTemplateString(${toLiteral(String(interaction.pdfPath))}, runtimeVariables)`
+      : `testInfo.outputPath(${toLiteral(`${String(step.id || 'extract-pdf')}.pdf`)})`
     lines.push(`const effectiveDownload = lastDownload ?? await page.waitForEvent('download', { timeout: 5000 }).catch(() => null)`)
     lines.push(`const effectivePdfResponse = lastPdfResponse ?? await page.waitForResponse((response) => String(response.headers()['content-type'] || '').includes('application/pdf'), { timeout: 5000 }).catch(() => null)`)
-    lines.push(`const extractedValue = await extractCodeFromPdf(resolveRuntimeTemplateString(${toLiteral(String(pdfPath))}, runtimeVariables), new RegExp(resolveRuntimeTemplateString(${toLiteral(String(regex))}, runtimeVariables)), { download: effectiveDownload, response: effectivePdfResponse })`)
+    lines.push(`const extractedValue = await extractCodeFromPdf(${pdfPathExpression}, new RegExp(resolveRuntimeTemplateString(${toLiteral(String(regex))}, runtimeVariables)), { download: effectiveDownload, response: effectivePdfResponse })`)
     lines.push(`setRuntimeVariable(runtimeVariables, ${toLiteral(String(output))}, extractedValue)`)
   } else if (interactionType === 'set-runtime-variable') {
     const output = interaction.output

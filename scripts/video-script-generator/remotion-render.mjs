@@ -59,12 +59,17 @@ async function main() {
   const verbose = argv.includes('--verbose')
   const ttsVoiceArg = argv.find((arg) => arg.startsWith('--tts-voice='))
   const profileArg = argv.find((arg) => arg.startsWith('--profile='))
+  const scenarioIdArg = argv.find((arg) => arg.startsWith('--scenario-id='))
   const profileName = String(profileArg ? profileArg.slice('--profile='.length) : 'all-channels').trim() || 'all-channels'
   const scenarioPathArg = argv.find((arg) => !arg.startsWith('-'))
+  const scenarioId = sanitizeScenarioOutputToken(scenarioIdArg ? scenarioIdArg.slice('--scenario-id='.length) : '', '')
   const wantsHelp = argv.includes('--help') || argv.includes('-h')
   if (!scenarioPathArg || wantsHelp) {
-    console.log('Usage: node scripts/video-script-generator/remotion-render.mjs <scenario.xml> [--profile=<name>] [--tts-voice=<name>] [--keep-temp-project]')
+    console.log('Usage: node scripts/video-script-generator/remotion-render.mjs <scenario.xml> --scenario-id=<id> [--profile=<name>] [--tts-voice=<name>] [--keep-temp-project]')
     process.exit(wantsHelp ? 0 : 1)
+  }
+  if (!scenarioId) {
+    throw new Error('Scenario-ID fehlt. Erwartet: --scenario-id=<id>')
   }
 
   const scenarioAbsolutePath = resolve(scenarioPathArg)
@@ -72,17 +77,9 @@ async function main() {
     throw new Error(`Szenario-Datei nicht gefunden: ${scenarioPathArg}`)
   }
 
-  const scenarioRaw = await readFile(scenarioAbsolutePath, 'utf8')
-  const idMatch = scenarioRaw.match(/<SzenarioScript\b[^>]*\bid\s*=\s*"([^"]+)"/i)
-  const versionMatch = scenarioRaw.match(/<SzenarioScript\b[^>]*\bszenario-version\s*=\s*"([^"]+)"/i)
-  const scenarioRoot = {
-    id: idMatch?.[1] || null,
-    version: versionMatch?.[1] || null,
-  }
-
   const scenarioToken = sanitizeScenarioOutputToken(basename(scenarioPathArg).replace(/\.[^.]+$/, ''), 'scenario')
   const scenarioFolderName = buildScenarioOutputFolderName({
-    scenarioId: scenarioRoot.id || scenarioToken,
+    scenarioId,
     fallbackName: scenarioToken,
   })
 
@@ -91,6 +88,7 @@ async function main() {
     'scripts/video-script-generator/run-annotated-video.mjs',
     '--scenario-tts',
     scenarioPathArg,
+    `--scenario-id=${scenarioId}`,
     `--profile=${profileName}`,
   ]
   if (ttsVoiceArg) {

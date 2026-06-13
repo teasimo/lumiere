@@ -4,6 +4,7 @@ import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'fs/promises'
 import { basename, dirname, extname, join, relative, resolve } from 'path'
+import { Buffer } from 'buffer'
 import { XMLBuilder, XMLParser } from 'fast-xml-parser'
 import { renderScenarioSpecTemplate } from './templates/spec-template.mjs'
 import {
@@ -43,6 +44,7 @@ const INTERACTION_TAGS = new Set([
   'Auswahl',
   'Upload',
   'Anzeige',
+  'Auslesen',
   'Warten',
   'Oeffnen',
   'SucheAuswahl',
@@ -81,6 +83,7 @@ function parseArgs(argv) {
     scenarioDir: null,
     outDir: null,
     xsdPath: null,
+    fragmentSource: 'local',
   }
 
   while (args.length) {
@@ -113,6 +116,16 @@ function parseArgs(argv) {
 
     if (token === '--xsd') {
       options.xsdPath = args.shift() || null
+      continue
+    }
+
+    if (token === '--fragment-source') {
+      options.fragmentSource = args.shift() || null
+      continue
+    }
+
+    if (token.startsWith('--fragment-source=')) {
+      options.fragmentSource = token.slice('--fragment-source='.length)
       continue
     }
 
@@ -149,7 +162,16 @@ function applyConfigDefaults(options, centralConfig) {
     outDir,
     xsdPath,
     scenarioPath,
+    fragmentSource: String(options.fragmentSource || 'local').trim().toLowerCase() || 'local',
   }
+}
+
+function normalizeBaseUrl(value) {
+  return String(value || '').trim().replace(/\/+$/, '')
+}
+
+function buildBasicAuthHeader(username, password) {
+  return `Basic ${Buffer.from(`${username}:${password}`, 'utf8').toString('base64')}`
 }
 
 function setPathValue(target, pathExpr, value) {
@@ -435,6 +457,25 @@ async function loadXmlDocument(filePath) {
   return { source, root }
 }
 
+function parseXmlDocumentFromSource(source, sourceLabel = 'inline-xml') {
+  const parsed = parser.parse(source)
+  if (!Array.isArray(parsed)) {
+    throw new Error(`Invalid XML structure in ${sourceLabel}`)
+  }
+
+  const rootNode = parsed.find((node) => getNodeTag(node))
+  if (!rootNode) {
+    throw new Error(`No root XML element found in ${sourceLabel}`)
+  }
+
+  const root = toElementTreeFromNode(rootNode)
+  if (!root) {
+    throw new Error(`Could not parse XML root in ${sourceLabel}`)
+  }
+
+  return { source, root }
+}
+
 function cloneElement(element) {
   return {
     tag: element.tag,
@@ -587,16 +628,37 @@ function extractSettings(rootElement) {
   return out
 }
 
-function getFragmentParameterNames(fragmentRootElement) {
-  const variablenElement = findFirstChild(fragmentRootElement, 'Variablen')
+function getVariableDefinitions(rootElement) {
+  const variablenElement = findFirstChild(rootElement, 'Variablen')
   if (!variablenElement) {
     return []
   }
 
   return (variablenElement.children || [])
     .filter((entry) => entry.tag === 'Variable')
-    .map((entry) => String(entry.attrs?.name || '').trim())
-    .filter(Boolean)
+    .map((entry) => ({
+      name: String(entry.attrs?.name || '').trim(),
+      hasDefault: entry.attrs?.default != null,
+      defaultValueRaw: entry.attrs?.default != null ? String(entry.attrs.default) : '',
+    }))
+    .filter((entry) => entry.name)
+}
+
+function resolveVariableDefaults(variableDefinitions, baseContext, dataFunctions) {
+  const resolvedDefaults = {}
+  const workingContext = { ...(baseContext || {}) }
+
+  for (const definition of variableDefinitions || []) {
+    if (!definition?.hasDefault) {
+      continue
+    }
+
+    const resolvedValue = resolveTemplateString(definition.defaultValueRaw, workingContext, dataFunctions)
+    setPathValue(resolvedDefaults, definition.name, resolvedValue)
+    setPathValue(workingContext, definition.name, resolvedValue)
+  }
+
+  return resolvedDefaults
 }
 
 function buildParameterContext(parameterElements, parentContext, dataFunctions) {
@@ -710,6 +772,64 @@ async function buildFragmentIndex(scenarioPath) {
   }
 
   return index
+}
+
+function getLunettesFragmentApiContext(centralConfig) {
+  const baseUrl = normalizeBaseUrl(centralConfig?.lunettes_api?.base_url)
+  if (!baseUrl) {
+    throw new Error('Lunettes API ist fuer Fragment-Aufloesung nicht konfiguriert. Erwartet: scenario.config.json > scenario["test-script"].lunettes_api.base_url')
+  }
+
+  const username = String(process.env.LUNETTES_API_USERNAME || '').trim()
+  const password = String(process.env.LUNETTES_API_PASSWORD || '')
+  if (!username || !password) {
+    throw new Error('LUNETTES_API_USERNAME oder LUNETTES_API_PASSWORD fehlt fuer Lunettes-Fragment-Aufloesung.')
+  }
+
+  return {
+    baseUrl,
+    authHeader: buildBasicAuthHeader(username, password),
+  }
+}
+
+async function fetchFragmentDocumentFromLunettes(fragmentName, centralConfig) {
+  const context = getLunettesFragmentApiContext(centralConfig)
+  const endpoint = `${context.baseUrl}/vue/api/anfo/szenarien/by-fragment-id?fragment_id=${encodeURIComponent(String(fragmentName || '').trim())}`
+  const response = await fetch(endpoint, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      Authorization: context.authHeader,
+    },
+  })
+
+  const responseText = await response.text()
+  let payload = null
+  try {
+    payload = responseText ? JSON.parse(responseText) : null
+  } catch {
+    throw new Error(`Lunettes-Fragment-Suche lieferte kein gueltiges JSON fuer "${fragmentName}".`)
+  }
+
+  if (!response.ok) {
+    const details = payload ? ` Response: ${JSON.stringify(payload)}` : ''
+    throw new Error(`Lunettes-Fragment-Suche fuer "${fragmentName}" schlug mit HTTP ${response.status} fehl.${details}`)
+  }
+
+  const entries = Array.isArray(payload) ? payload : []
+  const exactMatches = entries.filter((entry) => String(entry?.fragment_id || '').trim() === String(fragmentName || '').trim())
+  const withScenarioXml = exactMatches.filter((entry) => String(entry?.szenario || '').trim())
+  if (withScenarioXml.length === 0) {
+    throw new Error(`Kein Lunettes-Fragment mit XML fuer fragment_id "${fragmentName}" gefunden.`)
+  }
+
+  const selected = withScenarioXml[0]
+  const scenarioXml = String(selected?.szenario || '').trim()
+  const sourceLabel = `lunettes-fragment:${fragmentName}#${selected?.id ?? 'unknown'}`
+  return {
+    document: parseXmlDocumentFromSource(scenarioXml, sourceLabel),
+    sourceLabel,
+  }
 }
 
 function chooseFragmentPath(fragmentName, fragmentIndex) {
@@ -956,6 +1076,32 @@ function mapInteractionElementToStep(element, makeStepId) {
     })
   }
 
+  if (tag === 'Auslesen') {
+    const source = String(attrs.quelle || '').trim().toLowerCase() || 'text'
+    const output = String(attrs['in-variable'] || attrs.variable || '').trim()
+    if (!output) {
+      throw new Error('Auslesen requires "in-variable" (preferred) or "variable".')
+    }
+
+    if (source === 'download') {
+      const regex = String(attrs.regex || '').trim()
+      if (!regex) {
+        throw new Error('Auslesen with quelle="download" requires a non-empty regex attribute.')
+      }
+
+      return withResolvedMeta({
+        id: makeStepId(element, 'extract'),
+        interaction: {
+          type: 'extract-pdf-code',
+          regex,
+          output,
+        },
+      })
+    }
+
+    throw new Error(`Auslesen quelle="${source}" is currently not supported by the test generator.`)
+  }
+
   if (tag === 'Anzeige') {
     return withResolvedMeta({
       id: makeStepId(element, 'show'),
@@ -1158,7 +1304,42 @@ function assertUniqueFlowStepIds(flowEntries, scenarioPath) {
   throw new Error(`Duplicate step ids are not allowed in scenario "${scenarioPath}": ${duplicateText}`)
 }
 
-async function expandFragmentsInChildren(children, { context, dataFunctions, fragmentIndex, includeStack = [] }) {
+function isIncludedInFragment(element) {
+  const rawValue = element?.attrs?.['im-fragment-enthalten']
+  if (rawValue == null) {
+    return true
+  }
+
+  const normalized = String(rawValue).trim().toLowerCase()
+  return !['false', '0', 'no', 'nein'].includes(normalized)
+}
+
+function filterChildrenForFragmentInclusion(children) {
+  const filtered = []
+
+  for (const child of children || []) {
+    if (!isIncludedInFragment(child)) {
+      continue
+    }
+
+    const clonedChild = cloneElement(child)
+    if (Array.isArray(clonedChild.children) && clonedChild.children.length > 0) {
+      clonedChild.children = filterChildrenForFragmentInclusion(clonedChild.children)
+    }
+    filtered.push(clonedChild)
+  }
+
+  return filtered
+}
+
+async function expandFragmentsInChildren(children, {
+  context,
+  dataFunctions,
+  fragmentIndex,
+  includeStack = [],
+  fragmentSource = 'local',
+  centralConfig = null,
+}) {
   const expanded = []
 
   for (const child of children || []) {
@@ -1168,44 +1349,58 @@ async function expandFragmentsInChildren(children, { context, dataFunctions, fra
         throw new Error('Fragment element requires a non-empty name attribute.')
       }
 
-      const fragmentPath = chooseFragmentPath(fragmentName, fragmentIndex)
-      if (!fragmentPath) {
-        throw new Error(`Fragment "${fragmentName}" not found below app fragment directories.`)
+      let fragmentDocument = null
+      let fragmentSourceLabel = ''
+      if (fragmentSource === 'lunettes') {
+        const apiFragment = await fetchFragmentDocumentFromLunettes(fragmentName, centralConfig)
+        fragmentDocument = apiFragment.document
+        fragmentSourceLabel = apiFragment.sourceLabel
+      } else {
+        const fragmentPath = chooseFragmentPath(fragmentName, fragmentIndex)
+        if (!fragmentPath) {
+          throw new Error(`Fragment "${fragmentName}" not found below app fragment directories.`)
+        }
+        fragmentDocument = await loadXmlDocument(fragmentPath)
+        fragmentSourceLabel = fragmentPath
       }
 
-      if (includeStack.includes(fragmentPath)) {
-        throw new Error(`Circular fragment include detected: ${[...includeStack, fragmentPath].join(' -> ')}`)
+      if (includeStack.includes(fragmentSourceLabel)) {
+        throw new Error(`Circular fragment include detected: ${[...includeStack, fragmentSourceLabel].join(' -> ')}`)
       }
 
-      const fragmentDocument = await loadXmlDocument(fragmentPath)
       if (fragmentDocument.root.tag !== 'SzenarioScript') {
-        throw new Error(`Fragment file "${fragmentPath}" must have root <SzenarioScript>.`)
+        throw new Error(`Fragment source "${fragmentSourceLabel}" must have root <SzenarioScript>.`)
       }
 
-      const fragmentParameters = getFragmentParameterNames(fragmentDocument.root)
+      const fragmentVariableDefinitions = getVariableDefinitions(fragmentDocument.root)
+      const fragmentParameters = fragmentVariableDefinitions.map((entry) => entry.name)
       const parameterContext = buildParameterContext(child.children || [], context, dataFunctions)
+      const fragmentDefaults = resolveVariableDefaults(fragmentVariableDefinitions, context, dataFunctions)
       const fragmentContext = {
         ...context,
+        ...fragmentDefaults,
         ...parameterContext,
       }
 
-      for (const parameterName of fragmentParameters) {
-        if (!hasContextParameter(fragmentContext, parameterName)) {
-          throw new Error(`Missing fragment parameter "${parameterName}" for fragment "${fragmentName}" in ${fragmentPath}`)
+      for (const variableDefinition of fragmentVariableDefinitions) {
+        if (!variableDefinition.hasDefault && !hasContextParameter(fragmentContext, variableDefinition.name)) {
+          throw new Error(`Missing fragment parameter "${variableDefinition.name}" for fragment "${fragmentName}" in ${fragmentSourceLabel}`)
         }
       }
 
       const fragmentGroups = findChildren(fragmentDocument.root, 'Gruppe')
       const fragmentPayloadChildren = []
       for (const group of fragmentGroups) {
-        fragmentPayloadChildren.push(...(group.children || []))
+        fragmentPayloadChildren.push(...filterChildrenForFragmentInclusion(group.children || []))
       }
 
       const nestedExpansion = await expandFragmentsInChildren(fragmentPayloadChildren, {
         context: fragmentContext,
         dataFunctions,
         fragmentIndex,
-        includeStack: [...includeStack, fragmentPath],
+        includeStack: [...includeStack, fragmentSourceLabel],
+        fragmentSource,
+        centralConfig,
       })
 
       expanded.push(...nestedExpansion)
@@ -1218,6 +1413,8 @@ async function expandFragmentsInChildren(children, { context, dataFunctions, fra
       dataFunctions,
       fragmentIndex,
       includeStack,
+      fragmentSource,
+      centralConfig,
     })
 
     clonedChild.children = expandedNestedChildren
@@ -1314,7 +1511,7 @@ function composeResolvedXmlSource(resolvedRootElement) {
   return `<?xml version="1.0" encoding="UTF-8"?>\n${builder.build(payload)}`
 }
 
-async function scenarioToSpecSource({ scenarioPath, xsdPath, centralConfig, generatedSpecPath }) {
+async function scenarioToSpecSource({ scenarioPath, xsdPath, centralConfig, generatedSpecPath, fragmentSource = 'local' }) {
   const absoluteScenarioPath = resolve(workspaceRoot, scenarioPath)
   const absoluteXsdPath = resolve(workspaceRoot, xsdPath)
 
@@ -1328,13 +1525,21 @@ async function scenarioToSpecSource({ scenarioPath, xsdPath, centralConfig, gene
   const dataFunctions = await loadDataFunctions(absoluteScenarioPath)
   const rawData = extractRawDataObject(scenarioDocument.root)
   const resolvedData = resolveDataSection(rawData, dataFunctions)
+  const variableDefinitions = getVariableDefinitions(scenarioDocument.root)
+  const resolvedVariableDefaults = resolveVariableDefaults(variableDefinitions, resolvedData, dataFunctions)
   const settings = extractSettings(scenarioDocument.root)
+  const templateContext = {
+    ...resolvedData,
+    ...resolvedVariableDefaults,
+  }
 
   const fragmentIndex = await buildFragmentIndex(absoluteScenarioPath)
   const expandedChildren = await expandFragmentsInChildren(scenarioDocument.root.children || [], {
-    context: { ...resolvedData },
+    context: templateContext,
     dataFunctions,
     fragmentIndex,
+    fragmentSource,
+    centralConfig,
   })
 
   const expandedRoot = {
@@ -1343,7 +1548,7 @@ async function scenarioToSpecSource({ scenarioPath, xsdPath, centralConfig, gene
   }
 
   const resolvedRootElement = upsertResolvedData(
-    resolveElementTemplates(expandedRoot, { ...resolvedData }, dataFunctions),
+    resolveElementTemplates(expandedRoot, templateContext, dataFunctions),
     resolvedData,
   )
   annotateResolvedInteractionMetadata(resolvedRootElement)
@@ -1520,6 +1725,7 @@ async function generateOne(scenarioFilePath, outDirPath, options, centralConfig)
     xsdPath: options.xsdPath,
     centralConfig,
     generatedSpecPath: outputPath,
+    fragmentSource: options.fragmentSource,
   })
 
   const metaPath = `${outputPath}.meta.json`

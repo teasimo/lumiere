@@ -12,13 +12,8 @@
             <xs:element name="Variablen" type="VariablenType" minOccurs="0"/>
             <xs:element name="Gruppe" type="GruppeType" minOccurs="0" maxOccurs="unbounded"/>
         </xs:sequence>
-        <xs:attribute name="id" type="xs:ID" use="required"/>
-        <xs:attribute name="lunettes-id" type="xs:integer" use="required"/>
-        <xs:attribute name="testscript-version" type="xs:string" use="required"/>
-        <xs:attribute name="videoscript-version" type="xs:string" use="required"/>
-        <xs:attribute name="neo-version-min" type="xs:string" use="required"/>
-        <xs:attribute name="neo-version-max" type="xs:string" use="optional"/>
-        <xs:attribute name="titel" type="xs:string" use="required"/>
+        <xs:attribute name="id" type="xs:ID" use="optional"/>
+        <xs:attribute name="titel" type="xs:string" use="optional"/>
         <xs:attribute name="fragment" type="xs:boolean" use="optional" default="false"/>
     </xs:complexType>
 
@@ -50,6 +45,7 @@
     <xs:complexType name="VariableType">
         <xs:attribute name="name" type="xs:string" use="required"/>
         <xs:attribute name="value" type="xs:string" use="optional"/>
+        <xs:attribute name="default" type="xs:string" use="optional"/>
     </xs:complexType>
     <!-- ========================================================= -->
     <!-- Enums -->
@@ -118,6 +114,7 @@
             <xs:element name="Wenn" type="WennType"/>
         </xs:choice>
         <xs:attribute name="id" type="xs:ID"/>
+        <xs:attribute name="im-fragment-enthalten" type="xs:boolean" use="optional" default="true"/>
     </xs:complexType>
 
     <!-- WENN -->
@@ -204,7 +201,8 @@
     <xs:complexType name="AuslesenType">
         <xs:complexContent>
             <xs:extension base="InteractionType">
-                <xs:attribute name="variable" type="xs:string" use="required"/>
+                <xs:attribute name="variable" type="xs:string" use="optional"/>
+                <xs:attribute name="in-variable" type="xs:string" use="optional"/>
                 <xs:attribute name="quelle" type="AuslesenQuelleType" use="optional"/>
                 <xs:attribute name="regex" type="xs:string" use="optional"/>
             </xs:extension>
@@ -217,6 +215,7 @@
             <xs:enumeration value="value"/>
             <xs:enumeration value="attribute"/>
             <xs:enumeration value="url"/>
+            <xs:enumeration value="download"/>
         </xs:restriction>
     </xs:simpleType>
 

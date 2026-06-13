@@ -23,6 +23,7 @@
     "run:videoscript": "LUMIERE_VIDEO_DEBUG_OVERLAY=0 node scripts/video-script-generator/remotion-render.mjs --scenario-tts --profile=all-channels",
     "run:videoscript:debug": "LUMIERE_VIDEO_DEBUG_OVERLAY=1 node scripts/video-script-generator/remotion-render.mjs --keep-temp-project",
     "run:videoscript:verbose": "LUMIERE_VIDEO_DEBUG_OVERLAY=0 node scripts/video-script-generator/remotion-render.mjs --verbose",
+    "watch-jobs": "node scripts/lunettes-job-watcher/watch-lunettes-jobs.mjs",
     "debug:parse": "node scripts/debug-parse-scenario.mjs",
     "publish": "node publishhelper/publish-scenario-to-confluence.mjs"
   },

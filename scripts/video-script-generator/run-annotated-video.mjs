@@ -85,6 +85,7 @@ function parseArgs(argv) {
 
     let profile = null
     let ttsVoice = null
+    let scenarioId = null
     let remotionPlanOnly = false
     const positionalArgs = []
     const unsupportedArgs = []
@@ -95,6 +96,10 @@ function parseArgs(argv) {
       }
       if (arg.startsWith('--tts-voice=')) {
         ttsVoice = arg.slice('--tts-voice='.length)
+        continue
+      }
+      if (arg.startsWith('--scenario-id=')) {
+        scenarioId = arg.slice('--scenario-id='.length).trim()
         continue
       }
       if (arg === '--remotion-plan-only') {
@@ -137,6 +142,7 @@ function parseArgs(argv) {
       help: false,
       scenarioTts: true,
       scenarioPath,
+      scenarioId,
       profile,
       outputVideo,
       ttsVoice,
@@ -1109,19 +1115,16 @@ function resolveScenarioTtsProfile(centralConfig, profileName) {
   return found
 }
 
-function resolveScenarioClickIndicatorConfig(scenarioRoot) {
-  const clickConfig = scenarioRoot?.presentation?.indicators?.click
-  if (!clickConfig || typeof clickConfig !== 'object') {
-    return {
-      enabled: true,
-      beforeMs: 800,
-      afterMs: 100,
-      fadeMs: 50,
-    }
+function resolveScenarioClickIndicatorConfig(scenarioRoot, videoScriptConfig = {}) {
+  const centralClickConfig = videoScriptConfig?.presentation?.indicators?.click
+  const scenarioClickConfig = scenarioRoot?.presentation?.indicators?.click
+  const clickConfig = {
+    ...(centralClickConfig && typeof centralClickConfig === 'object' ? centralClickConfig : {}),
+    ...(scenarioClickConfig && typeof scenarioClickConfig === 'object' ? scenarioClickConfig : {}),
   }
 
   const enabled = clickConfig.enabled !== false
-  const beforeMs = Math.max(0, Number(clickConfig.before_ms ?? 800) || 800)
+  const beforeMs = Math.max(0, Number(clickConfig.before_ms ?? 100) || 100)
   const afterMs = Math.max(0, Number(clickConfig.after_ms ?? 100) || 100)
   const fadeMs = Math.max(0, Number(clickConfig.fade_ms ?? 50) || 50)
 
@@ -3719,7 +3722,7 @@ async function exportScenarioTtsDebugArtifacts({
   return debugDir
 }
 
-async function runScenarioTtsMode({ scenarioPath, profileName, outputVideo, ttsVoice = null, remotionPlanOnly = false }) {
+async function runScenarioTtsMode({ scenarioPath, scenarioId, profileName, outputVideo, ttsVoice = null, remotionPlanOnly = false }) {
   const central = loadCentralConfig(process.cwd())
   const videoScriptConfig = getVideoScriptConfig(central.config)
   const videoIntroConfig = resolveVideoIntroConfig(videoScriptConfig)
@@ -3731,6 +3734,10 @@ async function runScenarioTtsMode({ scenarioPath, profileName, outputVideo, ttsV
 
   if (extname(scenarioAbsolutePath).toLowerCase() !== '.xml') {
     throw new Error('Im Modus --scenario-tts werden nur XML-Szenarien unterstuetzt.')
+  }
+  const scenarioIdOverride = sanitizeFileToken(scenarioId, '')
+  if (!scenarioIdOverride) {
+    throw new Error('Im Modus --scenario-tts wird --scenario-id=<id> erwartet.')
   }
 
   const scenarioPathRelative = normalizeWorkspaceRelativePath(scenarioPath)
@@ -3764,7 +3771,7 @@ async function runScenarioTtsMode({ scenarioPath, profileName, outputVideo, ttsV
   const profileToken = sanitizeFileToken(profileName)
   const scenarioToken = sanitizeFileToken(basename(scenarioPathRelative).replace(/\.[^.]+$/, ''))
   const runId = toRunId()
-  const scenarioOutputRoot = buildScenarioOutputRoot(process.cwd(), scenarioRoot.id || scenarioToken, scenarioToken)
+  const scenarioOutputRoot = buildScenarioOutputRoot(process.cwd(), scenarioIdOverride, scenarioToken)
   const ttsOutputDir = join(scenarioOutputRoot, OUTPUT_VIDEOGENERATOR_SCOPE_DIR)
   const resolvedOutputVideo = outputVideo
     ? resolve(outputVideo)
@@ -3828,7 +3835,7 @@ async function runScenarioTtsMode({ scenarioPath, profileName, outputVideo, ttsV
 
   }
 
-  const clickIndicatorConfig = resolveScenarioClickIndicatorConfig(scenarioRoot)
+  const clickIndicatorConfig = resolveScenarioClickIndicatorConfig(scenarioRoot, videoScriptConfig)
 
   const sourceVideoForTts = artifacts.videoPath
   let clickAnnotateMeta = { clickHolds: [] }
@@ -4226,6 +4233,7 @@ async function main() {
   if (parsed.scenarioTts) {
     await runScenarioTtsMode({
       scenarioPath: parsed.scenarioPath,
+      scenarioId: parsed.scenarioId,
       profileName: parsed.profile,
       outputVideo: parsed.outputVideo,
       ttsVoice: parsed.ttsVoice,

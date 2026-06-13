@@ -10,7 +10,7 @@
         "base_url": "https://exigences-h9c6b9fweraub4eg.swedencentral-01.azurewebsites.net/"
       },
       "video": {
-        "wait_between_steps": 0,
+        "wait_between_steps": 1000,
         "scroll_delay_ms": 35,
         "scroll_step_px": 20,
         "autoscroll_smooth": false,
@@ -26,6 +26,14 @@
         "path": "neo/assets/video-intro-remotion-safe.mp4"
       },
       "presentation": {
+        "indicators": {
+          "click": {
+            "enabled": true,
+            "before_ms": 100,
+            "after_ms": 100,
+            "fade_ms": 50
+          }
+        },
         "slide": {
           "default_duration_ms": 3000,
           "inline_default_duration_ms": 3000

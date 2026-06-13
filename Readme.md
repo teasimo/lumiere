@@ -24,7 +24,7 @@ npm run generate:testfile -- neo/interactions/dubletten-aufloesen/FR1-case-sus-d
 Generierten Test ausfuehren:
 
 ```bash
-npm run check:testfile -- neo/interactions/dubletten-aufloesen/FR1-case-sus-dubletten-zusammenfuehren.xml
+npm run check:testfile -- neo/interactions/dubletten-aufloesen/FR1-case-sus-dubletten-zusammenfuehren.xml --scenario-id 123
 ```
 
 ## Wichtige Commands
@@ -37,11 +37,11 @@ Generierung:
 
 Ausfuehrung:
 
-- `npm run check:testfile -- <scenario.xml>`
-- `npm run check:testfile:force -- <scenario.xml>`
-- `npm run check:testfile:verbose -- <scenario.xml>`
-- `npm run run:testfile-script -- <scenario.xml>`
-- `npm run run:testfile-script:force -- <scenario.xml>`
+- `npm run check:testfile -- <scenario.xml> --scenario-id <id>`
+- `npm run check:testfile:force -- <scenario.xml> --scenario-id <id>`
+- `npm run check:testfile:verbose -- <scenario.xml> --scenario-id <id>`
+- `npm run run:testfile-script -- <scenario.xml> --scenario-id <id>`
+- `npm run run:testfile-script:force -- <scenario.xml> --scenario-id <id>`
 
 TTS/Video-Postprocessing:
 
@@ -135,19 +135,6 @@ Beispiele:
 
 - `--out-dir` gewinnt immer gegen `scenario.config.json`
 - wenn kein Szenario uebergeben wird, wird `scenario.config.json > scenario["test-script"].defaults.scenario_path_xml` bzw. `scenario_path` verwendet
-
-### 1b. Lunettes Rueckmeldung nach erfolgreichem Testscript
-
-Wenn `scenario.config.json > scenario["test-script"].lunettes_api.base_url` gesetzt ist, meldet `scripts/test-script-generator/run-generated-testfile.mjs` nach einem erfolgreichen Playwright-Lauf automatisch an:
-
-- `POST {base_url}/api/anfo/szenario/{lunettes-id}/testscript-erfolgreich`
-
-Voraussetzungen:
-
-- das XML-Wurzelelement `<SzenarioScript>` hat ein Attribut `lunettes-id`
-- `LUNETTES_API_USERNAME` und `LUNETTES_API_PASSWORD` sind als Umgebungsvariablen gesetzt
-
-Ist die API konfiguriert, aber ID, Credentials oder der POST fehlen bzw. schlagen fehl, beendet das Script den Lauf mit Fehler.
 
 ### 2. Video-bezogene Szenario-Einstellungen
 

@@ -1,34 +1,26 @@
 #!/usr/bin/env node
 
-import { cp, mkdir, writeFile } from 'fs/promises'
-import { existsSync, readFileSync, statSync } from 'fs'
+import { cp, mkdir, readdir, readFile, rm, writeFile } from 'fs/promises'
+import { existsSync, statSync } from 'fs'
 import { basename, dirname, extname, join, relative, resolve } from 'path'
 import { spawnSync } from 'child_process'
-import { XMLParser } from 'fast-xml-parser'
 import { getTestScriptConfig, loadCentralConfig } from '../shared/central-config.mjs'
 import { buildScenarioOutputRoot, sanitizeScenarioOutputToken } from '../shared/scenario-output.mjs'
 
 const workspaceRoot = process.cwd()
 const fallbackScenarioPath = 'neo/interactions/dubletten-aufloesen/FR1-case-sus-dubletten-zusammenfuehren.xml'
 const fallbackOutputDir = 'temp/testfiles'
-const xmlParser = new XMLParser({
-  ignoreAttributes: false,
-  attributeNamePrefix: '@_',
-  parseTagValue: false,
-  trimValues: true,
-})
-
 function printUsage() {
   console.log([
     'Usage:',
-    '  npm run check:testfile -- [<scenario-xml>] [--force] [--out-dir <path>] [-- <playwright-args>]',
-    '  npm run run:testfile-script -- [<scenario-xml>] [--force] [--out-dir <path>] [-- <playwright-args>]',
+    '  npm run check:testfile -- [<scenario-xml>] --scenario-id <id> [--force] [--out-dir <path>] [-- <playwright-args>]',
+    '  npm run run:testfile-script -- [<scenario-xml>] --scenario-id <id> [--force] [--out-dir <path>] [-- <playwright-args>]',
     '',
     'Examples:',
-    '  npm run check:testfile -- neo/interactions/dubletten-aufloesen/FR1-case-sus-dubletten-zusammenfuehren.xml',
-    '  npm run check:testfile:force -- neo/interactions/dubletten-aufloesen/FR1-case-sus-dubletten-zusammenfuehren.xml',
-    '  npm run run:testfile-script -- neo/interactions/dubletten-aufloesen/FR1-case-sus-dubletten-zusammenfuehren.xml',
-    '  npm run run:testfile-script -- neo/interactions/dubletten-aufloesen/FR1-case-sus-dubletten-zusammenfuehren.xml -- --project=chromium',
+    '  npm run check:testfile -- neo/interactions/dubletten-aufloesen/FR1-case-sus-dubletten-zusammenfuehren.xml --scenario-id 123',
+    '  npm run check:testfile:force -- neo/interactions/dubletten-aufloesen/FR1-case-sus-dubletten-zusammenfuehren.xml --scenario-id 123',
+    '  npm run run:testfile-script -- neo/interactions/dubletten-aufloesen/FR1-case-sus-dubletten-zusammenfuehren.xml --scenario-id 123',
+    '  npm run run:testfile-script -- neo/interactions/dubletten-aufloesen/FR1-case-sus-dubletten-zusammenfuehren.xml --scenario-id 123 -- --project=chromium',
   ].join('\n'))
 }
 
@@ -40,6 +32,8 @@ function parseArgs(argv) {
     mode: 'check',
     outDir: null,
     verbose: false,
+    scenarioId: null,
+    fragmentSource: 'local',
     playwrightArgs: [],
   }
 
@@ -86,6 +80,26 @@ function parseArgs(argv) {
       continue
     }
 
+    if (token === '--scenario-id') {
+      options.scenarioId = args.shift() || null
+      continue
+    }
+
+    if (token.startsWith('--scenario-id=')) {
+      options.scenarioId = token.slice('--scenario-id='.length)
+      continue
+    }
+
+    if (token === '--fragment-source') {
+      options.fragmentSource = args.shift() || null
+      continue
+    }
+
+    if (token.startsWith('--fragment-source=')) {
+      options.fragmentSource = token.slice('--fragment-source='.length)
+      continue
+    }
+
     if (token.startsWith('--')) {
       throw new Error(`Unknown option: ${token}`)
     }
@@ -106,6 +120,7 @@ function applyConfigDefaults(options, centralConfig) {
     ...options,
     scenarioPath: options.scenarioPath || defaults.scenario_path_xml || defaults.scenario_path || fallbackScenarioPath,
     outDir: options.outDir || defaults.output_dir || fallbackOutputDir,
+    fragmentSource: String(options.fragmentSource || 'local').trim().toLowerCase() || 'local',
   }
 }
 
@@ -133,82 +148,12 @@ function sanitizeFileToken(value, fallback = 'unknown') {
   return sanitizeScenarioOutputToken(value, fallback)
 }
 
-function readScenarioIdentity(scenarioAbsolutePath) {
-  const fallbackId = sanitizeFileToken(basename(scenarioAbsolutePath, extname(scenarioAbsolutePath)), 'scenario')
-
-  try {
-    const raw = readFileSync(scenarioAbsolutePath, 'utf8')
-    const parsed = xmlParser.parse(raw) || {}
-    const root = parsed?.SzenarioScript || {}
-    const scenarioId = sanitizeFileToken(root['@_id'] || fallbackId, fallbackId)
-    const scenarioVersion = root['@_szenario-version'] ?? 'unknown'
-    const lunettesId = String(root['@_lunettes-id'] || '').trim()
-    return { scenarioId, scenarioVersion, lunettesId }
-  } catch {
-    return { scenarioId: fallbackId, scenarioVersion: 'unknown', lunettesId: '' }
+function parseRequiredScenarioId(value) {
+  const scenarioId = sanitizeFileToken(value, '')
+  if (!scenarioId) {
+    throw new Error('Scenario-ID fehlt. Erwartet: --scenario-id <id>')
   }
-}
-
-function normalizeBaseUrl(value) {
-  return String(value || '').trim().replace(/\/+$/, '')
-}
-
-function buildBasicAuthHeader(username, password) {
-  const token = Buffer.from(`${username}:${password}`, 'utf8').toString('base64')
-  return `Basic ${token}`
-}
-
-async function notifyLunettesTestscriptSuccess({
-  scenarioPath,
-  centralConfig,
-}) {
-  const lunettesApiConfig = centralConfig?.['test-script']?.lunettes_api || {}
-  const baseUrl = normalizeBaseUrl(lunettesApiConfig.base_url)
-  if (!baseUrl) {
-    return
-  }
-
-  const scenarioAbsolutePath = resolve(workspaceRoot, scenarioPath)
-  const { scenarioId, lunettesId } = readScenarioIdentity(scenarioAbsolutePath)
-  if (!lunettesId) {
-    throw new Error(
-      `Lunettes API callback configured, but XML ${relative(workspaceRoot, scenarioAbsolutePath)} is missing "lunettes-id".`
-    )
-  }
-
-  const username = String(process.env.LUNETTES_API_USERNAME || '').trim()
-  const password = String(process.env.LUNETTES_API_PASSWORD || '')
-  if (!username || !password) {
-    throw new Error('Lunettes API callback configured, but LUNETTES_API_USERNAME or LUNETTES_API_PASSWORD is missing.')
-  }
-
-  const endpoint = `${baseUrl}/api/anfo/szenario/${encodeURIComponent(lunettesId)}/testscript-erfolgreich`
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      Authorization: buildBasicAuthHeader(username, password),
-    },
-  })
-
-  let responsePayload = null
-  let responseText = ''
-  try {
-    responseText = await response.text()
-    responsePayload = responseText ? JSON.parse(responseText) : null
-  } catch {
-    responsePayload = responseText || null
-  }
-
-  if (!response.ok) {
-    const details = responsePayload ? ` Response: ${JSON.stringify(responsePayload)}` : ''
-    throw new Error(
-      `Lunettes API callback failed for scenario ${scenarioId} (lunettes-id=${lunettesId}) with HTTP ${response.status}.${details}`
-    )
-  }
-
-  console.log(
-    `[scenario-runner] Lunettes callback sent: ${relative(workspaceRoot, scenarioAbsolutePath)} -> ${endpoint}`
-  )
+  return scenarioId
 }
 
 function countRenderedFlowSteps(flowEntries) {
@@ -389,6 +334,79 @@ async function persistScenarioRunArtifacts({
   }
 }
 
+async function pruneScenarioRuns({ scenarioRoot }) {
+  const runsRoot = join(scenarioRoot, 'runs')
+  if (!existsSync(runsRoot)) {
+    return { removedRunRoots: [] }
+  }
+
+  const runEntries = await readdir(runsRoot, { withFileTypes: true })
+  const runs = []
+
+  for (const entry of runEntries) {
+    if (!entry.isDirectory()) {
+      continue
+    }
+
+    const runRoot = join(runsRoot, entry.name)
+    const runMetaPath = join(runRoot, 'run-meta.json')
+    if (!existsSync(runMetaPath)) {
+      continue
+    }
+
+    try {
+      const raw = await readFile(runMetaPath, 'utf8')
+      const parsed = JSON.parse(raw)
+      runs.push({
+        runRoot,
+        status: String(parsed?.status || '').trim().toLowerCase(),
+        createdAtIso: String(parsed?.createdAtIso || '').trim(),
+        scenarioRunId: String(parsed?.scenarioRunId || entry.name).trim() || entry.name,
+      })
+    } catch {
+      console.warn(`[scenario-runner] Could not parse run metadata: ${relative(workspaceRoot, runMetaPath)}`)
+    }
+  }
+
+  const sortNewestFirst = (left, right) => {
+    const leftTime = Date.parse(left.createdAtIso)
+    const rightTime = Date.parse(right.createdAtIso)
+    const normalizedLeftTime = Number.isFinite(leftTime) ? leftTime : -Infinity
+    const normalizedRightTime = Number.isFinite(rightTime) ? rightTime : -Infinity
+    if (normalizedLeftTime !== normalizedRightTime) {
+      return normalizedRightTime - normalizedLeftTime
+    }
+    return right.scenarioRunId.localeCompare(left.scenarioRunId)
+  }
+
+  const passedRuns = runs
+    .filter((run) => run.status === 'passed')
+    .sort(sortNewestFirst)
+  const failedRuns = runs
+    .filter((run) => run.status === 'failed')
+    .sort(sortNewestFirst)
+
+  const keepRoots = new Set()
+  if (passedRuns[0]) {
+    keepRoots.add(passedRuns[0].runRoot)
+  }
+  if (failedRuns[0]) {
+    keepRoots.add(failedRuns[0].runRoot)
+  }
+
+  const removedRunRoots = []
+  for (const run of runs) {
+    if (keepRoots.has(run.runRoot)) {
+      continue
+    }
+
+    await rm(run.runRoot, { recursive: true, force: true })
+    removedRunRoots.push(run.runRoot)
+  }
+
+  return { removedRunRoots }
+}
+
 function formatIso(value) {
   return new Date(value).toISOString()
 }
@@ -423,7 +441,7 @@ function warnIfGeneratedSpecIsStale({ scenarioAbsolute, outputSpecAbsolute }) {
   }
 }
 
-function ensureGeneratedSpec({ scenarioPath, outDir, force }) {
+function ensureGeneratedSpec({ scenarioPath, outDir, force, fragmentSource = 'local' }) {
   const scenarioAbsolute = resolve(workspaceRoot, scenarioPath)
   const outputDirAbsolute = resolve(workspaceRoot, outDir)
   const outputFileName = `${basename(scenarioAbsolute, extname(scenarioAbsolute))}.spec.js`
@@ -438,7 +456,13 @@ function ensureGeneratedSpec({ scenarioPath, outDir, force }) {
     console.log(`Generating temp spec from ${relative(workspaceRoot, scenarioAbsolute)} ...`)
     runCommand(
       'node',
-      ['scripts/test-script-generator/generate-tests-from-scenario-xml.mjs', relative(workspaceRoot, scenarioAbsolute), '--out-dir', relative(workspaceRoot, outputDirAbsolute)],
+      [
+        'scripts/test-script-generator/generate-tests-from-scenario-xml.mjs',
+        relative(workspaceRoot, scenarioAbsolute),
+        '--out-dir',
+        relative(workspaceRoot, outputDirAbsolute),
+        `--fragment-source=${String(fragmentSource || 'local').trim().toLowerCase() || 'local'}`,
+      ],
       'Failed to generate temp spec file.'
     )
   } else {
@@ -597,10 +621,10 @@ async function main() {
     scenarioPath: options.scenarioPath,
     outDir: options.outDir,
     force: options.force || options.verbose,
+    fragmentSource: options.fragmentSource,
   })
 
-  const scenarioAbsolutePath = resolve(workspaceRoot, options.scenarioPath)
-  const { scenarioId } = readScenarioIdentity(scenarioAbsolutePath)
+  const scenarioId = parseRequiredScenarioId(options.scenarioId)
   const scenarioRunId = buildScenarioRunId()
   const scenarioRoot = buildScenarioOutputRoot(workspaceRoot, scenarioId)
   const runRoot = join(scenarioRoot, 'runs', scenarioRunId)
@@ -642,14 +666,15 @@ async function main() {
     console.log(`[scenario-runner] Run artifacts written to ${relative(workspaceRoot, persistedArtifacts.outputRoot)}`)
   }
 
+  const prunedRuns = await pruneScenarioRuns({ scenarioRoot })
+  for (const removedRunRoot of prunedRuns.removedRunRoots) {
+    console.log(`[scenario-runner] Removed old run: ${relative(workspaceRoot, removedRunRoot)}`)
+  }
+
   if (runResult.exitCode !== 0) {
     throw new Error('Playwright test execution failed.')
   }
 
-  await notifyLunettesTestscriptSuccess({
-    scenarioPath: options.scenarioPath,
-    centralConfig: central.config,
-  })
 }
 
 main().catch((error) => {
