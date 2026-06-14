@@ -16,7 +16,7 @@ function printUsage() {
   node publishhelper/publish-scenario-to-confluence.mjs <szenarioscript.xml> <confluence-page-id> --scenario-id=<id>
 
 Voraussetzungen:
-  - Es existiert ein erfolgreich gerendertes Remotion-Video im output/.../videogenerator Ordner
+  - Optional: Es existiert ein erfolgreich gerendertes Remotion-Video im output/.../videogenerator Ordner
   - ${CREDENTIALS_ENV_NAME} ist gesetzt
 `)
 }
@@ -159,6 +159,80 @@ async function findLatestSuccessfulRender({ scenarioId }) {
   return candidates[0]
 }
 
+async function findLatestTestRawVideo({ scenarioId }) {
+  const folderName = buildScenarioOutputFolderName({ scenarioId, fallbackName: 'scenario' })
+  const runsDir = resolve('output', folderName, 'runs')
+  if (!existsSync(runsDir)) {
+    return null
+  }
+
+  const entries = await readdir(runsDir, { withFileTypes: true })
+  const candidates = []
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue
+    }
+
+    const runMetaPath = join(runsDir, entry.name, 'run-meta.json')
+    if (!existsSync(runMetaPath)) {
+      continue
+    }
+
+    let meta = null
+    try {
+      meta = JSON.parse(await readFile(runMetaPath, 'utf8'))
+    } catch {
+      continue
+    }
+
+    const artifactsRelative = String(meta?.exportedTo?.artifactsRelative || '').trim()
+    if (!artifactsRelative) {
+      continue
+    }
+
+    const artifactsDir = resolve(artifactsRelative)
+    if (!existsSync(artifactsDir)) {
+      continue
+    }
+
+    const artifactEntries = await readdir(artifactsDir, { withFileTypes: true }).catch(() => [])
+    for (const artifactEntry of artifactEntries) {
+      if (!artifactEntry.isDirectory()) {
+        continue
+      }
+      const rawVideoPath = join(artifactsDir, artifactEntry.name, 'video.webm')
+      if (!existsSync(rawVideoPath)) {
+        continue
+      }
+
+      const [metaStats, videoStats] = await Promise.all([stat(runMetaPath), stat(rawVideoPath)])
+      if (!videoStats.isFile() || videoStats.size <= 0) {
+        continue
+      }
+
+      candidates.push({
+        runMetaPath,
+        metaStats,
+        videoPath: rawVideoPath,
+        videoStats,
+      })
+    }
+  }
+
+  if (!candidates.length) {
+    return null
+  }
+
+  candidates.sort((left, right) => {
+    const timeDiff = right.metaStats.mtimeMs - left.metaStats.mtimeMs
+    if (timeDiff !== 0) return timeDiff
+    return right.videoStats.mtimeMs - left.videoStats.mtimeMs
+  })
+
+  return candidates[0]
+}
+
 function buildAuthorizationHeader({ email, apiToken }) {
   return `Basic ${Buffer.from(`${email}:${apiToken}`).toString('base64')}`
 }
@@ -252,12 +326,22 @@ function toCdataSafe(value) {
   return String(value || '').replaceAll(']]>', ']]]]><![CDATA[>')
 }
 
-function buildManagedStorageBlock({ attachmentName, scenarioScriptRaw }) {
-  return `${MANAGED_BLOCK_START}
-<h1>Video</h1>
+function buildManagedStorageBlock({ attachmentName = null, rawAttachmentName = null, scenarioScriptRaw }) {
+  const videoBlock = attachmentName
+    ? `<h1>Video</h1>
 <ac:image ac:align="center" ac:layout="center" ac:custom-width="true" ac:width="760" ac:alt="${escapeXml(attachmentName)}">
   <ri:attachment ri:filename="${escapeXml(attachmentName)}" />
-</ac:image>
+</ac:image>`
+    : '<p><em>Kein veroeffentlichtes Video verfuegbar.</em></p>'
+
+  const rawVideoBlock = rawAttachmentName
+    ? `<h1>Test-Rohvideo</h1>
+<p><ac:link><ri:attachment ri:filename="${escapeXml(rawAttachmentName)}" /></ac:link></p>`
+    : ''
+
+  return `${MANAGED_BLOCK_START}
+${videoBlock}
+${rawVideoBlock}
 <h1>Szenarioscript</h1>
 <p>${escapeXml(scenarioScriptRaw).replace(/\r?\n/g, '<br />')}</p>
 ${MANAGED_BLOCK_END}`
@@ -348,24 +432,41 @@ async function main() {
     const scenarioScriptRaw = await readFile(scenarioAbsolutePath, 'utf8')
     const scenario = parseScenarioScript(scenarioScriptRaw)
 
-    const latestRender = await findLatestSuccessfulRender({ scenarioId })
+    const latestRender = await findLatestSuccessfulRender({ scenarioId }).catch(() => null)
+    const latestRawVideo = await findLatestTestRawVideo({ scenarioId }).catch(() => null)
     const page = await fetchPage({
       pageApiBaseUrl: apiContext.pageApiBaseUrl,
       authHeader: apiContext.authHeader,
       pageId,
     })
 
-    const attachmentName = `${basename(scenarioAbsolutePath, extname(scenarioAbsolutePath))}-remotion${extname(latestRender.videoPath) || '.mp4'}`
-    await uploadAttachment({
-      attachmentApiBaseUrl: apiContext.attachmentApiBaseUrl,
-      authHeader: apiContext.authHeader,
-      pageId,
-      attachmentName,
-      videoPath: latestRender.videoPath,
-    })
+    let attachmentName = null
+    if (latestRender?.videoPath) {
+      attachmentName = `${basename(scenarioAbsolutePath, extname(scenarioAbsolutePath))}-remotion${extname(latestRender.videoPath) || '.mp4'}`
+      await uploadAttachment({
+        attachmentApiBaseUrl: apiContext.attachmentApiBaseUrl,
+        authHeader: apiContext.authHeader,
+        pageId,
+        attachmentName,
+        videoPath: latestRender.videoPath,
+      })
+    }
+
+    let rawAttachmentName = null
+    if (latestRawVideo?.videoPath) {
+      rawAttachmentName = `${basename(scenarioAbsolutePath, extname(scenarioAbsolutePath))}-test-rohvideo${extname(latestRawVideo.videoPath) || '.webm'}`
+      await uploadAttachment({
+        attachmentApiBaseUrl: apiContext.attachmentApiBaseUrl,
+        authHeader: apiContext.authHeader,
+        pageId,
+        attachmentName: rawAttachmentName,
+        videoPath: latestRawVideo.videoPath,
+      })
+    }
 
     const managedBlock = buildManagedStorageBlock({
       attachmentName,
+      rawAttachmentName,
       scenarioScriptRaw,
     })
     const nextBody = mergeManagedBlock(page.bodyStorage, managedBlock)
@@ -386,8 +487,16 @@ async function main() {
     console.log(`Confluence-Seite aktualisiert: ${pageId}`)
     console.log(`Titel: ${nextTitle}`)
     console.log(`Auth-Modus: ${apiContext.authModeLabel}`)
-    console.log(`Video: ${latestRender.videoPath}`)
-    console.log(`Anhang: ${attachmentName}`)
+    if (latestRender?.videoPath && attachmentName) {
+      console.log(`Video: ${latestRender.videoPath}`)
+      console.log(`Anhang: ${attachmentName}`)
+    } else {
+      console.log('Video: keines verfuegbar, nur Szenarioscript veroeffentlicht')
+    }
+    if (latestRawVideo?.videoPath && rawAttachmentName) {
+      console.log(`Test-Rohvideo: ${latestRawVideo.videoPath}`)
+      console.log(`Rohvideo-Anhang: ${rawAttachmentName}`)
+    }
   } catch (error) {
     fail(String(error?.message || error))
   }
