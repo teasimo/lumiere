@@ -8,6 +8,9 @@ const DEFAULTS = {
       scenario_dir: 'neo/interactions',
       output_dir: 'temp/testfiles',
     },
+    runtime: {
+      step_timeout_ms: 30000,
+    },
     lunettes_api: {
       base_url: '',
     },

@@ -34,7 +34,7 @@ const jobEventLogBatchSize = 5
 const jobEventLogLineMaxLength = 800
 const jobEventLogFlushIntervalMs = 60000
 const scriptInactivityTimeoutMs = 180000
-const scriptTerminationGracePeriodMs = 5000
+const scriptTerminationGracePeriodMs = 60000
 
 class JobCanceledError extends Error {
   constructor(message = 'Job wurde serverseitig abgebrochen.') {
@@ -716,9 +716,9 @@ async function runCommandWithLogAndEvents({ command, args, env, logPath, context
     onStderr: (text) => reporter.pushChunk(text, 'stderr'),
     inactivityTimeoutMs: scriptInactivityTimeoutMs,
     onInactivityTimeout: () => {
-      console.error(`[job ${jobId}] Script-Inaktivitaet > ${Math.floor(scriptInactivityTimeoutMs / 1000)}s, Prozess wird beendet.`)
+      console.error(`[job ${jobId}] Script-Inaktivitaet > ${Math.floor(scriptInactivityTimeoutMs / 1000)}s, Prozess wird mit SIGTERM beendet. Nach ${Math.floor(scriptTerminationGracePeriodMs / 1000)}s folgt SIGKILL, falls noetig.`)
       reporter.pushChunk(
-        `Watcher: Keine Konsolenausgabe seit ${Math.floor(scriptInactivityTimeoutMs / 1000)} Sekunden. Prozess wird beendet.\n`,
+        `Watcher: Keine Konsolenausgabe seit ${Math.floor(scriptInactivityTimeoutMs / 1000)} Sekunden. Prozess wird mit SIGTERM beendet. Nach ${Math.floor(scriptTerminationGracePeriodMs / 1000)} Sekunden folgt SIGKILL, falls noetig.\n`,
         'stderr',
       )
     },

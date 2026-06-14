@@ -794,7 +794,7 @@ function getLunettesFragmentApiContext(centralConfig) {
 
 async function fetchFragmentDocumentFromLunettes(fragmentName, centralConfig) {
   const context = getLunettesFragmentApiContext(centralConfig)
-  const endpoint = `${context.baseUrl}/vue/api/anfo/szenarien/by-fragment-id?fragment_id=${encodeURIComponent(String(fragmentName || '').trim())}`
+  const endpoint = `${context.baseUrl}/api/anfo/szenarien/by-fragment-id?fragment_id=${encodeURIComponent(String(fragmentName || '').trim())}`
   const response = await fetch(endpoint, {
     method: 'GET',
     headers: {
@@ -909,6 +909,10 @@ function buildTargetFromAttributes(attrs, { includeText = true, includeUrl = fal
     target['aria-label'] = attrs['aria-label']
   }
 
+  if (attrs.komponententyp) {
+    target.komponententyp = attrs.komponententyp
+  }
+
   if (includeText && attrs.text) {
     target.text = attrs.text
   }
@@ -917,11 +921,17 @@ function buildTargetFromAttributes(attrs, { includeText = true, includeUrl = fal
     target.url = attrs.url
   }
 
-  if (attrs.number != null && String(attrs.number).trim() !== '') {
-    const numberValue = Number(attrs.number)
-    target.number = Number.isInteger(numberValue) && numberValue >= 0
-      ? numberValue
-      : String(attrs.number)
+  if (attrs['selektor-regex'] != null) {
+    const normalizedRegexFlag = String(attrs['selektor-regex']).trim().toLowerCase()
+    target['selektor-regex'] = ['true', '1', 'yes', 'on'].includes(normalizedRegexFlag)
+  }
+
+  const targetIndexAttr = attrs['treffer-index']
+  if (targetIndexAttr != null && String(targetIndexAttr).trim() !== '') {
+    const targetIndexValue = Number(targetIndexAttr)
+    target['treffer-index'] = Number.isInteger(targetIndexValue)
+      ? targetIndexValue
+      : String(targetIndexAttr)
   }
 
   return target
@@ -1084,16 +1094,16 @@ function mapInteractionElementToStep(element, makeStepId) {
     }
 
     if (source === 'download') {
-      const regex = String(attrs.regex || '').trim()
+      const regex = String(attrs['auslesen-regex'] || '').trim()
       if (!regex) {
-        throw new Error('Auslesen with quelle="download" requires a non-empty regex attribute.')
+        throw new Error('Auslesen with quelle="download" requires a non-empty auslesen-regex attribute.')
       }
 
       return withResolvedMeta({
         id: makeStepId(element, 'extract'),
         interaction: {
           type: 'extract-pdf-code',
-          regex,
+          auslesenRegex: regex,
           output,
         },
       })
@@ -1570,6 +1580,9 @@ async function scenarioToSpecSource({ scenarioPath, xsdPath, centralConfig, gene
     id: resolvedRootElement.attrs?.id || basename(absoluteScenarioPath, extname(absoluteScenarioPath)),
     version: resolvedRootElement.attrs?.['szenario-version'] || 'unknown',
     video: rootVideo,
+    runtime: {
+      step_timeout_ms: Number(centralConfig?.runtime?.step_timeout_ms ?? 30000),
+    },
     data: resolvedData,
     flow,
   }

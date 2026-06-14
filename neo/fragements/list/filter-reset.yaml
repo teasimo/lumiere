@@ -1,9 +1,0 @@
-fragment:
-  id: list-filter-reset
-  flow:
-    - id: root/btn/action-reset-settings
-      click: "@root/btn/action-reset-settings"
-
-    - id: Zurücksetzen
-      click:
-        text: Zurücksetzen

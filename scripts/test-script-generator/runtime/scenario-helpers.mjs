@@ -99,7 +99,7 @@ export async function searchAndSelect(page, { target, value, resultSelector, res
 
   let lastError = null;
   for (let attempt = 0; attempt < 4; attempt += 1) {
-    const result = page.locator(resultSelector).nth(resultIndex);
+    const result = await pickIndexedLocator(page.locator(resultSelector), resultIndex);
     try {
       await result.waitFor({ state: 'visible', timeout: 2000 });
       await ensureVisible(result);
@@ -388,25 +388,275 @@ async function assertComparableValue(locator, targetLabel, expectedValue) {
 }
 
 function resolveTargetIndex(options = {}) {
-  const rawIndex = options?.targetIndex ?? options?.index ?? options?.number
+  const rawIndex = options?.targetIndex ?? options?.['treffer-index'] ?? options?.index
   const index = Number(rawIndex)
-  return Number.isInteger(index) && index >= 0 ? index : null
+  return Number.isInteger(index) ? index : null
 }
 
-function pickLocator(locator, options = {}) {
-  const index = resolveTargetIndex(options)
-  return index == null ? locator.first() : locator.nth(index)
+export async function pickIndexedLocator(locator, rawIndex) {
+  const index = resolveTargetIndex({ targetIndex: rawIndex })
+  if (index == null) {
+    return locator.first()
+  }
+  if (index >= 0) {
+    return locator.nth(index)
+  }
+
+  const count = await locator.count()
+  const resolvedIndex = count + index
+  if (resolvedIndex < 0) {
+    throw new Error(`Negative target index ${index} is out of range for locator with ${count} matches.`)
+  }
+
+  return locator.nth(resolvedIndex)
+}
+
+async function pickLocator(locator, options = {}) {
+  return pickIndexedLocator(locator, resolveTargetIndex(options))
+}
+
+function isEditableTagName(tagName) {
+  const normalizedTagName = String(tagName || '').toLowerCase()
+  return normalizedTagName === 'input' || normalizedTagName === 'textarea' || normalizedTagName === 'select'
+}
+
+function parseTargetRegexFlag(target = {}) {
+  const raw = target?.['selektor-regex']
+  if (raw === true || raw === 1) {
+    return true
+  }
+  if (typeof raw === 'string') {
+    return ['true', '1', 'yes', 'on'].includes(raw.trim().toLowerCase())
+  }
+  return false
+}
+
+function buildRegexMatcher(pattern) {
+  return new RegExp(String(pattern ?? ''))
+}
+
+function buildExactAttributeSelector(attrName, value) {
+  return `[${attrName}=${JSON.stringify(String(value))}]`
+}
+
+function resolveKomponententypSelector(rawKomponententyp) {
+  const normalized = String(rawKomponententyp || '').trim()
+  if (!normalized) {
+    return null
+  }
+
+  const alias = normalized.toLowerCase()
+  if (alias === 'button') {
+    return 'button, [role="button"], .q-btn'
+  }
+  if (alias === 'input' || alias === 'eingabe' || alias === 'textbox') {
+    return 'input, textarea, [contenteditable="true"], [role="textbox"]'
+  }
+  if (alias === 'select' || alias === 'auswahl' || alias === 'combobox') {
+    return 'select, [role="combobox"], input.q-field__native, .q-field__native, input[aria-haspopup]'
+  }
+
+  return normalized
+}
+
+function matchesPreferredControlFromDom(element, preferredControl) {
+  if (!preferredControl) {
+    return true
+  }
+
+  const tagName = String(element?.tagName || '').toLowerCase()
+  const role = String(element?.getAttribute?.('role') || '').toLowerCase()
+  const className = String(element?.className || '')
+  const isContentEditable = Boolean(element?.isContentEditable)
+  const hasPopup = String(element?.getAttribute?.('aria-haspopup') || '').length > 0
+
+  if (preferredControl === 'fill') {
+    if (tagName === 'input' || tagName === 'textarea' || tagName === 'select' || isContentEditable || role === 'textbox') {
+      return true
+    }
+    return Boolean(element?.querySelector?.('input, textarea, select, [contenteditable="true"], [role="textbox"]'))
+  }
+
+  if (preferredControl === 'select') {
+    if (tagName === 'select' || role === 'combobox' || className.includes('q-field__native') || hasPopup) {
+      return true
+    }
+    return Boolean(element?.querySelector?.('select, [role="combobox"], input.q-field__native, .q-field__native, input'))
+  }
+
+  return true
+}
+
+async function pickAttributeLocator(page, attrName, value, target = {}, options = {}) {
+  const useRegex = parseTargetRegexFlag(target)
+  const preferredControl = options?.preferredControl || null
+  const komponententypSelector = resolveKomponententypSelector(target?.komponententyp)
+  const baseLocator = page.locator(`[${attrName}]`)
+  const matchIndexes = await baseLocator.evaluateAll((elements, payload) => {
+    const indexes = []
+    elements.forEach((element, index) => {
+      const attrValue = element.getAttribute(payload.attrName)
+      if (attrValue == null) {
+        return
+      }
+
+      const isMatch = payload.useRegex
+        ? new RegExp(String(payload.pattern ?? '')).test(attrValue)
+        : attrValue === String(payload.pattern ?? '')
+
+      if (!isMatch) {
+        return
+      }
+
+      const tagName = String(element?.tagName || '').toLowerCase()
+      const role = String(element?.getAttribute?.('role') || '').toLowerCase()
+      const className = String(element?.className || '')
+      const isContentEditable = Boolean(element?.isContentEditable)
+      const hasPopup = String(element?.getAttribute?.('aria-haspopup') || '').length > 0
+
+      let matchesPreferredControl = true
+      if (payload.preferredControl === 'fill') {
+        matchesPreferredControl =
+          tagName === 'input'
+          || tagName === 'textarea'
+          || tagName === 'select'
+          || isContentEditable
+          || role === 'textbox'
+          || Boolean(element?.querySelector?.('input, textarea, select, [contenteditable="true"], [role="textbox"]'))
+      } else if (payload.preferredControl === 'select') {
+        matchesPreferredControl =
+          tagName === 'select'
+          || role === 'combobox'
+          || className.includes('q-field__native')
+          || hasPopup
+          || Boolean(element?.querySelector?.('select, [role="combobox"], input.q-field__native, .q-field__native, input'))
+      }
+
+      let matchesKomponententyp = true
+      if (payload.komponententypSelector) {
+        try {
+          matchesKomponententyp =
+            element.matches(payload.komponententypSelector)
+            || Boolean(element.querySelector(payload.komponententypSelector))
+        } catch {
+          matchesKomponententyp = false
+        }
+      }
+
+      if (matchesPreferredControl && matchesKomponententyp) {
+        indexes.push(index)
+      }
+    })
+    return indexes
+  }, {
+    attrName,
+    pattern: String(value ?? ''),
+    useRegex,
+    preferredControl,
+    komponententypSelector,
+  })
+
+  if (matchIndexes.length === 0) {
+    throw new Error(`No element matched ${useRegex ? `/${String(value ?? '')}/` : JSON.stringify(String(value ?? ''))} for attribute "${attrName}".`)
+  }
+
+  const logicalIndex = resolveTargetIndex(target) ?? 0
+  const resolvedMatchIndex = logicalIndex >= 0 ? logicalIndex : matchIndexes.length + logicalIndex
+  if (resolvedMatchIndex < 0 || resolvedMatchIndex >= matchIndexes.length) {
+    throw new Error(`Target index ${logicalIndex} is out of range for ${matchIndexes.length} regex matches on attribute "${attrName}".`)
+  }
+
+  return baseLocator.nth(matchIndexes[resolvedMatchIndex])
+}
+
+async function pickLocatorWithKomponententyp(locator, target = {}, targetLabel = 'locator') {
+  const komponententypSelector = resolveKomponententypSelector(target?.komponententyp)
+  if (!komponententypSelector) {
+    return pickIndexedLocator(locator, resolveTargetIndex(target))
+  }
+
+  const matchIndexes = await locator.evaluateAll((elements, payload) => {
+    const indexes = []
+    elements.forEach((element, index) => {
+      try {
+        if (element.matches(payload.komponententypSelector) || element.querySelector(payload.komponententypSelector)) {
+          indexes.push(index)
+        }
+      } catch {
+        // Ignore invalid selector matches for this candidate.
+      }
+    })
+    return indexes
+  }, { komponententypSelector })
+
+  if (matchIndexes.length === 0) {
+    throw new Error(`No element matched komponententyp=${JSON.stringify(String(target?.komponententyp || ''))} for ${targetLabel}.`)
+  }
+
+  const logicalIndex = resolveTargetIndex(target) ?? 0
+  const resolvedMatchIndex = logicalIndex >= 0 ? logicalIndex : matchIndexes.length + logicalIndex
+  if (resolvedMatchIndex < 0 || resolvedMatchIndex >= matchIndexes.length) {
+    throw new Error(`Target index ${logicalIndex} is out of range for ${matchIndexes.length} komponententyp matches on ${targetLabel}.`)
+  }
+
+  return locator.nth(matchIndexes[resolvedMatchIndex])
+}
+
+export async function resolveTargetLocator(page, target = {}, options = {}) {
+  const textMode = String(options?.textMode || 'text')
+  const useRegex = parseTargetRegexFlag(target)
+  const preferredControl = options?.preferredControl || null
+
+  if (target.testid) {
+    return pickLocatorWithKomponententyp(page.getByTestId(String(target.testid)), target, `data-testid=${JSON.stringify(String(target.testid))}`)
+  }
+  if (target.id) {
+    return pickLocatorWithKomponententyp(page.locator(buildExactAttributeSelector('id', target.id)), target, `id=${JSON.stringify(String(target.id))}`)
+  }
+  if (target['data-id']) {
+    return pickAttributeLocator(page, 'data-id', target['data-id'], target, { preferredControl })
+  }
+  if (target.label) {
+    return pickAttributeLocator(page, 'label', target.label, target, { preferredControl })
+  }
+  if (target['aria-label']) {
+    return pickAttributeLocator(page, 'aria-label', target['aria-label'], target, { preferredControl })
+  }
+  if (target.text) {
+    if (textMode === 'label') {
+      const locator = useRegex
+        ? page.getByLabel(buildRegexMatcher(target.text))
+        : page.getByLabel(String(target.text), { exact: true })
+      return pickLocatorWithKomponententyp(locator, target, `label=${JSON.stringify(String(target.text))}`)
+    }
+    if (target.role) {
+      const locator = useRegex
+        ? page.getByRole(String(target.role), { name: buildRegexMatcher(target.text) })
+        : page.getByRole(String(target.role), { name: String(target.text), exact: true })
+      return pickLocatorWithKomponententyp(locator, target, `role=${JSON.stringify(String(target.role))}`)
+    }
+    const locator = useRegex
+      ? page.getByText(buildRegexMatcher(target.text))
+      : page.getByText(String(target.text), { exact: true })
+    return pickLocatorWithKomponententyp(locator, target, `text=${JSON.stringify(String(target.text))}`)
+  }
+
+  throw new Error('Target could not be resolved to a locator.')
 }
 
 export async function assertElementValueByTestId(page, testId, expectedValue, options = {}) {
-  const locator = pickLocator(page.getByTestId(testId), options)
+  const locator = await pickLocator(page.getByTestId(testId), options)
   await assertComparableValue(locator, `data-testid="${testId}"`, expectedValue)
 }
 
 export async function assertElementValueById(page, elementId, expectedValue, selectorType = "id", options = {}) {
   const selector = selectorType === "data-id" ? `[data-id=${JSON.stringify(String(elementId))}]` : `[id=${JSON.stringify(String(elementId))}]`
-  const locator = pickLocator(page.locator(selector), options)
+  const locator = await pickLocator(page.locator(selector), options)
   const targetLabel = selectorType === "data-id" ? `data-id="${elementId}"` : `id="#${elementId}"`
+  await assertComparableValue(locator, targetLabel, expectedValue)
+}
+
+export async function assertElementValueByLocator(locator, expectedValue, targetLabel = '<target>') {
   await assertComparableValue(locator, targetLabel, expectedValue)
 }
 
@@ -439,17 +689,19 @@ async function evaluateSingleCondition(page, rawCondition) {
 
   let locator = null
 
-  if (target.testid) {
-    locator = pickLocator(page.getByTestId(String(target.testid)), target)
+  if (parseTargetRegexFlag(target) || target.label || target['aria-label']) {
+    locator = await resolveTargetLocator(page, target, { textMode: 'text' })
+  } else if (target.testid) {
+    locator = await pickLocator(page.getByTestId(String(target.testid)), target)
   } else if (target.id) {
-    locator = pickLocator(page.locator(`[id=${JSON.stringify(String(target.id))}]`), target)
+    locator = await pickLocator(page.locator(`[id=${JSON.stringify(String(target.id))}]`), target)
   } else if (target["data-id"]) {
-    locator = pickLocator(page.locator(`[data-id=${JSON.stringify(String(target["data-id"]))}]`), target)
+    locator = await pickLocator(page.locator(`[data-id=${JSON.stringify(String(target["data-id"]))}]`), target)
   } else if (target.text) {
     if (target.role) {
-      locator = pickLocator(page.getByRole(String(target.role), { name: String(target.text), exact: true }), target)
+      locator = await pickLocator(page.getByRole(String(target.role), { name: String(target.text), exact: true }), target)
     } else {
-      locator = pickLocator(page.getByText(String(target.text), { exact: true }), target)
+      locator = await pickLocator(page.getByText(String(target.text), { exact: true }), target)
     }
   } else {
     throw new Error("Condition target must contain one of target.testid, target.id, target.data-id, target.text, or target.url.")
@@ -782,11 +1034,103 @@ async function applyDefaultFillStrategy(page, locator, expectedValue, elementInf
   )
 }
 
-export async function applyFillValue(page, testId, value, options = {}) {
-  const locator = pickLocator(page.getByTestId(testId), options)
-  await ensureLocatorScroll(page, locator, options)
+async function resolveSelectControlLocator(locator) {
+  const rootLocator = locator.first()
+  await rootLocator.waitFor({ state: "attached" })
 
-  const elementInfo = await locator.evaluate((el) => ({
+  const rootElementInfo = await rootLocator.evaluate((el) => ({
+    tagName: el.tagName?.toLowerCase?.() || '',
+    className: String(el.className || ''),
+    role: el.getAttribute?.('role') || '',
+  })).catch(() => null)
+
+  if (rootElementInfo) {
+    const rootTagName = String(rootElementInfo.tagName || '')
+    const rootClassName = String(rootElementInfo.className || '')
+    const rootRole = String(rootElementInfo.role || '')
+
+    if (
+      rootTagName === 'select'
+      || rootTagName === 'input'
+      || rootRole === 'combobox'
+      || rootClassName.includes('q-field__native')
+    ) {
+      return rootLocator
+    }
+  }
+
+  const candidateSelectors = [
+    'select',
+    '[role="combobox"]',
+    'input.q-field__native',
+    '.q-field__native',
+    'input',
+  ]
+
+  for (const selector of candidateSelectors) {
+    const candidate = rootLocator.locator(selector).first()
+    const count = await candidate.count().catch(() => 0)
+    if (count > 0) {
+      return candidate
+    }
+  }
+
+  return rootLocator
+}
+
+async function resolveFillControlLocator(locator) {
+  const rootLocator = locator.first()
+  await rootLocator.waitFor({ state: "attached" })
+
+  const rootElementInfo = await rootLocator.evaluate((el) => ({
+    tagName: el.tagName?.toLowerCase?.() || '',
+    isContentEditable: Boolean(el.isContentEditable),
+  })).catch(() => null)
+
+  if (rootElementInfo && (isEditableTagName(rootElementInfo.tagName) || rootElementInfo.isContentEditable)) {
+    return rootLocator
+  }
+
+  const candidateSelectors = [
+    'input',
+    'textarea',
+    'select',
+    '[contenteditable="true"]',
+    '[role="textbox"]',
+  ]
+
+  for (const selector of candidateSelectors) {
+    const candidate = rootLocator.locator(selector).first()
+    const count = await candidate.count().catch(() => 0)
+    if (count > 0) {
+      return candidate
+    }
+  }
+
+  throw new Error('Target did not resolve to an input-capable element.')
+}
+
+async function applyDefaultSelectStrategy(page, locator, expectedValue, elementInfo, targetLabel) {
+  if (elementInfo.tagName === 'select') {
+    await locator.selectOption({ label: expectedValue }).catch(async () => {
+      await locator.selectOption(expectedValue)
+    })
+    return
+  }
+
+  throw new Error(`No select strategy found for ${targetLabel}. Add a strategy to env/fill-strategies.mjs for this component.`)
+}
+
+export async function applyFillValue(page, testId, value, options = {}) {
+  const locator = await pickLocator(page.getByTestId(testId), options)
+  return applyFillValueToLocator(page, locator, value, { targetLabel: `data-testid="${testId}"` }, options)
+}
+
+export async function applyFillValueToLocator(page, locator, value, meta = {}, options = {}) {
+  const controlLocator = await resolveFillControlLocator(locator)
+  await ensureLocatorScroll(page, controlLocator, options)
+
+  const elementInfo = await controlLocator.evaluate((el) => ({
     tagName: el.tagName?.toLowerCase?.() || '',
     isContentEditable: Boolean(el.isContentEditable),
     className: String(el.className || ""),
@@ -795,6 +1139,7 @@ export async function applyFillValue(page, testId, value, options = {}) {
   }))
 
   const expectedValue = String(value ?? "")
+  const targetLabel = String(meta?.targetLabel || '<target>')
 
   const envStrategies = await loadEnvFillStrategies()
   for (const strategy of envStrategies) {
@@ -802,12 +1147,12 @@ export async function applyFillValue(page, testId, value, options = {}) {
       continue
     }
 
-    const isMatch = await strategy.match({ testId, elementInfo, expectedValue })
+    const isMatch = await strategy.match({ testId: targetLabel, elementInfo, expectedValue })
     if (!isMatch) {
       continue
     }
 
-    const result = await strategy.run({ page, locator, testId, elementInfo, expectedValue })
+    const result = await strategy.run({ page, locator: controlLocator, testId: targetLabel, elementInfo, expectedValue })
     const handled = typeof result === "object" && result !== null
       ? Boolean(result.handled)
       : Boolean(result)
@@ -815,21 +1160,22 @@ export async function applyFillValue(page, testId, value, options = {}) {
     if (handled) {
       const skipVerification = typeof result === "object" && result !== null && result.verify === false
       if (!skipVerification) {
-        await assertFillPersisted(locator, elementInfo, testId, expectedValue)
+        await assertFillPersisted(controlLocator, elementInfo, targetLabel, expectedValue)
       }
       return
     }
   }
 
-  await applyDefaultFillStrategy(page, locator, expectedValue, elementInfo, testId)
+  await applyDefaultFillStrategy(page, controlLocator, expectedValue, elementInfo, targetLabel)
 }
 
 export async function applyFillValueById(page, elementId, value, selectorType = "id", options = {}) {
   const selector = selectorType === "data-id" ? `[data-id=${JSON.stringify(String(elementId))}]` : `[id=${JSON.stringify(String(elementId))}]`
-  const locator = pickLocator(page.locator(selector), options)
-  await ensureLocatorScroll(page, locator, options)
+  const locator = await pickLocator(page.locator(selector), options)
+  const controlLocator = await resolveFillControlLocator(locator)
+  await ensureLocatorScroll(page, controlLocator, options)
 
-  const elementInfo = await locator.evaluate((el) => ({
+  const elementInfo = await controlLocator.evaluate((el) => ({
     tagName: el.tagName?.toLowerCase?.() || '',
     isContentEditable: Boolean(el.isContentEditable),
     className: String(el.className || ""),
@@ -850,7 +1196,7 @@ export async function applyFillValueById(page, elementId, value, selectorType = 
       continue
     }
 
-    const result = await strategy.run({ page, locator, testId: elementId, elementInfo, expectedValue })
+    const result = await strategy.run({ page, locator: controlLocator, testId: elementId, elementInfo, expectedValue })
     const handled = typeof result === "object" && result !== null
       ? Boolean(result.handled)
       : Boolean(result)
@@ -858,20 +1204,25 @@ export async function applyFillValueById(page, elementId, value, selectorType = 
     if (handled) {
       const skipVerification = typeof result === "object" && result !== null && result.verify === false
       if (!skipVerification) {
-        await assertFillPersisted(locator, elementInfo, `#${elementId}`, expectedValue)
+        await assertFillPersisted(controlLocator, elementInfo, `#${elementId}`, expectedValue)
       }
       return
     }
   }
 
-  await applyDefaultFillStrategy(page, locator, expectedValue, elementInfo, `#${elementId}`)
+  await applyDefaultFillStrategy(page, controlLocator, expectedValue, elementInfo, `#${elementId}`)
 }
 
 export async function applySelectValue(page, testId, value, options = {}) {
-  const locator = pickLocator(page.getByTestId(testId), options)
-  await ensureLocatorScroll(page, locator, options)
+  const locator = await pickLocator(page.getByTestId(testId), options)
+  return applySelectValueToLocator(page, locator, value, { targetLabel: `data-testid="${testId}"` }, options)
+}
 
-  const elementInfo = await locator.evaluate((el) => ({
+export async function applySelectValueToLocator(page, locator, value, meta = {}, options = {}) {
+  const controlLocator = await resolveSelectControlLocator(locator)
+  await ensureLocatorScroll(page, controlLocator, options)
+
+  const elementInfo = await controlLocator.evaluate((el) => ({
     tagName: el.tagName?.toLowerCase?.() || '',
     className: String(el.className || ''),
     role: el.getAttribute('role'),
@@ -879,6 +1230,12 @@ export async function applySelectValue(page, testId, value, options = {}) {
   }))
 
   const expectedValue = String(value ?? '')
+  const targetLabel = String(meta?.targetLabel || '<target>')
+
+  const currentValue = await readComparableValue(controlLocator).catch(() => null)
+  if (currentValue != null && String(currentValue).trim() === expectedValue.trim()) {
+    return
+  }
 
   const envStrategies = await loadEnvFillStrategies()
   for (const strategy of envStrategies) {
@@ -886,12 +1243,12 @@ export async function applySelectValue(page, testId, value, options = {}) {
       continue
     }
 
-    const isMatch = await strategy.match({ testId, elementInfo, expectedValue, isSelect: true })
+    const isMatch = await strategy.match({ testId: targetLabel, elementInfo, expectedValue, isSelect: true })
     if (!isMatch) {
       continue
     }
 
-    const result = await strategy.run({ page, locator, testId, elementInfo, expectedValue, isSelect: true })
+    const result = await strategy.run({ page, locator: controlLocator, testId: targetLabel, elementInfo, expectedValue, isSelect: true })
     const handled = typeof result === "object" && result !== null
       ? Boolean(result.handled)
       : Boolean(result)
@@ -901,15 +1258,16 @@ export async function applySelectValue(page, testId, value, options = {}) {
     }
   }
 
-  throw new Error(`No select strategy found for data-testid="${testId}". Add a strategy to env/fill-strategies.mjs for this component.`)
+  await applyDefaultSelectStrategy(page, controlLocator, expectedValue, elementInfo, targetLabel)
 }
 
 export async function applySelectValueById(page, elementId, value, selectorType = "id", options = {}) {
   const selector = selectorType === "data-id" ? `[data-id=${JSON.stringify(String(elementId))}]` : `[id=${JSON.stringify(String(elementId))}]`
-  const locator = pickLocator(page.locator(selector), options)
-  await ensureLocatorScroll(page, locator, options)
+  const locator = await pickLocator(page.locator(selector), options)
+  const controlLocator = await resolveSelectControlLocator(locator)
+  await ensureLocatorScroll(page, controlLocator, options)
 
-  const elementInfo = await locator.evaluate((el) => ({
+  const elementInfo = await controlLocator.evaluate((el) => ({
     tagName: el.tagName?.toLowerCase?.() || '',
     className: String(el.className || ''),
     role: el.getAttribute('role'),
@@ -917,6 +1275,11 @@ export async function applySelectValueById(page, elementId, value, selectorType 
   }))
 
   const expectedValue = String(value ?? '')
+
+  const currentValue = await readComparableValue(controlLocator).catch(() => null)
+  if (currentValue != null && String(currentValue).trim() === expectedValue.trim()) {
+    return
+  }
 
   const envStrategies = await loadEnvFillStrategies()
   for (const strategy of envStrategies) {
@@ -929,7 +1292,7 @@ export async function applySelectValueById(page, elementId, value, selectorType 
       continue
     }
 
-    const result = await strategy.run({ page, locator, testId: elementId, elementInfo, expectedValue, isSelect: true })
+    const result = await strategy.run({ page, locator: controlLocator, testId: elementId, elementInfo, expectedValue, isSelect: true })
     const handled = typeof result === "object" && result !== null
       ? Boolean(result.handled)
       : Boolean(result)
@@ -939,11 +1302,15 @@ export async function applySelectValueById(page, elementId, value, selectorType 
     }
   }
 
-  throw new Error(`No select strategy found for id="#${elementId}". Add a strategy to env/fill-strategies.mjs for this component.`)
+  await applyDefaultSelectStrategy(page, controlLocator, expectedValue, elementInfo, `id="#${elementId}"`)
 }
 
 export async function applyUploadValue(page, testId, value, options = {}) {
-  const rootLocator = pickLocator(page.getByTestId(testId), options)
+  const rootLocator = await pickLocator(page.getByTestId(testId), options)
+  return applyUploadValueToLocator(page, rootLocator, value, options)
+}
+
+export async function applyUploadValueToLocator(page, rootLocator, value, options = {}) {
   await ensureLocatorScroll(page, rootLocator, options)
   const fileLocator = await resolveUploadLocator(page, rootLocator)
   const uploadPath = await resolveUploadAssetPath(value)
@@ -956,7 +1323,7 @@ export async function applyUploadValueById(page, elementId, value, selectorType 
     : selectorType === "selector"
       ? String(elementId)
       : `[id=${JSON.stringify(String(elementId))}]`
-  const rootLocator = pickLocator(page.locator(selector), options)
+  const rootLocator = await pickLocator(page.locator(selector), options)
   await ensureLocatorScroll(page, rootLocator, options)
   const fileLocator = await resolveUploadLocator(page, rootLocator)
   const uploadPath = await resolveUploadAssetPath(value)
@@ -964,7 +1331,11 @@ export async function applyUploadValueById(page, elementId, value, selectorType 
 }
 
 export async function applyAppendValue(page, testId, value, options = {}) {
-  const locator = pickLocator(page.getByTestId(testId), options)
+  const locator = await pickLocator(page.getByTestId(testId), options)
+  return applyAppendValueToLocator(page, locator, value, { targetLabel: `data-testid="${testId}"` }, options)
+}
+
+export async function applyAppendValueToLocator(page, locator, value, meta = {}, options = {}) {
   await locator.waitFor({ state: 'visible' })
 
   const elementInfo = await locator.evaluate((el) => ({
@@ -976,6 +1347,7 @@ export async function applyAppendValue(page, testId, value, options = {}) {
   }))
 
   const expectedValue = String(value ?? "")
+  const targetLabel = String(meta?.targetLabel || '<target>')
 
   const envStrategies = await loadEnvFillStrategies()
   for (const strategy of envStrategies) {
@@ -983,12 +1355,12 @@ export async function applyAppendValue(page, testId, value, options = {}) {
       continue
     }
 
-    const isMatch = await strategy.match({ testId, elementInfo, expectedValue, isAppend: true })
+    const isMatch = await strategy.match({ testId: targetLabel, elementInfo, expectedValue, isAppend: true })
     if (!isMatch) {
       continue
     }
 
-    const result = await strategy.run({ page, locator, testId, elementInfo, expectedValue, isAppend: true })
+    const result = await strategy.run({ page, locator, testId: targetLabel, elementInfo, expectedValue, isAppend: true })
     const handled = typeof result === "object" && result !== null
       ? Boolean(result.handled)
       : Boolean(result)
@@ -996,18 +1368,18 @@ export async function applyAppendValue(page, testId, value, options = {}) {
     if (handled) {
       const skipVerification = typeof result === "object" && result !== null && result.verify === false
       if (!skipVerification) {
-        await assertAppendPersisted(locator, elementInfo, testId, expectedValue)
+        await assertAppendPersisted(locator, elementInfo, targetLabel, expectedValue)
       }
       return
     }
   }
 
-  await applyDefaultFillStrategy(page, locator, expectedValue, elementInfo, testId, "append")
+  await applyDefaultFillStrategy(page, locator, expectedValue, elementInfo, targetLabel, "append")
 }
 
 export async function applyAppendValueById(page, elementId, value, selectorType = "id", options = {}) {
   const selector = selectorType === "data-id" ? `[data-id=${JSON.stringify(String(elementId))}]` : `[id=${JSON.stringify(String(elementId))}]`
-  const locator = pickLocator(page.locator(selector), options)
+  const locator = await pickLocator(page.locator(selector), options)
   await locator.waitFor({ state: 'visible' })
 
   const elementInfo = await locator.evaluate((el) => ({
@@ -1057,7 +1429,11 @@ async function assertAppendPersisted(locator, elementInfo, testId, appendedValue
 
 export async function applyClickValueById(page, elementId, selectorType = "id", options = {}) {
   const selector = selectorType === "data-id" ? `[data-id=${JSON.stringify(String(elementId))}]` : `[id=${JSON.stringify(String(elementId))}]`
-  const locator = pickLocator(page.locator(selector), options)
+  const locator = await pickLocator(page.locator(selector), options)
+  return applyClickValueToLocator(page, locator, options, { targetLabel: selectorType === 'data-id' ? `data-id="${elementId}"` : `id="#${elementId}"` })
+}
+
+export async function applyClickValueToLocator(page, locator, options = {}, meta = {}) {
   const elementHandle = await locator.elementHandle({ timeout: 2500 }).catch(() => null)
   if (!elementHandle) {
     await clickWithOverlayRecovery(page, locator, options)
@@ -1077,12 +1453,12 @@ export async function applyClickValueById(page, elementId, selectorType = "id", 
       continue
     }
 
-    const isMatch = await strategy.match({ testId: elementId, elementInfo, isClick: true })
+    const isMatch = await strategy.match({ testId: meta?.targetLabel || '<target>', elementInfo, isClick: true })
     if (!isMatch) {
       continue
     }
 
-    const result = await strategy.run({ page, locator, testId: elementId, elementInfo, isClick: true })
+    const result = await strategy.run({ page, locator, testId: meta?.targetLabel || '<target>', elementInfo, isClick: true })
     const handled = typeof result === "object" && result !== null
       ? Boolean(result.handled)
       : Boolean(result)
@@ -1096,42 +1472,8 @@ export async function applyClickValueById(page, elementId, selectorType = "id", 
 }
 
 export async function applyClickValueBySelector(page, selector, options = {}) {
-  const locator = pickLocator(page.locator(selector), options)
-  const elementHandle = await locator.elementHandle({ timeout: 2500 }).catch(() => null)
-  if (!elementHandle) {
-    await clickWithOverlayRecovery(page, locator, options)
-    return
-  }
-
-  const elementInfo = await elementHandle.evaluate((el) => ({
-    tagName: el.tagName?.toLowerCase?.() || '',
-    className: String(el.className || ''),
-    role: el.getAttribute('role'),
-    ariaHasPopup: el.getAttribute('aria-haspopup'),
-  }))
-
-  const envStrategies = await loadEnvFillStrategies()
-  for (const strategy of envStrategies) {
-    if (!strategy || typeof strategy.match !== "function" || typeof strategy.run !== "function") {
-      continue
-    }
-
-    const isMatch = await strategy.match({ elementInfo, isClick: true })
-    if (!isMatch) {
-      continue
-    }
-
-    const result = await strategy.run({ page, locator, elementInfo, isClick: true })
-    const handled = typeof result === "object" && result !== null
-      ? Boolean(result.handled)
-      : Boolean(result)
-
-    if (handled) {
-      return
-    }
-  }
-
-  await clickWithOverlayRecovery(page, locator, options)
+  const locator = await pickLocator(page.locator(selector), options)
+  return applyClickValueToLocator(page, locator, options, { targetLabel: selector })
 }
 
 async function waitForTransientOverlays(page) {

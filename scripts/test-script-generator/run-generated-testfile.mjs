@@ -170,7 +170,7 @@ function countRenderedFlowSteps(flowEntries) {
     const target = step?.interaction?.target || {}
     const hasUsableScrollTarget = Boolean(
       target?.testid || target?.id || target?.['data-id'] || target?.text || Object.keys(target || {}).some((key) => (
-        !['testid', 'id', 'data-id', 'text', 'role', 'url', 'state', 'click_child_selector', 'number'].includes(key)
+        !['testid', 'id', 'data-id', 'text', 'role', 'url', 'state', 'click_child_selector', 'treffer-index', 'selektor-regex', 'label', 'aria-label', 'komponententyp'].includes(key)
         && target[key] != null
       ))
     )

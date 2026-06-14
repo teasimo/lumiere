@@ -240,7 +240,7 @@ function buildGeneratedStepTitle(node) {
   const tag = String(node?.tag || 'Step')
   const attrs = node?.attrs || {}
   const parts = [tag]
-  const preferredAttrs = ['data-id', 'id', 'testid', 'text', 'aria-label', 'label', 'number', 'url']
+  const preferredAttrs = ['data-id', 'id', 'testid', 'text', 'aria-label', 'label', 'selektor-regex', 'treffer-index', 'url']
   const sensitiveStep = isSensitiveStep(node)
 
   for (const attrName of preferredAttrs) {
@@ -749,7 +749,7 @@ function buildScrollTargetSummary(target) {
     return ''
   }
 
-  const fields = ['testid', 'data-id', 'id', 'role', 'text', 'label', 'aria-label', 'number']
+  const fields = ['testid', 'data-id', 'id', 'role', 'text', 'label', 'aria-label', 'selektor-regex', 'treffer-index', 'komponententyp']
   const parts = []
 
   for (const field of fields) {
@@ -798,6 +798,10 @@ function buildInjectedAutoScrollResolvedTitle(step) {
 function buildScrollLocatorExpression(target) {
   if (!target || typeof target !== 'object') {
     return null
+  }
+
+  if (targetNeedsRuntimeLocator(target)) {
+    return `await resolveTargetLocator(page, ${buildTargetObjectExpression(target)}, { textMode: 'text' })`
   }
 
   if (target.text) {
@@ -910,7 +914,7 @@ function toConditionList(value, keyName, stepId) {
 }
 
 function buildGenericTargetSelector(target) {
-  const reservedKeys = new Set(['testid', 'id', 'data-id', 'text', 'role', 'url', 'state', 'click_child_selector', 'number'])
+  const reservedKeys = new Set(['testid', 'id', 'data-id', 'text', 'role', 'url', 'state', 'click_child_selector', 'treffer-index', 'selektor-regex', 'label', 'aria-label', 'komponententyp'])
   const entries = Object.entries(target || {}).filter(([, value]) => value != null)
   const selectorParts = []
 
@@ -925,14 +929,49 @@ function buildGenericTargetSelector(target) {
   return selectorParts.length > 0 ? selectorParts.join('') : null
 }
 
+function targetNeedsRuntimeLocator(target) {
+  return Boolean(target?.['selektor-regex'] || target?.label || target?.['aria-label'] || target?.komponententyp)
+}
+
+function buildTargetObjectExpression(target, { runtimeVariables = false } = {}) {
+  const entries = []
+
+  for (const [key, rawValue] of Object.entries(target || {})) {
+    if (rawValue == null) {
+      continue
+    }
+
+    let valueExpression = null
+    if (typeof rawValue === 'string') {
+      valueExpression = runtimeVariables
+        ? `resolveRuntimeTemplateString(${toLiteral(rawValue)}, runtimeVariables)`
+        : toLiteral(rawValue)
+    } else if (typeof rawValue === 'number' || typeof rawValue === 'boolean') {
+      valueExpression = JSON.stringify(rawValue)
+    } else {
+      valueExpression = toLiteral(String(rawValue))
+    }
+
+    entries.push(`${JSON.stringify(key)}: ${valueExpression}`)
+  }
+
+  return `{ ${entries.join(', ')} }`
+}
+
 function getTargetIndex(target) {
-  const numberValue = Number(target?.number)
-  return Number.isInteger(numberValue) && numberValue >= 0 ? numberValue : null
+  const indexValue = Number(target?.['treffer-index'])
+  return Number.isInteger(indexValue) ? indexValue : null
 }
 
 function buildIndexedLocatorExpression(baseExpression, target) {
   const index = getTargetIndex(target)
-  return `${baseExpression}.${index == null ? 'first()' : `nth(${index})`}`
+  if (index == null) {
+    return `${baseExpression}.first()`
+  }
+  if (index >= 0) {
+    return `${baseExpression}.nth(${index})`
+  }
+  return `(await pickIndexedLocator(${baseExpression}, ${index}))`
 }
 
 function buildExpectedResultAssertions(expectedResults) {
@@ -943,7 +982,25 @@ function buildExpectedResultAssertions(expectedResults) {
     const target = result.target || {}
     const state = result.state || target.state || {}
 
-    if (target.testid) {
+    if (targetNeedsRuntimeLocator(target)) {
+      const locator = `await resolveTargetLocator(page, ${buildTargetObjectExpression(target)}, { textMode: 'text' })`
+
+      if (state.visible === true) {
+        lines.push(`await expect(${locator}).toBeVisible()`)
+      }
+
+      if (state.visible === false) {
+        lines.push(`await expect(${locator}).toBeHidden()`)
+      }
+
+      if (state['value-present'] === true) {
+        lines.push(`await expect(${locator}).toHaveValue(/.+/)`)
+      }
+
+      if (state['value-present'] === false) {
+        lines.push(`await expect(${locator}).toHaveValue('')`)
+      }
+    } else if (target.testid) {
       const testId = String(target.testid)
       const locator = buildIndexedLocatorExpression(`page.getByTestId(${toLiteral(testId)})`, target)
 
@@ -1089,6 +1146,9 @@ function buildInteractionLines(step, options = {}) {
     }
     if (target.testid) {
       lines.push(`await applyFillValue(page, ${toLiteral(String(target.testid))}, resolveRuntimeTemplateString(${toLiteral(String(interaction.value || ''))}, runtimeVariables), { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true, targetIndex: ${getTargetIndex(target) ?? 'undefined'} })`)
+    } else if (targetNeedsRuntimeLocator(target)) {
+      lines.push(`const __scenarioFillLocator = await resolveTargetLocator(page, ${buildTargetObjectExpression(target, { runtimeVariables: true })}, { textMode: 'label', preferredControl: 'fill' })`)
+      lines.push(`await applyFillValueToLocator(page, __scenarioFillLocator, resolveRuntimeTemplateString(${toLiteral(String(interaction.value || ''))}, runtimeVariables), { targetLabel: ${toLiteral(buildScrollTargetSummary(target) || '<target>')} }, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true })`)
     } else if (target.text) {
       // Fill by visible text (first matching input/textarea/select)
       lines.push(`await ${buildIndexedLocatorExpression(`page.getByLabel(resolveRuntimeTemplateString(${toLiteral(String(target.text))}, runtimeVariables), { exact: true })`, target)}.fill(resolveRuntimeTemplateString(${toLiteral(String(interaction.value || ''))}, runtimeVariables))`)
@@ -1113,6 +1173,9 @@ function buildInteractionLines(step, options = {}) {
     }
     if (target.testid) {
       lines.push(`await applyAppendValue(page, ${toLiteral(String(target.testid))}, ${toLiteral(String(interaction.value || ''))}, { targetIndex: ${getTargetIndex(target) ?? 'undefined'} })`)
+    } else if (targetNeedsRuntimeLocator(target)) {
+      lines.push(`const __scenarioAppendLocator = await resolveTargetLocator(page, ${buildTargetObjectExpression(target, { runtimeVariables: true })}, { textMode: 'label', preferredControl: 'fill' })`)
+      lines.push(`await applyAppendValueToLocator(page, __scenarioAppendLocator, ${toLiteral(String(interaction.value || ''))}, { targetLabel: ${toLiteral(buildScrollTargetSummary(target) || '<target>')} })`)
     } else {
       const selectorType = target['data-id'] ? 'data-id' : 'id'
       const value = target['data-id'] || target.id
@@ -1122,7 +1185,14 @@ function buildInteractionLines(step, options = {}) {
     if (!target.testid && !target.id && !target['data-id'] && !target.text && !buildGenericTargetSelector(target)) {
       throw new Error(`Step "${step.id}" has interaction type "click" but no usable target fields.`)
     }
-    if (target.text) {
+    if (targetNeedsRuntimeLocator(target)) {
+      lines.push(`const __scenarioClickLocator = await resolveTargetLocator(page, ${buildTargetObjectExpression(target, { runtimeVariables: true })}, { textMode: 'text' })`)
+      if (target.click_child_selector) {
+        lines.push(`await __scenarioClickLocator.locator(${toLiteral(String(target.click_child_selector))}).first().click()`)
+      } else {
+        lines.push(`await applyClickValueToLocator(page, __scenarioClickLocator, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true }, { targetLabel: ${toLiteral(buildScrollTargetSummary(target) || '<target>')} })`)
+      }
+    } else if (target.text) {
       const textValue = toLiteral(String(target.text))
       if (target.role) {
         const baseLocator = buildIndexedLocatorExpression(`page.getByRole(${toLiteral(String(target.role))}, { name: ${textValue}, exact: true })`, target)
@@ -1160,6 +1230,9 @@ function buildInteractionLines(step, options = {}) {
     }
     if (target.testid) {
       lines.push(`await applySelectValue(page, ${toLiteral(String(target.testid))}, ${toLiteral(String(interaction.value || ''))}, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true, targetIndex: ${getTargetIndex(target) ?? 'undefined'} })`)
+    } else if (targetNeedsRuntimeLocator(target)) {
+      lines.push(`const __scenarioSelectLocator = await resolveTargetLocator(page, ${buildTargetObjectExpression(target, { runtimeVariables: true })}, { textMode: 'label', preferredControl: 'select' })`)
+      lines.push(`await applySelectValueToLocator(page, __scenarioSelectLocator, ${toLiteral(String(interaction.value || ''))}, { targetLabel: ${toLiteral(buildScrollTargetSummary(target) || '<target>')} }, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true })`)
     } else {
       const selectorType = target['data-id'] ? 'data-id' : 'id'
       const value = target['data-id'] || target.id
@@ -1175,6 +1248,9 @@ function buildInteractionLines(step, options = {}) {
     const resolvedFileExpr = `resolveRuntimeTemplateString(${toLiteral(String(interaction.value || ''))}, runtimeVariables)`
     if (target.testid) {
       lines.push(`await applyUploadValue(page, ${toLiteral(String(target.testid))}, ${resolvedFileExpr}, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true, targetIndex: ${getTargetIndex(target) ?? 'undefined'} })`)
+    } else if (targetNeedsRuntimeLocator(target)) {
+      lines.push(`const __scenarioUploadLocator = await resolveTargetLocator(page, ${buildTargetObjectExpression(target, { runtimeVariables: true })}, { textMode: 'label' })`)
+      lines.push(`await applyUploadValueToLocator(page, __scenarioUploadLocator, ${resolvedFileExpr}, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true })`)
     } else if (buildGenericTargetSelector(target)) {
       lines.push(`await applyUploadValueById(page, ${toLiteral(buildGenericTargetSelector(target))}, ${resolvedFileExpr}, "selector", { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true, targetIndex: ${getTargetIndex(target) ?? 'undefined'} })`)
     } else {
@@ -1248,6 +1324,9 @@ function buildInteractionLines(step, options = {}) {
       const expectedValue = interaction.value ?? ''
       if (target.testid) {
         lines.push(`await assertElementValueByTestId(page, ${toLiteral(String(target.testid))}, ${toLiteral(String(expectedValue))}, { targetIndex: ${getTargetIndex(target) ?? 'undefined'} })`)
+      } else if (targetNeedsRuntimeLocator(target)) {
+        lines.push(`const __scenarioAssertLocator = await resolveTargetLocator(page, ${buildTargetObjectExpression(target, { runtimeVariables: true })}, { textMode: 'label' })`)
+        lines.push(`await assertElementValueByLocator(__scenarioAssertLocator, ${toLiteral(String(expectedValue))}, ${toLiteral(buildScrollTargetSummary(target) || '<target>')})`)
       } else {
         const selectorType = target['data-id'] ? 'data-id' : 'id'
         const value = target['data-id'] || target.id
@@ -1277,10 +1356,10 @@ function buildInteractionLines(step, options = {}) {
 
   } else if (interactionType === 'extract-pdf-code') {
     // Custom interaction: extract code from PDF and assign to variable
-    const regex = interaction.regex
+    const regex = interaction.auslesenRegex
     const output = interaction.output || 'extractedCode'
     if (!regex) {
-      throw new Error(`Step "${step.id}" with type extract-pdf-code requires regex.`)
+      throw new Error(`Step "${step.id}" with type extract-pdf-code requires auslesenRegex.`)
     }
     const pdfPathExpression = interaction.pdfPath
       ? `resolveRuntimeTemplateString(${toLiteral(String(interaction.pdfPath))}, runtimeVariables)`
@@ -1320,6 +1399,7 @@ export function renderScenarioSpecTemplate({
   const waitBetweenStepsMs = Number(resolvedRoot?.video?.wait_between_steps ?? 0)
   const scrollDelayMs = Number(resolvedRoot?.video?.scroll_delay_ms ?? 35)
   const scrollStepPx = Number(resolvedRoot?.video?.scroll_step_px ?? 20)
+  const stepTimeoutMs = Number(resolvedRoot?.runtime?.step_timeout_ms ?? 30000)
   const smoothScrollEnabled = autoScrollSmoothEnabled
   const renderedStepCount = Math.max(1, countRenderedSteps(flow))
   const actionBudgetMs = renderedStepCount * 3500
@@ -1343,6 +1423,7 @@ export function renderScenarioSpecTemplate({
   parts.push(`    test.setTimeout(${dynamicTestTimeoutMs})`)
   parts.push(`    const waitBetweenStepsMs = ${Number.isFinite(waitBetweenStepsMs) ? Math.max(0, Math.floor(waitBetweenStepsMs)) : 0}`)
   parts.push(`    const scrollDelayMs = ${Number.isFinite(scrollDelayMs) ? Math.max(0, Math.floor(scrollDelayMs)) : 35}`)
+  parts.push(`    const stepTimeoutMs = ${Number.isFinite(stepTimeoutMs) ? Math.max(0, Math.floor(stepTimeoutMs)) : 30000}`)
   parts.push(`    const smoothScrollEnabled = ${smoothScrollEnabled ? 'true' : 'false'}`)
   parts.push(`    const stepIdentifierLogEnabledByScenario = ${stepIdentifierLogEnabledByScenario ? 'true' : 'false'}`)
   parts.push('    const stepIdentifierLogEnabledByEnv = process.env.SCENARIO_STEP_DOM_LOG === "1" || process.env.SCENARIO_STEP_DOM_LOG === "true"')
@@ -1365,6 +1446,7 @@ export function renderScenarioSpecTemplate({
   parts.push('      page,')
   parts.push('      videoModeEnabled,')
   parts.push('      waitBetweenStepsMs,')
+  parts.push('      stepTimeoutMs,')
   parts.push('    })')
   parts.push('    const stepIdentifierLogger = createStepDomIdentifierLogger({ page, testInfo, enabled: stepIdentifierLogEnabled })')
   parts.push('')

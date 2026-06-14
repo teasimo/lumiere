@@ -11,6 +11,7 @@ export function createScenarioTimelineRuntime({
   page,
   videoModeEnabled = false,
   waitBetweenStepsMs = 0,
+  stepTimeoutMs = 30000,
 }) {
   const timeline = []
 
@@ -20,7 +21,26 @@ export function createScenarioTimelineRuntime({
       const startedAtIso = new Date(startedAtMs).toISOString()
 
       const executeResult = await test.step(stepId, async () => {
-        return execute()
+        const effectiveStepTimeoutMs = Math.max(0, Number(stepTimeoutMs) || 0)
+        if (effectiveStepTimeoutMs <= 0) {
+          return execute()
+        }
+
+        let timeoutHandle = null
+        try {
+          return await Promise.race([
+            execute(),
+            new Promise((_, reject) => {
+              timeoutHandle = setTimeout(() => {
+                reject(new Error(`Scenario step timed out after ${effectiveStepTimeoutMs}ms: ${stepId || '<no-id>'} | ${stepDescription || '<no-description>'}`))
+              }, effectiveStepTimeoutMs)
+            }),
+          ])
+        } finally {
+          if (timeoutHandle) {
+            clearTimeout(timeoutHandle)
+          }
+        }
       })
 
       const skipped = Boolean(

@@ -49,7 +49,9 @@ export const centralFillStrategies = [
       // Match if element itself has combobox role or if parent/grandparent is q-select
       const hasComboboxRole = elementInfo?.role === 'combobox'
       const hasQSelectParent = elementInfo?.className?.includes?.('q-field__native')
-      return hasComboboxRole || hasQSelectParent
+      const tagName = String(elementInfo?.tagName || '').toLowerCase()
+      const hasPopup = String(elementInfo?.ariaHasPopup || '').length > 0
+      return hasComboboxRole || hasQSelectParent || tagName === 'input' || hasPopup
     },
     async run({ page, locator, expectedValue }) {
       if (!expectedValue) {
@@ -59,9 +61,11 @@ export const centralFillStrategies = [
       const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
       const optionPattern = new RegExp(`^\\s*${escapeRegExp(expectedValue)}\\s*$`, 'i')
 
-      // Find the actual input or parent q-select container
+      await locator.click({ force: true }).catch(() => {})
+      await page.waitForTimeout(150)
+
       const container = locator.locator('..').first()
-      await container.click()
+      await container.click({ force: true }).catch(() => {})
       await page.waitForTimeout(300)
 
       const optionLocator = page

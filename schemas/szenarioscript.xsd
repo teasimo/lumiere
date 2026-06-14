@@ -191,11 +191,13 @@
     <!-- ========================================================= -->
     <xs:complexType name="InteractionType" abstract="false">
         <xs:attribute name="id" type="xs:ID"/>
-        <xs:attribute name="number" type="xs:string" use="optional"/>
+        <xs:attribute name="treffer-index" type="xs:integer" default="0"/>
         <xs:attribute name="text" type="xs:string" use="optional"/>
         <xs:attribute name="label" type="xs:string" use="optional"/>
         <xs:attribute name="aria-label" type="xs:string" use="optional"/>
         <xs:attribute name="data-id" type="xs:string" use="optional"/>
+        <xs:attribute name="komponententyp" type="xs:string" use="optional"/>
+        <xs:attribute name="selektor-regex" type="xs:boolean" use="optional" default="false"/>
     </xs:complexType>
 
     <xs:complexType name="AuslesenType">
@@ -204,7 +206,7 @@
                 <xs:attribute name="variable" type="xs:string" use="optional"/>
                 <xs:attribute name="in-variable" type="xs:string" use="optional"/>
                 <xs:attribute name="quelle" type="AuslesenQuelleType" use="optional"/>
-                <xs:attribute name="regex" type="xs:string" use="optional"/>
+                <xs:attribute name="auslesen-regex" type="xs:string" use="optional"/>
             </xs:extension>
         </xs:complexContent>
     </xs:complexType>
@@ -273,9 +275,6 @@
             <xs:extension base="InteractionType">
 
                 <xs:attribute name="suchwert" type="xs:string" use="required"/>
-
-                <xs:attribute name="treffer-index" type="xs:nonNegativeInteger" use="optional" default="0"/>
-
                 <xs:attribute name="wartezeit-ms" type="xs:positiveInteger" use="optional"/>
 
             </xs:extension>
