@@ -17,6 +17,7 @@ import { readFile, mkdtemp, rm, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import { basename, dirname, extname, join, resolve } from 'path'
 import { execSync, spawnSync } from 'child_process'
+import { buildScenarioXmlGeneratorInvocation } from '../shared/scenario-xml-generator.mjs'
 
 const DEFAULT_CLICK_BEFORE_MS = 80
 const DEFAULT_CLICK_AFTER_MS = 420
@@ -164,16 +165,94 @@ async function extractTraceEvents(zipPath) {
       candidates = found.split('\n').filter(Boolean)
     }
 
-    const allRaw = await Promise.all(candidates.map((p) => readFile(p, 'utf8')))
-    return allRaw
-      .join('\n')
-      .split('\n')
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line) => JSON.parse(line))
+    const allRaw = await Promise.all(candidates.map(async (p) => ({
+      name: basename(p),
+      raw: await readFile(p, 'utf8'),
+    })))
+
+    const events = []
+    for (const file of allRaw) {
+      for (const line of file.raw.split('\n')) {
+        const trimmed = line.trim()
+        if (!trimmed) continue
+        const parsed = JSON.parse(trimmed)
+        parsed.__traceSource = file.name
+        events.push(parsed)
+      }
+    }
+    return events
   } finally {
     await rm(temp, { recursive: true, force: true })
   }
+}
+
+function median(values) {
+  const sorted = [...values].sort((left, right) => left - right)
+  if (sorted.length === 0) return null
+  const middle = Math.floor(sorted.length / 2)
+  if (sorted.length % 2 === 1) {
+    return sorted[middle]
+  }
+  return (sorted[middle - 1] + sorted[middle]) / 2
+}
+
+function resolveBrowserTraceOffsetMs(events) {
+  const apiStartByStepId = new Map()
+  for (const entry of events) {
+    if (entry?.__traceSource !== 'test.trace') continue
+    if (entry?.type !== 'before') continue
+    const stepId = String(entry?.stepId || '').trim()
+    const startTime = Number(entry?.startTime)
+    if (!stepId || !Number.isFinite(startTime)) continue
+    if (!apiStartByStepId.has(stepId)) {
+      apiStartByStepId.set(stepId, startTime)
+    }
+  }
+
+  const deltas = []
+  for (const entry of events) {
+    if (entry?.__traceSource !== '0-trace.trace') continue
+    if (entry?.type !== 'before') continue
+    const stepId = String(entry?.stepId || '').trim()
+    const startTime = Number(entry?.startTime)
+    const apiStartTime = Number(apiStartByStepId.get(stepId))
+    if (!stepId || !Number.isFinite(startTime) || !Number.isFinite(apiStartTime)) continue
+    deltas.push(startTime - apiStartTime)
+  }
+
+  return median(deltas) || 0
+}
+
+function normalizeTraceTimeMs(entry, key, browserTraceOffsetMs) {
+  const raw = Number(entry?.[key])
+  if (!Number.isFinite(raw)) {
+    return null
+  }
+  if (entry?.__traceSource === '0-trace.trace') {
+    return raw - browserTraceOffsetMs
+  }
+  return raw
+}
+
+function resolveTraceViewport(events) {
+  for (const entry of events) {
+    if (entry?.__traceSource !== '0-trace.trace') continue
+    if (String(entry?.type || '').trim().toLowerCase() !== 'context-options') continue
+
+    const viewport = entry?.options?.viewport
+    const width = Number(viewport?.width)
+    const height = Number(viewport?.height)
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+      continue
+    }
+
+    return {
+      width: Math.max(1, Math.round(width)),
+      height: Math.max(1, Math.round(height)),
+    }
+  }
+
+  return null
 }
 
 function extractStepsAndClicks(events) {
@@ -181,10 +260,11 @@ function extractStepsAndClicks(events) {
   const clicks = []
   const started = new Map()
   const pendingClicks = new Map()
+  const browserTraceOffsetMs = resolveBrowserTraceOffsetMs(events)
 
   const getEventTimeMs = (entry) => {
-    for (const key of ['time', 'startTime', 'endTime']) {
-      const value = entry?.[key]
+    for (const key of ['startTime', 'time', 'endTime']) {
+      const value = normalizeTraceTimeMs(entry, key, browserTraceOffsetMs)
       if (typeof value === 'number' && Number.isFinite(value)) return value
     }
     return null
@@ -196,7 +276,7 @@ function extractStepsAndClicks(events) {
     if (entry.type === 'before' && method === 'test.step') {
       started.set(entry.callId, {
         label: entry.title ?? '',
-        startMs: entry.startTime,
+        startMs: getEventTimeMs(entry),
       })
       continue
     }
@@ -205,11 +285,12 @@ function extractStepsAndClicks(events) {
       const s = started.get(entry.callId)
       if (s) {
         started.delete(entry.callId)
-        if (s.startMs !== undefined && entry.endTime !== undefined) {
+        const endMs = getEventTimeMs(entry)
+        if (s.startMs !== undefined && endMs !== null) {
           steps.push({
             label: s.label,
             startMs: s.startMs,
-            endMs: entry.endTime,
+            endMs,
           })
         }
       }
@@ -217,7 +298,7 @@ function extractStepsAndClicks(events) {
     }
 
     if (entry.type === 'before' && (method === 'click' || method === 'dblclick' || method === 'tap')) {
-      pendingClicks.set(entry.callId, { startMs: entry.startTime })
+      pendingClicks.set(entry.callId, { startMs: getEventTimeMs(entry) })
       continue
     }
 
@@ -225,7 +306,9 @@ function extractStepsAndClicks(events) {
       const p = pendingClicks.get(entry.callId)
       if (p) {
         const inputTimeMs = getEventTimeMs(entry)
-        const clickTimeMs = inputTimeMs !== null ? Math.max(p.startMs, inputTimeMs) : p.startMs
+        // Prefer the earliest reliable action timestamp from the pointer event itself.
+        // Using the later value shifts markers visibly behind the actual click in the video.
+        const clickTimeMs = inputTimeMs !== null ? inputTimeMs : p.startMs
         clicks.push({
           x: Math.round(entry.point.x),
           y: Math.round(entry.point.y),
@@ -237,6 +320,44 @@ function extractStepsAndClicks(events) {
   }
 
   return { steps, clicks }
+}
+
+function clampCoordinate(value, maxExclusive) {
+  const numeric = Number(value)
+  if (!Number.isFinite(numeric)) {
+    return 0
+  }
+
+  if (!Number.isFinite(maxExclusive) || maxExclusive <= 1) {
+    return Math.max(0, Math.round(numeric))
+  }
+
+  return Math.min(Math.max(0, Math.round(numeric)), Math.max(0, Math.floor(maxExclusive) - 1))
+}
+
+function scaleClicksToVideo(clicks, traceViewport, videoSize) {
+  const viewportWidth = Number(traceViewport?.width)
+  const viewportHeight = Number(traceViewport?.height)
+  const videoWidth = Number(videoSize?.width)
+  const videoHeight = Number(videoSize?.height)
+
+  if (
+    !Number.isFinite(viewportWidth) || viewportWidth <= 0
+    || !Number.isFinite(viewportHeight) || viewportHeight <= 0
+    || !Number.isFinite(videoWidth) || videoWidth <= 0
+    || !Number.isFinite(videoHeight) || videoHeight <= 0
+  ) {
+    return Array.isArray(clicks) ? clicks.map((click) => ({ ...click })) : []
+  }
+
+  const scaleX = videoWidth / viewportWidth
+  const scaleY = videoHeight / viewportHeight
+
+  return (Array.isArray(clicks) ? clicks : []).map((click) => ({
+    ...click,
+    x: clampCoordinate(Number(click?.x || 0) * scaleX, videoWidth),
+    y: clampCoordinate(Number(click?.y || 0) * scaleY, videoHeight),
+  }))
 }
 
 function normalizeToken(value) {
@@ -347,15 +468,12 @@ async function readScenarioData(pathValue) {
   }
 
   const scenarioXmlPathAbsolute = resolve(pathValue)
-  const scenarioName = basename(scenarioXmlPathAbsolute, extname(scenarioXmlPathAbsolute))
-  const resolvedJsonPath = resolve('temp', 'testfiles', `${scenarioName}.resolved.json`)
+  const generatorInvocation = buildScenarioXmlGeneratorInvocation({
+    scenarioPath: scenarioXmlPathAbsolute,
+    outDir: 'temp/testfiles',
+  })
 
-  const generateResult = spawnSync('node', [
-    'scripts/test-script-generator/generate-tests-from-scenario-xml.mjs',
-    scenarioXmlPathAbsolute,
-    '--out-dir',
-    'temp/testfiles',
-  ], {
+  const generateResult = spawnSync(generatorInvocation.command, generatorInvocation.args, {
     stdio: 'inherit',
     shell: process.platform === 'win32',
   })
@@ -364,11 +482,11 @@ async function readScenarioData(pathValue) {
     throw new Error(`Scenario XML could not be resolved: ${scenarioXmlPathAbsolute}`)
   }
 
-  if (!existsSync(resolvedJsonPath)) {
-    throw new Error(`Resolved scenario JSON not found after XML generation: ${resolvedJsonPath}`)
+  if (!existsSync(generatorInvocation.paths.resolvedJsonPath)) {
+    throw new Error(`Resolved scenario JSON not found after XML generation: ${generatorInvocation.paths.resolvedJsonPath}`)
   }
 
-  const raw = await readFile(resolvedJsonPath, 'utf8')
+  const raw = await readFile(generatorInvocation.paths.resolvedJsonPath, 'utf8')
   const parsed = JSON.parse(raw)
   const root = parsed.interaction || parsed
   const flow = Array.isArray(root?.flow) ? root.flow : []
@@ -469,6 +587,7 @@ async function getMediaMetadata(filePath) {
 async function main() {
   console.log(`Reading trace: ${traceZip}`)
   const traceEvents = await extractTraceEvents(traceZip)
+  const traceViewport = resolveTraceViewport(traceEvents)
   const { steps, clicks } = extractStepsAndClicks(traceEvents)
 
   if (!steps.length) {
@@ -493,7 +612,27 @@ async function main() {
     throw new Error(`Invalid effective clip range: ${effectiveClipStartMs}..${effectiveClipEndMs}`)
   }
 
-  const { segments, clickMarkers, originMs } = toVideoSeconds(steps, clicks, {
+  const sourceMedia = await getMediaMetadata(inputVideo)
+  if (!Number.isFinite(sourceMedia.durationInSeconds) || sourceMedia.durationInSeconds <= 0) {
+    throw new Error(`Could not read media duration via Remotion metadata: ${inputVideo}`)
+  }
+  if (!Number.isFinite(sourceMedia.width) || !Number.isFinite(sourceMedia.height) || sourceMedia.width <= 0 || sourceMedia.height <= 0) {
+    throw new Error(`Could not read video dimensions via Remotion metadata: ${inputVideo}`)
+  }
+
+  const baseDurationSec = effectiveClipEndMs != null
+    ? (effectiveClipEndMs - effectiveClipStartMs) / 1000
+    : Math.max(0.001, sourceMedia.durationInSeconds - (effectiveClipStartMs / 1000))
+
+  const outputFps = Math.max(1, Math.round(Number(sourceMedia.fps) || 25))
+  const outputWidth = Math.max(1, Math.round(Number(sourceMedia.width) || 1280))
+  const outputHeight = Math.max(1, Math.round(Number(sourceMedia.height) || 720))
+  const outputDurationInFrames = Math.max(1, Math.ceil(baseDurationSec * outputFps))
+  const scaledClicks = scaleClicksToVideo(clicks, traceViewport, {
+    width: outputWidth,
+    height: outputHeight,
+  })
+  const { segments, clickMarkers, originMs } = toVideoSeconds(steps, scaledClicks, {
     clipStartMs: effectiveClipStartMs,
     clipEndMs: effectiveClipEndMs,
   })
@@ -511,23 +650,6 @@ async function main() {
   const effectiveClickMarkers = (clickEnabled && clickHoldDurationSec > 0)
     ? clickMarkers
     : []
-
-  const sourceMedia = await getMediaMetadata(inputVideo)
-  if (!Number.isFinite(sourceMedia.durationInSeconds) || sourceMedia.durationInSeconds <= 0) {
-    throw new Error(`Could not read media duration via Remotion metadata: ${inputVideo}`)
-  }
-  if (!Number.isFinite(sourceMedia.width) || !Number.isFinite(sourceMedia.height) || sourceMedia.width <= 0 || sourceMedia.height <= 0) {
-    throw new Error(`Could not read video dimensions via Remotion metadata: ${inputVideo}`)
-  }
-
-  const baseDurationSec = effectiveClipEndMs != null
-    ? (effectiveClipEndMs - effectiveClipStartMs) / 1000
-    : Math.max(0.001, sourceMedia.durationInSeconds - (effectiveClipStartMs / 1000))
-
-  const outputFps = Math.max(1, Math.round(Number(sourceMedia.fps) || 25))
-  const outputWidth = Math.max(1, Math.round(Number(sourceMedia.width) || 1280))
-  const outputHeight = Math.max(1, Math.round(Number(sourceMedia.height) || 720))
-  const outputDurationInFrames = Math.max(1, Math.ceil(baseDurationSec * outputFps))
 
   const plan = {
     generatedAt: new Date().toISOString(),
@@ -562,6 +684,7 @@ async function main() {
       stepSegments: segments,
       chapterCurtains,
       clickMarkers: effectiveClickMarkers,
+      traceViewport,
     },
   }
 

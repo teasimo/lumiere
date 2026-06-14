@@ -737,11 +737,11 @@ function hasUsableScrollTarget(target) {
     return false
   }
 
-  if (target.testid || target.id || target['data-id'] || target.text) {
+  if (target.testid || target.id || target['data-id'] || target.text || target.role) {
     return true
   }
 
-  return Boolean(buildGenericTargetSelector(target))
+  return targetNeedsRuntimeLocator(target) || Boolean(buildGenericTargetSelector(target))
 }
 
 function buildScrollTargetSummary(target) {
@@ -930,7 +930,7 @@ function buildGenericTargetSelector(target) {
 }
 
 function targetNeedsRuntimeLocator(target) {
-  return Boolean(target?.['selektor-regex'] || target?.label || target?.['aria-label'] || target?.komponententyp)
+  return Boolean(target?.role || target?.['selektor-regex'] || target?.label || target?.['aria-label'] || target?.komponententyp)
 }
 
 function buildTargetObjectExpression(target, { runtimeVariables = false } = {}) {
@@ -1182,7 +1182,7 @@ function buildInteractionLines(step, options = {}) {
       lines.push(`await applyAppendValueById(page, ${toLiteral(String(value))}, ${toLiteral(String(interaction.value || ''))}, ${toLiteral(selectorType)}, { targetIndex: ${getTargetIndex(target) ?? 'undefined'} })`)
     }
   } else if (interactionType === 'click') {
-    if (!target.testid && !target.id && !target['data-id'] && !target.text && !buildGenericTargetSelector(target)) {
+    if (!target.testid && !target.id && !target['data-id'] && !target.text && !target.role && !buildGenericTargetSelector(target)) {
       throw new Error(`Step "${step.id}" has interaction type "click" but no usable target fields.`)
     }
     if (targetNeedsRuntimeLocator(target)) {
@@ -1220,8 +1220,8 @@ function buildInteractionLines(step, options = {}) {
       lines.push(`await applyClickValueById(page, ${toLiteral(String(value))}, ${toLiteral(selectorType)}, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true, targetIndex: ${getTargetIndex(target) ?? 'undefined'} })`)
     }
   } else if (interactionType === 'select') {
-    if (!target.testid && !target.id && !target['data-id']) {
-      throw new Error(`Step "${step.id}" has interaction type "select" but no target.testid, target.id, or target.data-id.`)
+    if (!target.testid && !target.id && !target['data-id'] && !targetNeedsRuntimeLocator(target)) {
+      throw new Error(`Step "${step.id}" has interaction type "select" but no target.testid, target.id, target.data-id, role, label, aria-label, komponententyp, or selector-regex target.`)
     }
     if (interaction.value == null && target.value != null) {
       throw new Error(
@@ -1239,7 +1239,7 @@ function buildInteractionLines(step, options = {}) {
       lines.push(`await applySelectValueById(page, ${toLiteral(String(value))}, ${toLiteral(String(interaction.value || ''))}, ${toLiteral(selectorType)}, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true, targetIndex: ${getTargetIndex(target) ?? 'undefined'} })`)
     }
   } else if (interactionType === 'upload') {
-    if (!target.testid && !target.id && !target['data-id'] && !buildGenericTargetSelector(target)) {
+    if (!target.testid && !target.id && !target['data-id'] && !targetNeedsRuntimeLocator(target) && !buildGenericTargetSelector(target)) {
       throw new Error(`Step "${step.id}" has interaction type "upload" but no usable target fields.`)
     }
     if (interaction.value == null || String(interaction.value).trim() === '') {
@@ -1261,7 +1261,7 @@ function buildInteractionLines(step, options = {}) {
   } else if (interactionType === 'scroll') {
     const focus = interaction.focus === true
     const onlyIfNotVisible = interaction.only_if_not_visible === true
-    if (!target.testid && !target.id && !target['data-id'] && !target.text && !buildGenericTargetSelector(target)) {
+    if (!target.testid && !target.id && !target['data-id'] && !target.text && !target.role && !targetNeedsRuntimeLocator(target) && !buildGenericTargetSelector(target)) {
       throw new Error(`Step "${step.id}" has interaction type "scroll" but no usable target fields.`)
     }
     const locatorExpression = buildScrollLocatorExpression(target)
@@ -1311,8 +1311,8 @@ function buildInteractionLines(step, options = {}) {
       const expectedUrl = interaction.value ?? target.url
       lines.push(`await expect(page).toHaveURL(${toLiteral(String(expectedUrl))})`)
     } else {
-      if (!target.testid && !target.id && !target['data-id']) {
-        throw new Error(`Step "${step.id}" has interaction type "assert" but no target.testid, target.id, target.data-id, or target.url.`)
+      if (!target.testid && !target.id && !target['data-id'] && !targetNeedsRuntimeLocator(target)) {
+        throw new Error(`Step "${step.id}" has interaction type "assert" but no target.testid, target.id, target.data-id, role, label, aria-label, komponententyp, selector-regex target, or target.url.`)
       }
 
       if (interaction.value == null && target.value != null) {

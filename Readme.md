@@ -107,6 +107,16 @@ Beispiel:
       }
     },
     "video-script": {
+      "render": {
+        "fps": null,
+        "encoding": {
+          "preset": "veryfast",
+          "crf": 18,
+          "video_bitrate": null,
+          "audio_bitrate": "192k",
+          "pix_fmt": "yuv420p"
+        }
+      },
       "tts": [
         {
           "profile": "all-channels"
@@ -165,7 +175,14 @@ Das ist keine JSON-Konfig, aber ebenfalls eine Hierarchie, die fuer das Verhalte
 
 ### 4. Video-Skripte
 
-Die Video-Skripte verwenden `scenario.config.json > scenario["video-script"]` als eigene Default-Quelle, aktuell insbesondere fuer TTS-Profile. Sie konsumieren zusaetzlich bereits erzeugte Test-/Timeline-Artefakte. Fuer die eigentliche UI-Interaktionslogik greifen sie jedoch nicht in die Testscript-Konfigurationshierarchie ein.
+Die Video-Skripte verwenden `scenario.config.json > scenario["video-script"]` als eigene Default-Quelle, aktuell insbesondere fuer TTS-Profile sowie Render-/Encoding-Parameter. Sie konsumieren zusaetzlich bereits erzeugte Test-/Timeline-Artefakte. Fuer die eigentliche UI-Interaktionslogik greifen sie jedoch nicht in die Testscript-Konfigurationshierarchie ein.
+
+Wichtig zur Trennung:
+
+- `scenario["test-script"].video.resolution` steuert die simulierte Bildschirm-/Capture-Groesse des Rohvideos.
+- `scenario["video-script"].render.fps` steuert die Zielbildrate des finalen Videos.
+- `scenario["video-script"].render.encoding` steuert die finale Codierung, aktuell `preset`, `crf`, `video_bitrate`, `audio_bitrate` und `pix_fmt`.
+- `scenario["video-script"].presentation.step_timing` steuert den Vor-/Nachlauf um Interaktionsschritte im Video, aktuell `before_interaction_ms` und `after_interaction_ms`.
 
 ## XML-Tags Und Wirkung
 
@@ -207,6 +224,10 @@ Wichtig:
 - `scripts/video-script-generator/run-annotated-video.mjs`
 - `scripts/video-script-generator/annotate-video-from-trace.mjs`
 - `scripts/video-script-generator/remotion-render.mjs`
+
+Fuer das Zeitmodell des Video-Script-Generators gibt es eine eigene Doku:
+
+- [scripts/video-script-generator/README.md](/home/simon/Documents/Programming/ssvn-controlling/lumiere/scripts/video-script-generator/README.md)
 
 ## Skriptstruktur
 

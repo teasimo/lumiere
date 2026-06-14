@@ -5,6 +5,7 @@ import { readdir, readFile, stat } from 'fs/promises'
 import { basename, join, resolve } from 'path'
 import { spawnSync } from 'child_process'
 import { buildScenarioOutputFolderName, sanitizeScenarioOutputToken } from '../shared/scenario-output.mjs'
+import { appendFragmentSourceArg, resolveFragmentSourceForScenario } from '../shared/lunettes-fragment-source.mjs'
 
 const OUTPUT_ROOT = resolve('output')
 
@@ -60,9 +61,15 @@ async function main() {
   const ttsVoiceArg = argv.find((arg) => arg.startsWith('--tts-voice='))
   const profileArg = argv.find((arg) => arg.startsWith('--profile='))
   const scenarioIdArg = argv.find((arg) => arg.startsWith('--scenario-id='))
+  const fragmentSourceArg = argv.find((arg) => arg.startsWith('--fragment-source='))
   const profileName = String(profileArg ? profileArg.slice('--profile='.length) : 'all-channels').trim() || 'all-channels'
   const scenarioPathArg = argv.find((arg) => !arg.startsWith('-'))
   const scenarioId = sanitizeScenarioOutputToken(scenarioIdArg ? scenarioIdArg.slice('--scenario-id='.length) : '', '')
+  const fragmentSource = resolveFragmentSourceForScenario(
+    fragmentSourceArg ? fragmentSourceArg.slice('--fragment-source='.length) : null,
+    scenarioPathArg,
+    'lunettes',
+  )
   const wantsHelp = argv.includes('--help') || argv.includes('-h')
   if (!scenarioPathArg || wantsHelp) {
     console.log('Usage: node scripts/video-script-generator/remotion-render.mjs <scenario.xml> --scenario-id=<id> [--profile=<name>] [--tts-voice=<name>] [--keep-temp-project]')
@@ -84,13 +91,13 @@ async function main() {
   })
 
   const ttsOutputDir = join(OUTPUT_ROOT, scenarioFolderName, 'videogenerator')
-  const bootstrapArgs = [
+  const bootstrapArgs = appendFragmentSourceArg([
     'scripts/video-script-generator/run-annotated-video.mjs',
     '--scenario-tts',
     scenarioPathArg,
     `--scenario-id=${scenarioId}`,
     `--profile=${profileName}`,
-  ]
+  ], fragmentSource)
   if (ttsVoiceArg) {
     bootstrapArgs.push(ttsVoiceArg)
   }

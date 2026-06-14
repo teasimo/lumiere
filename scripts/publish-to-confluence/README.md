@@ -77,7 +77,7 @@ Fuer die Video-Einbettung verwendet das Script trotzdem die normale Tenant-URL u
 Direkt:
 
 ```bash
-node publishhelper/publish-scenario-to-confluence.mjs neo/interactions/demo.xml 2105671681 --scenario-id=1
+node scripts/publish-to-confluence/publish-scenario-to-confluence.mjs neo/interactions/demo.xml 2105671681 --scenario-id=1
 ```
 
 Oder ueber `npm`:

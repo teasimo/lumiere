@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from 'fs'
-import { dirname, join, resolve, relative } from 'path'
+import { readFileSync } from 'fs'
+import { dirname, join, resolve } from 'path'
 import { spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'
 import { XMLParser } from 'fast-xml-parser'
@@ -8,8 +8,6 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(__dirname, '../..')
 
 const SCHEMA_PATH = join(REPO_ROOT, 'schemas', 'szenarioscript.xsd')
-const FRAGMENT_LIBRARY_PATH = join(REPO_ROOT, 'neo', 'fragements', 'fragment-library.json')
-
 // ── XSD-Validierung ──────────────────────────────────────────────────────────
 
 export function validateXml(xmlAbsPath, { schemaPath = SCHEMA_PATH } = {}) {
@@ -56,39 +54,6 @@ function extractOpeningTagPositions(rawXml, lineStarts) {
     positions.push({ tag: m[1], line: offsetToLine(lineStarts, m.index) })
   }
   return positions
-}
-
-// ── Fragment-Bibliothek ──────────────────────────────────────────────────────
-
-function loadFragmentLibrary() {
-  if (!existsSync(FRAGMENT_LIBRARY_PATH)) return {}
-  return JSON.parse(readFileSync(FRAGMENT_LIBRARY_PATH, 'utf8'))
-}
-
-function chooseFragmentPath(fragmentName, fragmentLibrary) {
-  const normalizedName = String(fragmentName || '').trim()
-  if (!normalizedName) {
-    return null
-  }
-
-  if (fragmentLibrary[normalizedName]) {
-    return fragmentLibrary[normalizedName]
-  }
-
-  const suffix = normalizedName.includes('-')
-    ? normalizedName.split('-').filter(Boolean).slice(-1)[0]
-    : ''
-
-  if (!suffix) {
-    return null
-  }
-
-  const suffixCandidates = Object.entries(fragmentLibrary)
-    .filter(([fragmentId]) => fragmentId === suffix)
-    .map(([, fragmentPath]) => fragmentPath)
-    .sort((left, right) => left.localeCompare(right))
-
-  return suffixCandidates[0] || null
 }
 
 // ── XML-Parser ───────────────────────────────────────────────────────────────
@@ -233,27 +198,7 @@ function walkNodes(orderedNodes, tagPositions, cursor, opts) {
 
     // Fragment auflösen
     if (tagName === 'Fragment' && attrs.name) {
-      const fragmentRelPath = chooseFragmentPath(attrs.name, fragmentLibrary)
-      if (fragmentRelPath) {
-        const absFragmentPath = resolve(REPO_ROOT, fragmentRelPath)
-        if (existsSync(absFragmentPath) && !visitedPaths.has(absFragmentPath)) {
-          const newVisited = new Set(visitedPaths)
-          newVisited.add(absFragmentPath)
-          entry._resolved = resolveFragmentFile(
-            absFragmentPath,
-            rowIndex,
-            relative(REPO_ROOT, absFragmentPath),
-            fragmentLibrary,
-            newVisited,
-          )
-        } else if (visitedPaths.has(absFragmentPath)) {
-          entry._resolveError = `Zirkulärer Fragment-Import: ${fragmentRelPath}`
-        } else {
-          entry._resolveError = `Fragment-Datei nicht gefunden: ${fragmentRelPath}`
-        }
-      } else {
-        entry._resolveError = `Fragment nicht in Bibliothek: ${attrs.name}`
-      }
+      entry._resolveError = `Fragment-Aufloesung erfolgt nur noch ueber die Lunettes-API: ${attrs.name}`
     }
 
     result.push(entry)
@@ -327,14 +272,13 @@ export function parseScenarioXml(xmlFilePath) {
   const ordered = parseRawXml(rawXml)
   const cursor = { idx: 0 }
 
-  const fragmentLibrary = loadFragmentLibrary()
   const visitedPaths = new Set([absPath])
 
   const topLevel = ordered.filter((n) => !Object.prototype.hasOwnProperty.call(n, '#text'))
   const nodes = walkNodes(topLevel, tagPositions, cursor, {
     parentRowIndex: null,
     sourceFile: null,
-    fragmentLibrary,
+    fragmentLibrary: null,
     visitedPaths,
   })
 

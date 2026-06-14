@@ -14,6 +14,7 @@ import {
 import { getTestScriptConfig, loadCentralConfig } from '../shared/central-config.mjs'
 import { centralDataFunctions } from './central-data-functions.mjs'
 import { buildScenarioOutputFolderName, sanitizeScenarioOutputToken } from '../shared/scenario-output.mjs'
+import { resolveFragmentSourceForScenario } from '../shared/lunettes-fragment-source.mjs'
 
 const execFileAsync = promisify(execFile)
 
@@ -83,7 +84,7 @@ function parseArgs(argv) {
     scenarioDir: null,
     outDir: null,
     xsdPath: null,
-    fragmentSource: 'local',
+    fragmentSource: 'lunettes',
   }
 
   while (args.length) {
@@ -162,7 +163,7 @@ function applyConfigDefaults(options, centralConfig) {
     outDir,
     xsdPath,
     scenarioPath,
-    fragmentSource: String(options.fragmentSource || 'local').trim().toLowerCase() || 'local',
+    fragmentSource: resolveFragmentSourceForScenario(options.fragmentSource, scenarioPath, 'lunettes'),
   }
 }
 
@@ -699,81 +700,6 @@ async function fileExists(filePath) {
   }
 }
 
-async function buildFragmentIndex(scenarioPath) {
-  const appRoot = deriveAppRootAbsolutePath(scenarioPath)
-  if (!appRoot) {
-    return new Map()
-  }
-
-  const candidateDirs = [
-    resolve(appRoot, 'fragements'),
-    resolve(appRoot, 'fragments'),
-  ]
-
-  const existingDirs = []
-  for (const dir of candidateDirs) {
-    try {
-      const dirStat = await stat(dir)
-      if (dirStat.isDirectory()) {
-        existingDirs.push(dir)
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  const index = new Map()
-
-  async function walk(currentDir) {
-    const entries = await readdir(currentDir, { withFileTypes: true })
-    for (const entry of entries) {
-      const absolute = join(currentDir, entry.name)
-      if (entry.isDirectory()) {
-        await walk(absolute)
-        continue
-      }
-
-      if (!entry.isFile() || extname(entry.name).toLowerCase() !== '.xml') {
-        continue
-      }
-
-      const registerKey = (rawKey) => {
-        const key = String(rawKey || '').trim()
-        if (!key) {
-          return
-        }
-
-        if (!index.has(key)) {
-          index.set(key, [])
-        }
-
-        const list = index.get(key)
-        if (!list.includes(absolute)) {
-          list.push(absolute)
-        }
-      }
-
-      registerKey(basename(entry.name, '.xml'))
-
-      try {
-        const xmlSource = await readFile(absolute, 'utf8')
-        const idMatch = xmlSource.match(/<SzenarioScript\b[^>]*\bid\s*=\s*"([^"]+)"/i)
-        if (idMatch && idMatch[1]) {
-          registerKey(idMatch[1])
-        }
-      } catch {
-        // keep basename registration only if reading/parsing fails
-      }
-    }
-  }
-
-  for (const dir of existingDirs) {
-    await walk(dir)
-  }
-
-  return index
-}
-
 function getLunettesFragmentApiContext(centralConfig) {
   const baseUrl = normalizeBaseUrl(centralConfig?.lunettes_api?.base_url)
   if (!baseUrl) {
@@ -832,31 +758,6 @@ async function fetchFragmentDocumentFromLunettes(fragmentName, centralConfig) {
   }
 }
 
-function chooseFragmentPath(fragmentName, fragmentIndex) {
-  const normalizedName = String(fragmentName || '').trim()
-  const candidates = fragmentIndex.get(normalizedName) || []
-  if (!candidates.length) {
-    const suffix = normalizedName.includes('-')
-      ? normalizedName.split('-').filter(Boolean).slice(-1)[0]
-      : ''
-
-    if (suffix) {
-      const suffixCandidates = fragmentIndex.get(suffix) || []
-      if (suffixCandidates.length > 0) {
-        return suffixCandidates.slice().sort((left, right) => left.localeCompare(right))[0]
-      }
-    }
-
-    return null
-  }
-
-  if (candidates.length > 1) {
-    candidates.sort((left, right) => left.localeCompare(right))
-  }
-
-  return candidates[0]
-}
-
 function mapWaitStatusToState(statusRaw) {
   const status = String(statusRaw || '').trim().toLowerCase()
   if (!status) {
@@ -899,6 +800,10 @@ function buildTargetFromAttributes(attrs, { includeText = true, includeUrl = fal
 
   if (attrs.id) {
     target.id = attrs.id
+  }
+
+  if (attrs.role) {
+    target.role = attrs.role
   }
 
   if (attrs.label) {
@@ -1324,10 +1229,19 @@ function isIncludedInFragment(element) {
   return !['false', '0', 'no', 'nein'].includes(normalized)
 }
 
+function shouldIgnoreFragmentChild(element) {
+  const tag = String(element?.tag || '').trim()
+  return tag === 'VideoStart' || tag === 'VideoStop'
+}
+
 function filterChildrenForFragmentInclusion(children) {
   const filtered = []
 
   for (const child of children || []) {
+    if (shouldIgnoreFragmentChild(child)) {
+      continue
+    }
+
     if (!isIncludedInFragment(child)) {
       continue
     }
@@ -1359,20 +1273,9 @@ async function expandFragmentsInChildren(children, {
         throw new Error('Fragment element requires a non-empty name attribute.')
       }
 
-      let fragmentDocument = null
-      let fragmentSourceLabel = ''
-      if (fragmentSource === 'lunettes') {
-        const apiFragment = await fetchFragmentDocumentFromLunettes(fragmentName, centralConfig)
-        fragmentDocument = apiFragment.document
-        fragmentSourceLabel = apiFragment.sourceLabel
-      } else {
-        const fragmentPath = chooseFragmentPath(fragmentName, fragmentIndex)
-        if (!fragmentPath) {
-          throw new Error(`Fragment "${fragmentName}" not found below app fragment directories.`)
-        }
-        fragmentDocument = await loadXmlDocument(fragmentPath)
-        fragmentSourceLabel = fragmentPath
-      }
+      const apiFragment = await fetchFragmentDocumentFromLunettes(fragmentName, centralConfig)
+      const fragmentDocument = apiFragment.document
+      const fragmentSourceLabel = apiFragment.sourceLabel
 
       if (includeStack.includes(fragmentSourceLabel)) {
         throw new Error(`Circular fragment include detected: ${[...includeStack, fragmentSourceLabel].join(' -> ')}`)
@@ -1543,11 +1446,9 @@ async function scenarioToSpecSource({ scenarioPath, xsdPath, centralConfig, gene
     ...resolvedVariableDefaults,
   }
 
-  const fragmentIndex = await buildFragmentIndex(absoluteScenarioPath)
   const expandedChildren = await expandFragmentsInChildren(scenarioDocument.root.children || [], {
     context: templateContext,
     dataFunctions,
-    fragmentIndex,
     fragmentSource,
     centralConfig,
   })

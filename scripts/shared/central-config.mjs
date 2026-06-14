@@ -30,6 +30,16 @@ const DEFAULTS = {
       enabled: true,
       path: 'neo/assets/video-intro.mp4',
     },
+    render: {
+      fps: null,
+      encoding: {
+        preset: 'veryfast',
+        crf: 18,
+        video_bitrate: null,
+        audio_bitrate: '192k',
+        pix_fmt: 'yuv420p',
+      },
+    },
     presentation: {
       indicators: {
         click: {
@@ -38,6 +48,10 @@ const DEFAULTS = {
           after_ms: 100,
           fade_ms: 50,
         },
+      },
+      step_timing: {
+        before_interaction_ms: 500,
+        after_interaction_ms: 500,
       },
       slide: {
         default_duration_ms: 2000,

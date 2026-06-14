@@ -114,7 +114,7 @@ function resolveNeighborWindowForAnonStep(stepId, flattenedFlowStepEntries, sort
   return null
 }
 
-function buildStepWindowMap({ scenarioRoot, timelineReport, presentationRange = null }) {
+function buildStepWindowMap({ scenarioRoot, timelineReport, presentationRange = null, stepTiming = null }) {
   const flow = Array.isArray(scenarioRoot?.flow) ? scenarioRoot.flow : []
   const timelineSteps = Array.isArray(timelineReport?.steps) ? timelineReport.steps : []
   const flattenedFlowStepEntries = flattenFlowSteps(flow)
@@ -134,6 +134,8 @@ function buildStepWindowMap({ scenarioRoot, timelineReport, presentationRange = 
   const clipEndMs = presentationRange?.endMs == null
     ? null
     : Math.max(clipStartMs, Number(presentationRange.endMs) || clipStartMs)
+  const beforeInteractionMs = Math.max(0, Math.floor(Number(stepTiming?.beforeInteractionMs || 0)))
+  const afterInteractionMs = Math.max(0, Math.floor(Number(stepTiming?.afterInteractionMs || 0)))
   const stepWindowById = new Map()
 
   for (const flowEntry of flattenedFlowStepEntries) {
@@ -145,17 +147,13 @@ function buildStepWindowMap({ scenarioRoot, timelineReport, presentationRange = 
       continue
     }
 
-    // Das sind die Parameter, die bestimmen, welche Zeit vor und nach einem Interaktion aus dem Video übernommen wird
-    const timeToShowBeforeInteraction = 500;
-    const timeToShowAfterInteraction = 500;
-
     const timelineRelativeStartMs = Math.max(0, Math.floor(window.startedAtMs - timelineOriginMs))
     const timelineRelativeEndMs = Math.max(
       timelineRelativeStartMs,
-      Math.floor(window.endedAtMs - timelineOriginMs + timeToShowAfterInteraction),
+      Math.floor(window.endedAtMs - timelineOriginMs + afterInteractionMs),
     )
 
-    const unclippedWindowStartMs = Math.max(0, timelineRelativeStartMs - timeToShowBeforeInteraction)
+    const unclippedWindowStartMs = Math.max(0, timelineRelativeStartMs - beforeInteractionMs)
     const unclippedWindowEndMs = Math.max(unclippedWindowStartMs + 1, timelineRelativeEndMs)
     const clipWindowStartMs = clipStartMs
     const clipWindowEndMs = clipEndMs == null
@@ -252,21 +250,48 @@ function buildNarrationGroups(adjustedAudioFiles) {
 
 function groupClickMarkersByStep(stepWindowById, clickMarkers, markerSourceOffsetMs = 0) {
   const sourceOffsetMs = Math.max(0, Math.floor(Number(markerSourceOffsetMs) || 0))
-  const clickMarkersByStepId = new Map()
-  for (const [stepId, window] of stepWindowById.entries()) {
-    const markers = (Array.isArray(clickMarkers) ? clickMarkers : [])
-      .filter((marker) => {
-        const markerAtMs = Math.max(0, Math.round(Number(marker?.at || 0) * 1000) + sourceOffsetMs)
-        return markerAtMs >= window.sourceStartMs && markerAtMs <= window.sourceEndMs
-      })
-      .map((marker) => ({
-        atSourceMs: Math.max(0, Math.round(Number(marker?.at || 0) * 1000) + sourceOffsetMs),
-        x: Math.max(0, Number(marker?.x || 0)),
-        y: Math.max(0, Number(marker?.y || 0)),
-        durationMs: Math.max(1, Math.floor(Number(marker?.durationMs || 900))),
-      }))
+  const clickMarkersByStepId = new Map(
+    [...stepWindowById.keys()].map((stepId) => [stepId, []]),
+  )
+  const windows = [...stepWindowById.entries()].map(([stepId, window], index) => ({
+    stepId,
+    order: index,
+    sourceStartMs: Math.max(0, Number(window?.sourceStartMs || 0)),
+    sourceEndMs: Math.max(0, Number(window?.sourceEndMs || 0)),
+    originalStartMs: Math.max(0, Number(window?.originalStartMs ?? window?.sourceStartMs ?? 0)),
+    originalEndMs: Math.max(0, Number(window?.originalEndMs ?? window?.sourceEndMs ?? 0)),
+  }))
 
-    clickMarkersByStepId.set(stepId, markers)
+  for (const marker of Array.isArray(clickMarkers) ? clickMarkers : []) {
+    const markerAtMs = Math.max(0, Math.round(Number(marker?.at || 0) * 1000) + sourceOffsetMs)
+    const normalizedMarker = {
+      atSourceMs: markerAtMs,
+      x: Math.max(0, Number(marker?.x || 0)),
+      y: Math.max(0, Number(marker?.y || 0)),
+      durationMs: Math.max(1, Math.floor(Number(marker?.durationMs || 900))),
+    }
+
+    const originalMatches = windows.filter((window) => (
+      markerAtMs >= window.originalStartMs && markerAtMs <= window.originalEndMs
+    ))
+    const sourceMatches = windows.filter((window) => (
+      markerAtMs >= window.sourceStartMs && markerAtMs <= window.sourceEndMs
+    ))
+    const candidates = originalMatches.length > 0 ? originalMatches : sourceMatches
+    if (candidates.length === 0) {
+      continue
+    }
+
+    candidates.sort((left, right) => {
+      const leftCenterDistance = Math.abs(markerAtMs - ((left.originalStartMs + left.originalEndMs) / 2))
+      const rightCenterDistance = Math.abs(markerAtMs - ((right.originalStartMs + right.originalEndMs) / 2))
+      if (leftCenterDistance !== rightCenterDistance) {
+        return leftCenterDistance - rightCenterDistance
+      }
+      return left.order - right.order
+    })
+
+    clickMarkersByStepId.get(candidates[0].stepId).push(normalizedMarker)
   }
 
   return clickMarkersByStepId
@@ -578,6 +603,7 @@ export function buildSemanticVideoPlan({
   width,
   height,
   fps,
+  stepTiming = null,
   slideDefaults = null,
   videoIntro = null,
 }) {
@@ -585,6 +611,7 @@ export function buildSemanticVideoPlan({
     scenarioRoot,
     timelineReport,
     presentationRange,
+    stepTiming,
   })
   const { narrationsByStepId, pausesByStepId } = buildNarrationGroups(adjustedAudioFiles)
   const clickMarkerSourceOffsetMs = presentationRange
@@ -907,7 +934,7 @@ export function buildSemanticRemotionTsx({ semanticPlan, outputFilePath, runtime
   return lines.join('\n')
 }
 
-export function buildRemotionRenderPlan({ semanticPlan, outputVideo, adjustedAudioFiles }) {
+export function buildRemotionRenderPlan({ semanticPlan, outputVideo, adjustedAudioFiles, renderConfig = null }) {
   const chapterSteps = (semanticPlan?.chapters || []).flatMap((chapter) => chapter.steps || [])
   let maxEndMs = 0
   for (const step of chapterSteps) {
@@ -931,6 +958,7 @@ export function buildRemotionRenderPlan({ semanticPlan, outputVideo, adjustedAud
     width: Number(semanticPlan?.source?.width || 1280),
     height: Number(semanticPlan?.source?.height || 720),
     fps,
+    renderConfig: renderConfig && typeof renderConfig === 'object' ? renderConfig : undefined,
     outputDurationSec: outputDurationMs / 1000,
     durationInFrames: Math.max(1, Math.ceil((outputDurationMs / 1000) * fps)),
     narrations: allNarrations

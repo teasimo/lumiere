@@ -6,6 +6,8 @@ import { basename, dirname, extname, join, relative, resolve } from 'path'
 import { spawnSync } from 'child_process'
 import { getTestScriptConfig, loadCentralConfig } from '../shared/central-config.mjs'
 import { buildScenarioOutputRoot, sanitizeScenarioOutputToken } from '../shared/scenario-output.mjs'
+import { resolveFragmentSourceForScenario } from '../shared/lunettes-fragment-source.mjs'
+import { buildScenarioXmlGeneratorInvocation } from '../shared/scenario-xml-generator.mjs'
 
 const workspaceRoot = process.cwd()
 const fallbackScenarioPath = 'neo/interactions/dubletten-aufloesen/FR1-case-sus-dubletten-zusammenfuehren.xml'
@@ -33,7 +35,7 @@ function parseArgs(argv) {
     outDir: null,
     verbose: false,
     scenarioId: null,
-    fragmentSource: 'local',
+    fragmentSource: 'lunettes',
     playwrightArgs: [],
   }
 
@@ -120,7 +122,11 @@ function applyConfigDefaults(options, centralConfig) {
     ...options,
     scenarioPath: options.scenarioPath || defaults.scenario_path_xml || defaults.scenario_path || fallbackScenarioPath,
     outDir: options.outDir || defaults.output_dir || fallbackOutputDir,
-    fragmentSource: String(options.fragmentSource || 'local').trim().toLowerCase() || 'local',
+    fragmentSource: resolveFragmentSourceForScenario(
+      options.fragmentSource,
+      options.scenarioPath || defaults.scenario_path_xml || defaults.scenario_path || fallbackScenarioPath,
+      'lunettes',
+    ),
   }
 }
 
@@ -444,8 +450,12 @@ function warnIfGeneratedSpecIsStale({ scenarioAbsolute, outputSpecAbsolute }) {
 function ensureGeneratedSpec({ scenarioPath, outDir, force, fragmentSource = 'local' }) {
   const scenarioAbsolute = resolve(workspaceRoot, scenarioPath)
   const outputDirAbsolute = resolve(workspaceRoot, outDir)
-  const outputFileName = `${basename(scenarioAbsolute, extname(scenarioAbsolute))}.spec.js`
-  const outputSpecAbsolute = resolve(outputDirAbsolute, outputFileName)
+  const generatorInvocation = buildScenarioXmlGeneratorInvocation({
+    scenarioPath: scenarioAbsolute,
+    outDir: outputDirAbsolute,
+    fragmentSource,
+  })
+  const outputSpecAbsolute = generatorInvocation.paths.specPath
 
   if (!existsSync(scenarioAbsolute)) {
     throw new Error(`Scenario file not found: ${relative(workspaceRoot, scenarioAbsolute)}`)
@@ -455,14 +465,8 @@ function ensureGeneratedSpec({ scenarioPath, outDir, force, fragmentSource = 'lo
   if (shouldGenerate) {
     console.log(`Generating temp spec from ${relative(workspaceRoot, scenarioAbsolute)} ...`)
     runCommand(
-      'node',
-      [
-        'scripts/test-script-generator/generate-tests-from-scenario-xml.mjs',
-        relative(workspaceRoot, scenarioAbsolute),
-        '--out-dir',
-        relative(workspaceRoot, outputDirAbsolute),
-        `--fragment-source=${String(fragmentSource || 'local').trim().toLowerCase() || 'local'}`,
-      ],
+      generatorInvocation.command,
+      generatorInvocation.args,
       'Failed to generate temp spec file.'
     )
   } else {
@@ -503,65 +507,12 @@ function buildScenarioRunId() {
   return `${yyyy}${mm}${dd}-${hh}${min}${ss}-${ms}`
 }
 
-function readVideoConfigFromScenario(scenarioAbsolutePath, centralConfig) {
-  const fallbackResolution = normalizeResolution(centralConfig?.video?.resolution)
-
-  try {
-    const raw = readFileSync(scenarioAbsolutePath, 'utf8')
-    const parsed = xmlParser.parse(raw) || {}
-    const root = parsed?.SzenarioScript || {}
-
-    const settingsEntries = root?.Einstellungen
-      ? (Array.isArray(root.Einstellungen) ? root.Einstellungen : [root.Einstellungen])
-      : []
-
-    const findGroupByName = (groupCandidate, groupName) => {
-      if (!groupCandidate) return null
-      const groups = groupCandidate.Gruppe
-      const list = Array.isArray(groups) ? groups : (groups ? [groups] : [])
-      return list.find((entry) => String(entry?.['@_name'] || '').trim() === groupName) || null
-    }
-
-    let videoGroup = null
-    for (const settings of settingsEntries) {
-      videoGroup = findGroupByName(settings, 'video')
-      if (videoGroup) break
-    }
-
-    const resolutionGroup = findGroupByName(videoGroup, 'resolution')
-    const resolutionEntries = resolutionGroup?.Einstellung
-    const resolutionList = Array.isArray(resolutionEntries) ? resolutionEntries : (resolutionEntries ? [resolutionEntries] : [])
-    const widthSetting = resolutionList.find((entry) => String(entry?.['@_name'] || '').trim() === 'width')
-    const heightSetting = resolutionList.find((entry) => String(entry?.['@_name'] || '').trim() === 'height')
-    const scenarioResolution = normalizeResolution({
-      width: widthSetting?.['@_value'],
-      height: heightSetting?.['@_value'],
-    })
-
-    if (scenarioResolution) {
-      return {
-        resolution: scenarioResolution,
-        source: 'scenario',
-      }
-    }
-
-    if (fallbackResolution) {
-      return {
-        resolution: fallbackResolution,
-        source: 'central-config',
-      }
-    }
-
-    return { resolution: null, source: 'none' }
-  } catch {
-    if (fallbackResolution) {
-      return {
-        resolution: fallbackResolution,
-        source: 'central-config',
-      }
-    }
-    return { resolution: null, source: 'none' }
+function readVideoConfigFromScenario(_scenarioAbsolutePath, centralConfig) {
+  const resolution = normalizeResolution(centralConfig?.video?.resolution)
+  if (resolution) {
+    return { resolution, source: 'central-config' }
   }
+  return { resolution: null, source: 'none' }
 }
 
 function runPlaywright(specAbsolutePath, playwrightArgs, mode, scenarioPath, centralConfig, verbose = false, runContext = null) {

@@ -7,7 +7,6 @@
     "node": ">=20"
   },
   "scripts": {
-    "build:fragment-library": "node scripts/build-fragment-library.mjs",
     "generate:testscript": "node scripts/test-script-generator/generate-tests-from-scenario-xml.mjs",
     "generate:testscripts:all": "node scripts/test-script-generator/generate-tests-from-scenario-xml.mjs --all",
     "clean:testscripts": "node scripts/test-script-generator/generate-tests-from-scenario-xml.mjs --clean",
@@ -25,7 +24,7 @@
     "run:videoscript:verbose": "LUMIERE_VIDEO_DEBUG_OVERLAY=0 node scripts/video-script-generator/remotion-render.mjs --verbose",
     "watch-jobs": "node scripts/lunettes-job-watcher/watch-lunettes-jobs.mjs",
     "debug:parse": "node scripts/debug-parse-scenario.mjs",
-    "publish": "node publishhelper/publish-scenario-to-confluence.mjs"
+    "publish": "node scripts/publish-to-confluence/publish-scenario-to-confluence.mjs"
   },
   "dependencies": {
     "@google-cloud/text-to-speech": "^6.4.1",

@@ -16,6 +16,7 @@ import {
   buildScenarioOutputFolderName,
   sanitizeScenarioOutputToken,
 } from '../shared/scenario-output.mjs'
+import { appendFragmentSourceArg } from '../shared/lunettes-fragment-source.mjs'
 
 const workspaceRoot = process.cwd()
 const runtimeRoot = resolve(workspaceRoot, 'temp', 'lunettes-job-watcher')
@@ -818,7 +819,7 @@ function buildTestscriptCommand({ scenarioPath, payload, context }) {
     throw new Error('Job enthaelt keine szenario_id im Payload.')
   }
   const outDir = toWorkspaceRelativePath(join(runtimeRoot, 'testfiles', scenarioId))
-  const args = [
+  const args = appendFragmentSourceArg([
     'scripts/test-script-generator/run-generated-testfile.mjs',
     scenarioPathArg,
     '--scenario-id',
@@ -826,13 +827,11 @@ function buildTestscriptCommand({ scenarioPath, payload, context }) {
     '--out-dir',
     outDir,
     '--force',
-    '--fragment-source',
-    'lunettes',
     '--mode',
     allowedTestModes.has(String(payload?.mode || '').trim())
       ? String(payload.mode).trim()
       : context.testscriptMode,
-  ]
+  ], 'lunettes')
 
   if (payload?.verbose === true) {
     args.push('--verbose')
@@ -856,12 +855,12 @@ function buildVideoscriptCommand({ scenarioPath, payload, context }) {
     throw new Error('Job enthaelt keine szenario_id im Payload.')
   }
   const profile = String(payload?.profile || context.videoProfile || 'all-channels').trim() || 'all-channels'
-  const args = [
+  const args = appendFragmentSourceArg([
     'scripts/video-script-generator/remotion-render.mjs',
     scenarioPathArg,
     `--scenario-id=${scenarioId}`,
     `--profile=${profile}`,
-  ]
+  ], 'lunettes')
 
   if (typeof payload?.tts_voice === 'string' && payload.tts_voice.trim()) {
     args.push(`--tts-voice=${payload.tts_voice.trim()}`)
@@ -897,7 +896,7 @@ function buildPublishCommand({ scenarioPath, payload }) {
   return {
     command: 'node',
     args: [
-      'publishhelper/publish-scenario-to-confluence.mjs',
+      'scripts/publish-to-confluence/publish-scenario-to-confluence.mjs',
       scenarioPathArg,
       confluencePageId,
       `--scenario-id=${scenarioId}`,

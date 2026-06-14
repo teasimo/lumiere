@@ -622,6 +622,17 @@ export async function resolveTargetLocator(page, target = {}, options = {}) {
   if (target['aria-label']) {
     return pickAttributeLocator(page, 'aria-label', target['aria-label'], target, { preferredControl })
   }
+  if (target.role) {
+    const roleName = String(target.role)
+    const locator = target.text
+      ? (
+          useRegex
+            ? page.getByRole(roleName, { name: buildRegexMatcher(target.text) })
+            : page.getByRole(roleName, { name: String(target.text), exact: true })
+        )
+      : page.getByRole(roleName)
+    return pickLocatorWithKomponententyp(locator, target, `role=${JSON.stringify(roleName)}`)
+  }
   if (target.text) {
     if (textMode === 'label') {
       const locator = useRegex

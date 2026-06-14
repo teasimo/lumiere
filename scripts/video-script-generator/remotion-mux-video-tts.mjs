@@ -4,6 +4,7 @@ import { existsSync } from 'fs'
 import { copyFile, mkdir, readFile, rm, stat, writeFile } from 'fs/promises'
 import { basename, dirname, extname, join, relative, resolve } from 'path'
 import { tmpdir } from 'os'
+import { spawnSync } from 'child_process'
 
 function parseArgs(argv) {
   let planPath = null
@@ -62,6 +63,62 @@ function toPosixPath(value) {
 function normalizeRelativeImportPath(value) {
   const normalized = toPosixPath(value)
   return normalized.startsWith('.') ? normalized : `./${normalized}`
+}
+
+function runCommand(command, args) {
+  const result = spawnSync(command, args, {
+    stdio: 'inherit',
+    shell: process.platform === 'win32',
+  })
+
+  if (result.error) {
+    throw result.error
+  }
+
+  return result.status ?? 1
+}
+
+function normalizeEncodingConfig(value) {
+  const raw = value && typeof value === 'object' ? value : {}
+  const preset = String(raw.preset || 'veryfast').trim() || 'veryfast'
+  const pixFmt = String(raw.pix_fmt ?? raw.pixFmt ?? 'yuv420p').trim() || 'yuv420p'
+  const crfValue = raw.crf == null ? 18 : Number(raw.crf)
+  const videoBitrate = String(raw.video_bitrate ?? raw.videoBitrate ?? '').trim()
+  const audioBitrate = String(raw.audio_bitrate ?? raw.audioBitrate ?? '192k').trim() || '192k'
+
+  return {
+    preset,
+    crf: Number.isFinite(crfValue) ? Math.max(0, Math.floor(crfValue)) : 18,
+    videoBitrate: videoBitrate || null,
+    audioBitrate,
+    pixFmt,
+  }
+}
+
+async function reencodeRenderedVideo({ inputVideo, outputVideo, encodingConfig }) {
+  const normalizedEncoding = normalizeEncodingConfig(encodingConfig)
+  const args = [
+    '-y',
+    '-i', inputVideo,
+    '-c:v', 'libx264',
+    '-preset', normalizedEncoding.preset,
+    '-crf', String(normalizedEncoding.crf),
+    '-pix_fmt', normalizedEncoding.pixFmt,
+    '-c:a', 'aac',
+    '-b:a', normalizedEncoding.audioBitrate,
+    '-movflags', '+faststart',
+  ]
+
+  if (normalizedEncoding.videoBitrate) {
+    args.push('-b:v', normalizedEncoding.videoBitrate)
+  }
+
+  args.push(outputVideo)
+
+  const exitCode = runCommand('ffmpeg', args)
+  if (exitCode !== 0) {
+    throw new Error(`Re-Encode des Remotion-Videos fehlgeschlagen (Exit-Code ${exitCode}).`)
+  }
 }
 
 async function resolveImportSourcePath(fromFilePath, importSpecifier) {
@@ -380,9 +437,14 @@ async function main() {
 
   const rawPlan = await readFile(planPath, 'utf8')
   const plan = JSON.parse(rawPlan)
+  const renderConfig = plan?.renderConfig && typeof plan.renderConfig === 'object'
+    ? plan.renderConfig
+    : {}
+  const encodingConfig = renderConfig?.encoding || null
 
   const inputVideo = resolve(String(plan.inputVideo || ''))
   const outputVideo = resolve(String(plan.outputVideo || ''))
+  const renderedOutputVideo = `${outputVideo}.rendered${extname(outputVideo) || '.mp4'}`
   const audioTracks = Array.isArray(plan.narrations) ? plan.narrations : Array.isArray(plan.audioTracks) ? plan.audioTracks : []
 
   if (!existsSync(inputVideo)) {
@@ -426,7 +488,7 @@ async function main() {
       serveUrl,
       codec: 'h264',
       audioCodec: 'aac',
-      outputLocation: outputVideo,
+      outputLocation: renderedOutputVideo,
       logLevel: verbose ? 'verbose' : 'info',
       chromiumOptions: {
         gl: 'swangle',
@@ -447,6 +509,12 @@ async function main() {
       },
     })
     logWithTimestamp('[render] Render complete')
+    await reencodeRenderedVideo({
+      inputVideo: renderedOutputVideo,
+      outputVideo,
+      encodingConfig,
+    })
+    logWithTimestamp('[render] Re-encode complete')
   } finally {
     if (keepTempProject) {
       logWithTimestamp(`[render:debug] Temp project kept at: ${workDir}`)

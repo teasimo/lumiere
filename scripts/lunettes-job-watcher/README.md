@@ -43,7 +43,7 @@ Optional:
 
 ## Verhalten
 
-- `testscript`: startet `scripts/test-script-generator/run-generated-testfile.mjs`, uebergibt `payload.szenario_id` als `--scenario-id`, erzwingt mit `--force` eine Neugenerierung, verwendet einen eigenen `--out-dir` pro Szenario unter `temp/lunettes-job-watcher/testfiles/<szenario_id>` und loest Fragmente ueber Lunettes statt lokal aus `neo/fragements` auf
+- `testscript`: startet `scripts/test-script-generator/run-generated-testfile.mjs`, uebergibt `payload.szenario_id` als `--scenario-id`, erzwingt mit `--force` eine Neugenerierung, verwendet einen eigenen `--out-dir` pro Szenario unter `temp/lunettes-job-watcher/testfiles/<szenario_id>` und loest Fragmente ausschliesslich ueber die Lunettes-API auf
 - `videoscript`: startet `scripts/video-script-generator/remotion-render.mjs` und uebergibt `payload.szenario_id` als `--scenario-id`
 - `publish`: startet `publishhelper/publish-scenario-to-confluence.mjs` und uebergibt `payload.confluence_page_id`, `payload.szenario_id` sowie `payload.titel`
 
@@ -60,7 +60,7 @@ Beispiel fuer einen Publish-Payload:
 }
 ```
 
-Empfangene XMLs werden unter `neo/interactions/_lunettes-job-watcher/szenario-<szenario_id>/` abgelegt. Die gemeinsame Quelle fuer alle Jobs derselben Lunettes-`szenario_id` ist immer `source.xml`; genau dieser Pfad wird an Testscript- und Videoscript-Laeufe uebergeben. Dadurch koennen dieselben Test-Artefakte spaeter wiedergefunden und weiterverwendet werden. Die Generatoren koennen dabei weiter app-relativ auf `neo/fragements` und `neo/env` zugreifen. Pro Job werden Logs unter `temp/lunettes-job-watcher/jobs/<job-id>/job.log` geschrieben.
+Empfangene XMLs werden unter `neo/interactions/_lunettes-job-watcher/szenario-<szenario_id>/` abgelegt. Die gemeinsame Quelle fuer alle Jobs derselben Lunettes-`szenario_id` ist immer `source.xml`; genau dieser Pfad wird an Testscript- und Videoscript-Laeufe uebergeben. Dadurch koennen dieselben Test-Artefakte spaeter wiedergefunden und weiterverwendet werden. Fuer die Fragment-Aufloesung wird ausschliesslich die Lunettes-API verwendet; app-lokale Fragmentbibliotheken werden nicht mehr genutzt. Pro Job werden Logs unter `temp/lunettes-job-watcher/jobs/<job-id>/job.log` geschrieben.
 
 Die stdout/stderr-Ausgaben der gestarteten Skripte werden zusaetzlich als gebuendelte `progress`-Events an die Render-Job-API gesendet: spaetestens nach 5 Zeilen oder nach 60 Sekunden, auch wenn bis dahin weniger Zeilen angefallen sind.
 

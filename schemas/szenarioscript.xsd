@@ -167,7 +167,7 @@
     <xs:complexType name="TextBlockType" mixed="true" />
     <xs:complexType name="InfoType" mixed="true">
         <xs:sequence/>
-        <xs:attribute name="typ" type="InfoTypType" use="required"/>
+        <xs:attribute name="typ" type="InfoTypType" use="optional" default="Erklärung"/>
         <xs:attribute name="ausgabe" type="AusgabeType" use="optional"/>
         <xs:attribute name="interaktion" type="InfoInteraktionType" use="optional"/>
     </xs:complexType>
@@ -193,6 +193,7 @@
         <xs:attribute name="id" type="xs:ID"/>
         <xs:attribute name="treffer-index" type="xs:integer" default="0"/>
         <xs:attribute name="text" type="xs:string" use="optional"/>
+        <xs:attribute name="role" type="xs:string" use="optional"/>
         <xs:attribute name="label" type="xs:string" use="optional"/>
         <xs:attribute name="aria-label" type="xs:string" use="optional"/>
         <xs:attribute name="data-id" type="xs:string" use="optional"/>

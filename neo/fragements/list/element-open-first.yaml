@@ -1,6 +1,0 @@
-fragment:
-  id: element-open-first
-  parameters:  
-  flow:
-  - id: datensatz öffnen
-    click: "controlBtn/action-detaillink"

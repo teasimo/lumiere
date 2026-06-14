@@ -13,7 +13,7 @@ const MANAGED_BLOCK_END = '<!-- lumiere-publishhelper:end -->'
 
 function printUsage() {
   console.log(`Verwendung:
-  node publishhelper/publish-scenario-to-confluence.mjs <szenarioscript.xml> <confluence-page-id> --scenario-id=<id>
+  node scripts/publish-to-confluence/publish-scenario-to-confluence.mjs <szenarioscript.xml> <confluence-page-id> --scenario-id=<id>
 
 Voraussetzungen:
   - Optional: Es existiert ein erfolgreich gerendertes Remotion-Video im output/.../videogenerator Ordner
@@ -442,7 +442,7 @@ async function main() {
 
     let attachmentName = null
     if (latestRender?.videoPath) {
-      attachmentName = `${basename(scenarioAbsolutePath, extname(scenarioAbsolutePath))}-remotion${extname(latestRender.videoPath) || '.mp4'}`
+      attachmentName = basename(latestRender.videoPath)
       await uploadAttachment({
         attachmentApiBaseUrl: apiContext.attachmentApiBaseUrl,
         authHeader: apiContext.authHeader,
@@ -454,7 +454,7 @@ async function main() {
 
     let rawAttachmentName = null
     if (latestRawVideo?.videoPath) {
-      rawAttachmentName = `${basename(scenarioAbsolutePath, extname(scenarioAbsolutePath))}-test-rohvideo${extname(latestRawVideo.videoPath) || '.webm'}`
+      rawAttachmentName = basename(latestRawVideo.videoPath)
       await uploadAttachment({
         attachmentApiBaseUrl: apiContext.attachmentApiBaseUrl,
         authHeader: apiContext.authHeader,

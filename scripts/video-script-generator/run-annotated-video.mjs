@@ -13,6 +13,8 @@ import {
 } from './semantic-remotion.mjs'
 import { getVideoScriptConfig, loadCentralConfig } from '../shared/central-config.mjs'
 import { buildScenarioOutputFolderName, buildScenarioOutputRoot, sanitizeScenarioOutputToken } from '../shared/scenario-output.mjs'
+import { appendFragmentSourceArg, normalizeFragmentSource, resolveFragmentSourceForScenario } from '../shared/lunettes-fragment-source.mjs'
+import { buildScenarioXmlGeneratorInvocation } from '../shared/scenario-xml-generator.mjs'
 
 const OUTPUT_ROOT = resolve('output')
 const OUTPUT_VIDEOGENERATOR_SCOPE_DIR = 'videogenerator'
@@ -86,6 +88,7 @@ function parseArgs(argv) {
     let profile = null
     let ttsVoice = null
     let scenarioId = null
+    let fragmentSource = 'local'
     let remotionPlanOnly = false
     const positionalArgs = []
     const unsupportedArgs = []
@@ -100,6 +103,10 @@ function parseArgs(argv) {
       }
       if (arg.startsWith('--scenario-id=')) {
         scenarioId = arg.slice('--scenario-id='.length).trim()
+        continue
+      }
+      if (arg.startsWith('--fragment-source=')) {
+        fragmentSource = arg.slice('--fragment-source='.length).trim()
         continue
       }
       if (arg === '--remotion-plan-only') {
@@ -143,6 +150,7 @@ function parseArgs(argv) {
       scenarioTts: true,
       scenarioPath,
       scenarioId,
+      fragmentSource: resolveFragmentSourceForScenario(fragmentSource, scenarioPath, 'lunettes'),
       profile,
       outputVideo,
       ttsVoice,
@@ -505,32 +513,30 @@ function toCanonicalComparable(value) {
   return ordered
 }
 
-function ensureResolvedJsonForScenarioXml(scenarioAbsolutePath) {
-  const scenarioName = basename(scenarioAbsolutePath, extname(scenarioAbsolutePath))
-  const outDirRelative = 'temp/testfiles'
-  const resolvedJsonPath = resolve(outDirRelative, `${scenarioName}.resolved.json`)
-
-  const exitCode = runCommand('node', [
-    'scripts/test-script-generator/generate-tests-from-scenario-xml.mjs',
-    scenarioAbsolutePath,
-    '--out-dir',
-    outDirRelative,
-  ])
+function ensureResolvedJsonForScenarioXml(scenarioAbsolutePath, options = {}) {
+  const generatorInvocation = buildScenarioXmlGeneratorInvocation({
+    scenarioPath: scenarioAbsolutePath,
+    outDir: 'temp/testfiles',
+    fragmentSource: options.fragmentSource,
+  })
+  const exitCode = runCommand(generatorInvocation.command, generatorInvocation.args)
 
   if (exitCode !== 0) {
     throw new Error(`Szenario konnte nicht aus XML aufgeloest werden: ${scenarioAbsolutePath}`)
   }
 
-  if (!existsSync(resolvedJsonPath)) {
-    throw new Error(`Resolved JSON fehlt nach XML-Generierung: ${resolvedJsonPath}`)
+  if (!existsSync(generatorInvocation.paths.resolvedJsonPath)) {
+    throw new Error(`Resolved JSON fehlt nach XML-Generierung: ${generatorInvocation.paths.resolvedJsonPath}`)
   }
 
-  return resolvedJsonPath
+  return generatorInvocation.paths.resolvedJsonPath
 }
 
 function getResolvedXmlPathForScenarioXml(scenarioAbsolutePath) {
-  const scenarioName = basename(scenarioAbsolutePath, extname(scenarioAbsolutePath))
-  return resolve('temp/testfiles', `${scenarioName}.test-resolved.xml`)
+  return buildScenarioXmlGeneratorInvocation({
+    scenarioPath: scenarioAbsolutePath,
+    outDir: 'temp/testfiles',
+  }).paths.resolvedXmlPath
 }
 
 function getXmlNodeTag(node) {
@@ -549,6 +555,11 @@ function getXmlNodeTag(node) {
   }
 
   return null
+}
+
+function resolveInfoType(value) {
+  const normalized = String(value || '').trim()
+  return normalized || 'Erklärung'
 }
 
 function findVideoScriptRangeAnchorsInResolvedXml(resolvedXmlRaw) {
@@ -750,24 +761,22 @@ function annotateScenarioPresentationFromResolvedXml(scenarioRoot, resolvedXmlRa
         pendingSlides.push(text)
       } else if (tag === 'Info' && text && inVideoSegment) {
         const attrs = node[':@'] || {}
-        const typ = String(attrs['@_typ'] || '').trim()
+        const typ = resolveInfoType(attrs['@_typ'])
         const interaktion = String(attrs['@_interaktion'] || '').trim().toLowerCase()
-        if (typ) {
-          const entry = { typ, text, interaktion: interaktion || null }
-          if (interaktion === 'währenddessen' && groupContext) {
-            groupContext.duringInfos.push(entry)
-          } else if (interaktion === 'vorige' || interaktion === 'danach') {
-            // Attach to the preceding interaction step
-            if (lastInteractionStep) {
-              if (!Array.isArray(lastInteractionStep.infoAnnotations)) {
-                lastInteractionStep.infoAnnotations = []
-              }
-              lastInteractionStep.infoAnnotations.push(entry)
+        const entry = { typ, text, interaktion: interaktion || null }
+        if (interaktion === 'währenddessen' && groupContext) {
+          groupContext.duringInfos.push(entry)
+        } else if (interaktion === 'vorige' || interaktion === 'danach') {
+          // Attach to the preceding interaction step
+          if (lastInteractionStep) {
+            if (!Array.isArray(lastInteractionStep.infoAnnotations)) {
+              lastInteractionStep.infoAnnotations = []
             }
-          } else {
-            // Defer to the next interaction step (währenddessen or no interaktion)
-            pendingInfoQueue.push(entry)
+            lastInteractionStep.infoAnnotations.push(entry)
           }
+        } else {
+          // Defer to the next interaction step (währenddessen or no interaktion)
+          pendingInfoQueue.push(entry)
         }
       } else if (interactionTags.has(tag) && inVideoSegment) {
         const attrs = node[':@'] || {}
@@ -998,13 +1007,13 @@ function annotateScenarioFlowRowIndices(scenarioRoot, scenarioXmlRaw) {
   visit(flow)
 }
 
-async function loadScenarioRootForTts(scenarioAbsolutePath) {
+async function loadScenarioRootForTts(scenarioAbsolutePath, options = {}) {
   const extension = extname(scenarioAbsolutePath).toLowerCase()
   if (extension !== '.xml') {
     throw new Error('Nur XML-Szenarien werden unterstuetzt. Bitte eine .xml-Datei uebergeben.')
   }
 
-  const resolvedJsonPath = ensureResolvedJsonForScenarioXml(scenarioAbsolutePath)
+  const resolvedJsonPath = ensureResolvedJsonForScenarioXml(scenarioAbsolutePath, options)
   const resolvedXmlPath = getResolvedXmlPathForScenarioXml(scenarioAbsolutePath)
   const resolvedJsonRaw = await readFile(resolvedJsonPath, 'utf8')
   const resolvedJsonParsed = JSON.parse(resolvedJsonRaw)
@@ -1651,9 +1660,9 @@ function buildNarrationsFromScenarioTimeline({ scenarioRoot, timelineReport, pro
       ? stepEntryByResolvedId.presentationInfoAnnotations
       : Array.isArray(stepEntry?.presentationInfoAnnotations) ? stepEntry.presentationInfoAnnotations : []
     for (const info of presentationInfoAnnotations) {
-      const typ = String(info?.typ || '').trim()
+      const typ = resolveInfoType(info?.typ)
       const infoText = String(info?.text || '').trim()
-      if (!typ || !infoText) continue
+      if (!infoText) continue
 
       const channelConfig = channelsConfig[typ]
       if (!channelConfig || channelConfig.enabled !== true) continue
@@ -1681,9 +1690,9 @@ function buildNarrationsFromScenarioTimeline({ scenarioRoot, timelineReport, pro
     const presentationGroupIndex = Number(stepEntryByResolvedId?.presentationGroupIndex ?? stepEntry?.presentationGroupIndex)
     const groupWindow = Number.isFinite(presentationGroupIndex) ? groupWindowByIndex.get(presentationGroupIndex) : null
     for (const info of groupDuringInfoAnnotations) {
-      const typ = String(info?.typ || '').trim()
+      const typ = resolveInfoType(info?.typ)
       const infoText = String(info?.text || '').trim()
-      if (!typ || !infoText) continue
+      if (!infoText) continue
 
       const channelConfig = channelsConfig[typ]
       if (!channelConfig || channelConfig.enabled !== true) continue
@@ -1717,10 +1726,10 @@ function buildNarrationsFromScenarioTimeline({ scenarioRoot, timelineReport, pro
       ? stepEntryByResolvedId.infoAnnotations
       : Array.isArray(stepEntry?.infoAnnotations) ? stepEntry.infoAnnotations : []
     for (const info of infoAnnotations) {
-      const typ = String(info?.typ || '').trim()
+      const typ = resolveInfoType(info?.typ)
       const interaktion = String(info?.interaktion || '').trim().toLowerCase()
       const infoText = String(info?.text || '').trim()
-      if (!typ || !infoText) continue
+      if (!infoText) continue
 
       const channelConfig = channelsConfig[typ]
       if (!channelConfig || channelConfig.enabled !== true) continue
@@ -2823,7 +2832,7 @@ function insertStepTitleCardsIntoVideo({ inputVideo, outputVideo, stepTitles }) 
   writeFileSync(resolvedOutput, readFileSync(resolvedInput))
 }
 
-function prependIntroToVideo({ inputVideo, outputVideo, introVideoPath = null }) {
+function prependIntroToVideo({ inputVideo, outputVideo, introVideoPath = null, encodingConfig = null }) {
   const resolvedInput = resolve(String(inputVideo || ''))
   const resolvedOutput = resolve(String(outputVideo || ''))
   const resolvedIntro = resolve(String(introVideoPath || DEFAULT_VIDEO_INTRO_PATH))
@@ -2846,6 +2855,7 @@ function prependIntroToVideo({ inputVideo, outputVideo, introVideoPath = null })
   const introDurationSec = Math.max(0, Number(getMediaDurationSeconds(resolvedIntro) || 0))
   const mainDurationSec = Math.max(0, Number(getMediaDurationSeconds(resolvedInput) || 0))
   const targetSize = getVideoDimensions(resolvedInput)
+  const normalizedEncoding = normalizeVideoEncodingConfig(encodingConfig)
 
   const args = [
     '-y',
@@ -2877,13 +2887,16 @@ function prependIntroToVideo({ inputVideo, outputVideo, introVideoPath = null })
     '-filter_complex', filterParts.join(';'),
     '-map', '[v]',
     '-c:v', 'libx264',
-    '-preset', 'veryfast',
-    '-crf', '18',
-    '-pix_fmt', 'yuv420p',
+    '-preset', normalizedEncoding.preset,
+    '-crf', String(normalizedEncoding.crf),
+    '-pix_fmt', normalizedEncoding.pixFmt,
   )
+  if (normalizedEncoding.videoBitrate) {
+    args.push('-b:v', normalizedEncoding.videoBitrate)
+  }
 
   if (hasOutputAudio) {
-    args.push('-map', '[a]', '-c:a', 'aac', '-ar', '48000', '-ac', '2', '-b:a', '192k')
+    args.push('-map', '[a]', '-c:a', 'aac', '-ar', '48000', '-ac', '2', '-b:a', normalizedEncoding.audioBitrate)
   }
 
   args.push('-movflags', '+faststart', resolvedOutput)
@@ -2924,11 +2937,26 @@ function resolveVideoPresentationConfig(videoScriptConfig) {
   const rawConfig = videoScriptConfig && typeof videoScriptConfig === 'object'
     ? videoScriptConfig
     : {}
+  const stepTimingRaw = rawConfig?.presentation?.step_timing && typeof rawConfig.presentation.step_timing === 'object'
+    ? rawConfig.presentation.step_timing
+    : {}
   const slideRaw = rawConfig?.presentation?.slide && typeof rawConfig.presentation.slide === 'object'
     ? rawConfig.presentation.slide
     : {}
 
   return {
+    stepTiming: {
+      beforeInteractionMs: Math.max(0, Math.floor(Number(
+        stepTimingRaw.before_interaction_ms
+        ?? stepTimingRaw.beforeInteractionMs
+        ?? 500,
+      ) || 0)),
+      afterInteractionMs: Math.max(0, Math.floor(Number(
+        stepTimingRaw.after_interaction_ms
+        ?? stepTimingRaw.afterInteractionMs
+        ?? 500,
+      ) || 0)),
+    },
     slide: {
       defaultDurationMs: Math.max(1, Math.floor(Number(
         slideRaw.default_duration_ms
@@ -2941,6 +2969,38 @@ function resolveVideoPresentationConfig(videoScriptConfig) {
         ?? 3000,
       ) || 3000)),
     },
+  }
+}
+
+function normalizeVideoEncodingConfig(value) {
+  const raw = value && typeof value === 'object' ? value : {}
+  const preset = String(raw.preset || 'veryfast').trim() || 'veryfast'
+  const pixFmt = String(raw.pix_fmt ?? raw.pixFmt ?? 'yuv420p').trim() || 'yuv420p'
+  const crfValue = raw.crf == null ? 18 : Number(raw.crf)
+  const videoBitrate = String(raw.video_bitrate ?? raw.videoBitrate ?? '').trim()
+  const audioBitrate = String(raw.audio_bitrate ?? raw.audioBitrate ?? '192k').trim() || '192k'
+
+  return {
+    preset,
+    crf: Number.isFinite(crfValue) ? Math.max(0, Math.floor(crfValue)) : 18,
+    videoBitrate: videoBitrate || null,
+    audioBitrate,
+    pixFmt,
+  }
+}
+
+function resolveVideoRenderConfig(videoScriptConfig) {
+  const rawConfig = videoScriptConfig && typeof videoScriptConfig === 'object'
+    ? videoScriptConfig
+    : {}
+  const renderRaw = rawConfig.render && typeof rawConfig.render === 'object'
+    ? rawConfig.render
+    : {}
+  const fpsValue = renderRaw.fps == null ? null : Number(renderRaw.fps)
+
+  return {
+    fps: Number.isFinite(fpsValue) && fpsValue > 0 ? Math.max(1, Math.round(fpsValue)) : null,
+    encoding: normalizeVideoEncodingConfig(renderRaw.encoding),
   }
 }
 
@@ -3282,7 +3342,10 @@ function writeSemanticRemotionArtifacts({ inputVideo, outputVideo, adjustedAudio
   const finalRemotionDocumentPath = renderScriptTsxPath
   const frameTimelineLogPath = `${outputVideo}.frame-timeline.log`
   const widthHeight = getVideoDimensions(inputVideo)
-  const fps = getVideoFps(inputVideo)
+  const configuredFps = Number(semanticContext?.videoRenderConfig?.fps || 0)
+  const fps = Number.isFinite(configuredFps) && configuredFps > 0
+    ? Math.max(1, Math.round(configuredFps))
+    : getVideoFps(inputVideo)
   const semanticRuntimePath = resolve('scripts/video-script-generator/runtime/semantic-runtime.tsx')
   const introConfig = semanticContext?.videoIntroConfig && typeof semanticContext.videoIntroConfig === 'object'
     ? semanticContext.videoIntroConfig
@@ -3310,6 +3373,7 @@ function writeSemanticRemotionArtifacts({ inputVideo, outputVideo, adjustedAudio
     width: widthHeight.width,
     height: widthHeight.height,
     fps,
+    stepTiming: semanticContext?.videoPresentationConfig?.stepTiming || null,
     slideDefaults: semanticContext?.videoPresentationConfig?.slide || null,
     videoIntro,
   })
@@ -3317,6 +3381,7 @@ function writeSemanticRemotionArtifacts({ inputVideo, outputVideo, adjustedAudio
     semanticPlan: semanticVideoPlan,
     outputVideo,
     adjustedAudioFiles,
+    renderConfig: semanticContext?.videoRenderConfig || null,
   })
   const renderScriptTsx = buildSemanticRemotionTsx({
     semanticPlan: semanticVideoPlan,
@@ -3517,7 +3582,8 @@ async function buildAnnotatedArtifacts({
   tts = false,
   ttsVoice = null,
   videoIntroConfig = { enabled: true, path: DEFAULT_VIDEO_INTRO_PATH },
-  videoPresentationConfig = { slide: { defaultDurationMs: 2000, inlineDefaultDurationMs: 3000 } },
+  videoRenderConfig = { fps: null, encoding: { preset: 'veryfast', crf: 18, videoBitrate: null, audioBitrate: '192k', pixFmt: 'yuv420p' } },
+  videoPresentationConfig = { stepTiming: { beforeInteractionMs: 500, afterInteractionMs: 500 }, slide: { defaultDurationMs: 2000, inlineDefaultDurationMs: 3000 } },
 }) {
   const resolvedTracePath = resolve(tracePath)
   const resolvedInputVideo = resolve(inputVideo)
@@ -3572,6 +3638,7 @@ async function buildAnnotatedArtifacts({
     semanticContext: {
       ...semanticContext,
       videoIntroConfig,
+      videoRenderConfig,
       videoPresentationConfig,
     },
     render: true,
@@ -3609,6 +3676,7 @@ async function buildAnnotatedArtifacts({
       semanticContext: {
         ...semanticContext,
         videoIntroConfig,
+        videoRenderConfig,
         videoPresentationConfig,
       },
       render: true,
@@ -3722,10 +3790,11 @@ async function exportScenarioTtsDebugArtifacts({
   return debugDir
 }
 
-async function runScenarioTtsMode({ scenarioPath, scenarioId, profileName, outputVideo, ttsVoice = null, remotionPlanOnly = false }) {
+async function runScenarioTtsMode({ scenarioPath, scenarioId, fragmentSource = 'local', profileName, outputVideo, ttsVoice = null, remotionPlanOnly = false }) {
   const central = loadCentralConfig(process.cwd())
   const videoScriptConfig = getVideoScriptConfig(central.config)
   const videoIntroConfig = resolveVideoIntroConfig(videoScriptConfig)
+  const videoRenderConfig = resolveVideoRenderConfig(videoScriptConfig)
   const videoPresentationConfig = resolveVideoPresentationConfig(videoScriptConfig)
   const scenarioAbsolutePath = resolve(scenarioPath)
   if (!existsSync(scenarioAbsolutePath)) {
@@ -3744,7 +3813,9 @@ async function runScenarioTtsMode({ scenarioPath, scenarioId, profileName, outpu
   const profile = resolveScenarioTtsProfile(videoScriptConfig, profileName)
   const narrationFreezeConfig = resolveNarrationFreezeConfig(profile)
 
-  const { scenarioRoot, resolvedJsonPath, resolvedXmlPath, videoScriptRange } = await loadScenarioRootForTts(scenarioAbsolutePath)
+  const { scenarioRoot, resolvedJsonPath, resolvedXmlPath, videoScriptRange } = await loadScenarioRootForTts(scenarioAbsolutePath, {
+    fragmentSource,
+  })
   const scenarioXmlRaw = await readFile(scenarioAbsolutePath, 'utf8')
 
   const artifacts = await ensureScenarioVideoTimelinePair({
@@ -4134,6 +4205,7 @@ async function runScenarioTtsMode({ scenarioPath, scenarioId, profileName, outpu
       clickIndicator: clickIndicatorConfig,
       stepSegments: visualOverlays.stepSegments,
       videoIntroConfig,
+      videoRenderConfig,
       videoPresentationConfig,
     },
     narrationFreezeConfig,
@@ -4224,6 +4296,7 @@ async function main() {
   const central = loadCentralConfig(process.cwd())
   const videoScriptConfig = getVideoScriptConfig(central.config)
   const videoIntroConfig = resolveVideoIntroConfig(videoScriptConfig)
+  const videoRenderConfig = resolveVideoRenderConfig(videoScriptConfig)
   const videoPresentationConfig = resolveVideoPresentationConfig(videoScriptConfig)
   if (parsed.help) {
     printUsage()
@@ -4260,6 +4333,7 @@ async function main() {
       tts: parsed.tts,
       ttsVoice: parsed.ttsVoice,
       videoIntroConfig,
+      videoRenderConfig,
       videoPresentationConfig,
     })
     return
@@ -4285,6 +4359,7 @@ async function main() {
       tts: parsed.tts,
       ttsVoice: parsed.ttsVoice,
       videoIntroConfig,
+      videoRenderConfig,
       videoPresentationConfig,
     })
     return
@@ -4331,7 +4406,9 @@ async function main() {
       inputVideo: resolvedInputVideo,
       outputVideo: outputWithTts,
       audioFiles,
-      clickHolds: annotateMeta.clickHolds || [],
+      semanticContext: {
+        videoRenderConfig,
+      },
     })
     console.log(`Voiceover-Video bereit: ${outputWithTts}`)
     return
