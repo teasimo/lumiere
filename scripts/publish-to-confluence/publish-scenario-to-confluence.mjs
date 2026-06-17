@@ -5,7 +5,7 @@ import { existsSync } from 'fs'
 import { basename, extname, join, resolve } from 'path'
 import { Buffer } from 'buffer'
 import { XMLParser } from 'fast-xml-parser'
-import { buildScenarioOutputFolderName } from '../scripts/shared/scenario-output.mjs'
+import { buildScenarioOutputFolderName } from '../shared/scenario-output.mjs'
 
 const CREDENTIALS_ENV_NAME = 'CONFLUENCE_PUBLISHHELPER_CREDENTIALS'
 const MANAGED_BLOCK_START = '<!-- lumiere-publishhelper:start -->'

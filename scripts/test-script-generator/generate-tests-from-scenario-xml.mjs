@@ -794,6 +794,10 @@ function mapWaitStatusToState(statusRaw) {
 function buildTargetFromAttributes(attrs, { includeText = true, includeUrl = false } = {}) {
   const target = {}
 
+  if (attrs['data-testid']) {
+    target.testid = attrs['data-testid']
+  }
+
   if (attrs['data-id']) {
     target['data-id'] = attrs['data-id']
   }
@@ -856,6 +860,7 @@ function createStepIdFactory() {
   return (element, fallbackPrefix = 'step') => {
     const explicitId = String(element.attrs?.id || '').trim()
     const base = sanitizeIdPart(explicitId)
+      || sanitizeIdPart(element.attrs?.['data-testid'])
       || sanitizeIdPart(element.attrs?.['data-id'])
       || sanitizeIdPart(element.attrs?.text)
       || sanitizeIdPart(`${fallbackPrefix}-${element.tag}`)

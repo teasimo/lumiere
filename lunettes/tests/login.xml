@@ -1,0 +1,7 @@
+<SzenarionScript>
+	<Gruppe>
+		<Eingabe data-testid="login-username-input" aria-label="Benutzername">schulte</Eingabe>
+		<Eingabe data-testid="login-password-input" aria-label="Passwort">testtest</Eingabe>
+		<Click data-testid="login-submit-button" text="LOGIN"/>
+	</Gruppe>
+</SzenarionScript>

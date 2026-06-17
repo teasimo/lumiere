@@ -196,7 +196,10 @@
         <xs:attribute name="role" type="xs:string" use="optional"/>
         <xs:attribute name="label" type="xs:string" use="optional"/>
         <xs:attribute name="aria-label" type="xs:string" use="optional"/>
+        <!-- NEO verwendet data-id -->
         <xs:attribute name="data-id" type="xs:string" use="optional"/>
+        <!-- Lunttes verwendet data-testid -->
+        <xs:attribute name="data-testid" type="xs:string" use="optional"/>
         <xs:attribute name="komponententyp" type="xs:string" use="optional"/>
         <xs:attribute name="selektor-regex" type="xs:boolean" use="optional" default="false"/>
     </xs:complexType>

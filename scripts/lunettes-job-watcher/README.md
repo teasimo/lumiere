@@ -45,7 +45,7 @@ Optional:
 
 - `testscript`: startet `scripts/test-script-generator/run-generated-testfile.mjs`, uebergibt `payload.szenario_id` als `--scenario-id`, erzwingt mit `--force` eine Neugenerierung, verwendet einen eigenen `--out-dir` pro Szenario unter `temp/lunettes-job-watcher/testfiles/<szenario_id>` und loest Fragmente ausschliesslich ueber die Lunettes-API auf
 - `videoscript`: startet `scripts/video-script-generator/remotion-render.mjs` und uebergibt `payload.szenario_id` als `--scenario-id`
-- `publish`: startet `publishhelper/publish-scenario-to-confluence.mjs` und uebergibt `payload.confluence_page_id`, `payload.szenario_id` sowie `payload.titel`
+- `publish`: startet `scripts/publish-to-confluence/publish-scenario-to-confluence.mjs` und uebergibt `payload.confluence_page_id`, `payload.szenario_id` sowie `payload.titel`
 
 Beispiel fuer einen Publish-Payload:
 

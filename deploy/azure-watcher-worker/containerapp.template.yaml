@@ -1,0 +1,73 @@
+location: swedencentral
+type: Microsoft.App/containerApps
+name: lumiere-lunettes-worker
+properties:
+  managedEnvironmentId: /subscriptions/__SUBSCRIPTION_ID__/resourceGroups/__RESOURCE_GROUP__/providers/Microsoft.App/managedEnvironments/__CONTAINER_APP_ENV__
+  configuration:
+    activeRevisionsMode: Single
+    ingress:
+      external: false
+    secrets:
+      - name: lunettes-api-username
+        value: __LUNETTES_API_USERNAME__
+      - name: lunettes-api-password
+        value: __LUNETTES_API_PASSWORD__
+      - name: aws-access-key-id
+        value: __AWS_ACCESS_KEY_ID__
+      - name: aws-secret-access-key
+        value: __AWS_SECRET_ACCESS_KEY__
+      - name: aws-session-token
+        value: __AWS_SESSION_TOKEN__
+      - name: confluence-publishhelper-credentials
+        value: __CONFLUENCE_PUBLISHHELPER_CREDENTIALS__
+      - name: google-application-credentials-json
+        value: __GOOGLE_APPLICATION_CREDENTIALS_JSON__
+  template:
+    containers:
+      - name: worker
+        image: __ACR_LOGIN_SERVER__/lumiere-lunettes-worker:latest
+        env:
+          - name: LUNETTES_BASE_URL
+            value: __LUNETTES_BASE_URL__
+          - name: LUNETTES_API_USERNAME
+            secretRef: lunettes-api-username
+          - name: LUNETTES_API_PASSWORD
+            secretRef: lunettes-api-password
+          - name: AWS_ACCESS_KEY_ID
+            secretRef: aws-access-key-id
+          - name: AWS_SECRET_ACCESS_KEY
+            secretRef: aws-secret-access-key
+          - name: AWS_SESSION_TOKEN
+            secretRef: aws-session-token
+          - name: CONFLUENCE_PUBLISHHELPER_CREDENTIALS
+            secretRef: confluence-publishhelper-credentials
+          - name: GOOGLE_APPLICATION_CREDENTIALS_JSON
+            secretRef: google-application-credentials-json
+          - name: WATCHER_TYPES
+            value: testscript,videoscript,publish
+          - name: WATCHER_POLL_INTERVAL_MS
+            value: "15000"
+          - name: WATCHER_LEASE_SECONDS
+            value: "14400"
+          - name: WATCHER_TESTSCRIPT_MODE
+            value: video
+          - name: WATCHER_VIDEO_PROFILE
+            value: all-channels
+          - name: WATCHER_WORKER_ID
+            value: azure-worker-01
+          - name: S3_BUCKET
+            value: __S3_BUCKET__
+          - name: S3_PREFIX
+            value: workers/azure-worker-01
+          - name: S3_SYNC_INTERVAL_SECONDS
+            value: "60"
+          - name: S3_ENDPOINT_URL
+            value: __S3_ENDPOINT_URL__
+          - name: WORKER_DATA_ROOT
+            value: /app/runtime-data
+        resources:
+          cpu: 2.0
+          memory: 4Gi
+    scale:
+      minReplicas: 1
+      maxReplicas: 1

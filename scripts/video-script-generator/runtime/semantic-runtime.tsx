@@ -129,7 +129,10 @@ export const VideoScript: React.FC<VideoScriptProps> = ({
         </Sequence>
       ) : null}
       {globalNarrations.map((narration, index) => {
-        const absoluteAtMs = Math.max(0, Number(narration.atMs || 0))
+        // narration.atMs is step-relative (offset from the step's composition start).
+        // stepStartMs is the step's absolute composition start, added here to get the
+        // correct global position. See buildNarrationGroups in semantic-remotion.mjs.
+        const absoluteAtMs = Math.max(0, Number(narration.stepStartMs || 0) + Number(narration.atMs || 0))
         const from = msToSequenceFromMs(absoluteAtMs + Math.max(0, Number(introDurationMs || 0)), fps)
         return (
           <Sequence key={narration.id || `global-narration-${index}`} from={from}>

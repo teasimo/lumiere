@@ -202,6 +202,7 @@ function buildNarrationGroups(adjustedAudioFiles) {
     narrationsByStepId.get(narrationStepId).push({
       id: String(entry?.id || narrationStepId),
       file: rawFile ? resolve(rawFile) : null,
+      // Stored as absolute annotated-video time here; converted to step-relative below.
       atMs: Math.max(0, Math.floor(Number(entry?.finalOutputStartMs != null ? entry.finalOutputStartMs : entry?.startMs || 0))),
       endMs: Math.max(
         0,
@@ -240,6 +241,29 @@ function buildNarrationGroups(adjustedAudioFiles) {
       durationMs: overflowMs,
       sourceAnchor: String(entry?.sourceAnchor || '').trim().toLowerCase() || undefined,
     })
+  }
+
+  // Convert narration atMs/endMs from absolute annotated-video time to step-relative time.
+  //
+  // Problem: finalOutputStartMs is in "annotated-video time" (source video position +
+  // cumulative overflow holds). The Remotion runtime interprets narration.atMs as
+  // absolute composition time (sum of step durations, gaps between steps skipped).
+  // These diverge because Remotion only plays short clip windows per step.
+  //
+  // Fix: store atMs/endMs as offsets from the first narration in the step (= the
+  // freeze anchor). The runtime adds step.startMs to get the correct absolute position.
+  for (const narrations of narrationsByStepId.values()) {
+    if (narrations.length === 0) {
+      continue
+    }
+    const stepBaseAtMs = Math.min(...narrations.map((n) => n.atMs))
+    if (stepBaseAtMs <= 0) {
+      continue
+    }
+    for (const narration of narrations) {
+      narration.atMs = Math.max(0, narration.atMs - stepBaseAtMs)
+      narration.endMs = Math.max(0, narration.endMs - stepBaseAtMs)
+    }
   }
 
   return {

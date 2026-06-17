@@ -342,6 +342,50 @@ Loesung:
 
 - alle plan-relevanten Elemente ueber `sourceToPlanOffsetMs(...)` oder aequivalente Logik verschieben
 
+### 5. `info-before`-Narration spielt zu spaet (Koordinaten-Verwechslung)
+
+Symptom:
+
+- Der TTS-Ton einer `<Info>` (ohne `interaktion`-Attribut) ist waehrend des Freeze-Bilds nicht zu hoeren.
+- Stattdessen laeuft die Narration spaeter, waehrend nachfolgende Clips normal weiterlaufen.
+- Im `semantic-video-plan.json` liegt `narration.atMs` deutlich hinter `step.startMs`.
+
+Ursache:
+
+`buildNarrationGroups` setzt `narration.atMs = finalOutputStartMs`. Dieser Wert ist:
+
+```
+finalOutputStartMs = source_step_start_ms + kumulative_narrations_overflows
+```
+
+Das ist annotierte-Video-Zeit (Quellvideo-Zeit mit eingefuegten Pausen). Im Remotion-Runtime wird `narration.atMs` aber als Remotion-Kompositions-Zeit interpretiert, d. h. als absolute Position in der summierten Stepfolge (ab 0).
+
+Diese beiden Zeitbasen sind verschieden, weil Remotion die Luecken zwischen den Interaktionsschritten im Rohvideo ueberspringt. Jeder Step spielt nur sein kleines Clip-Fenster (typisch 1-3 s), waehrend die Quellvideo-Zeit des Steps viel groesser ist (kumulierte Rohvideoposition).
+
+Konkretes Beispiel (Video 4, Step R0016):
+
+- Remotion `step.startMs` = 17210 ms → dort beginnt der Freeze
+- `narration.atMs` = 24996 ms → Narration startet 7786 ms zu spaet
+- Die Narration (10800 ms lang) beginnt mitten im Freeze und laeuft weit in die naechsten Clips
+
+Betroffene Anker:
+
+- `info-before` (sicher betroffen)
+- `before` (selbe Logik, betroffen)
+- `info-presentation` (aktuell zufaellig korrekt, weil der erste Step bei Remotion-Zeit 0 liegt)
+
+Loesung (implementiert):
+
+In `buildNarrationGroups` (`semantic-remotion.mjs`) wird nach dem Sammeln aller Narrations pro Schritt eine Nachbearbeitung durchgefuehrt: `stepBaseAtMs = min(group.atMs)` wird von jedem `atMs` und `endMs` der Gruppe subtrahiert. Damit ist `atMs` schritt-relativ (0 = Beginn des Freeze-Bilds).
+
+In `semantic-runtime.tsx` wird die absolute Kompositions-Position berechnet als:
+
+```tsx
+const absoluteAtMs = Math.max(0, Number(narration.stepStartMs || 0) + Number(narration.atMs || 0))
+```
+
+`stepStartMs` wird bereits in `globalNarrations` auf jede Narration gesetzt (via `flatMap`). Damit spielen `info-before`-Narrations genau beim Einfrieren des ersten Frames.
+
 ## Aktuelle Architekturentscheidung
 
 Die aktuelle, gewollte Datenrichtung lautet:
@@ -376,6 +420,7 @@ Wenn Marker oder Narrationen falsch sitzen, zuerst pruefen:
 
 - Die Zeitbasis wird an mehreren Stellen implizit statt als eigener Typ modelliert.
 - Eine explizite Datenstruktur fuer `traceTimeMs`, `sourceVideoMs`, `clipMs` und `planMs` waere robuster als freie Zahlenwerte.
+- `info-before`-Narrations sitzen zeitlich falsch (siehe Fehlerquelle #5). Behoben: `narration.atMs` ist jetzt schritt-relativ, `semantic-runtime.tsx` addiert `step.startMs`.
 
 Bis dahin gilt:
 
