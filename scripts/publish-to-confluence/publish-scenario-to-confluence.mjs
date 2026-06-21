@@ -417,7 +417,7 @@ async function fetchConfluencePageIdFromLunettes({ scenarioId, software }) {
     return null
   }
 
-  const url = `${context.baseUrl}/api/anfo/szenario/${encodeURIComponent(String(scenarioId))}/confluence-page-id`
+  const url = `${context.baseUrl}/api/anfo/szenario/${encodeURIComponent(String(scenarioId))}`
   const response = await fetch(url, {
     method: 'GET',
     headers: {
@@ -432,7 +432,7 @@ async function fetchConfluencePageIdFromLunettes({ scenarioId, software }) {
 
   if (!response.ok) {
     const body = await response.text()
-    throw new Error(`Lunettes-Abfrage der vorhandenen confluence_page_id fehlgeschlagen (${response.status} ${response.statusText}): ${body}`)
+    throw new Error(`Lunettes-Abfrage des Szenarios ${scenarioId} fehlgeschlagen (${response.status} ${response.statusText}): ${body}`)
   }
 
   const responseText = await response.text()
