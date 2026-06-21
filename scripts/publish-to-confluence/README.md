@@ -15,7 +15,7 @@ Wenn alles vorhanden ist, dann:
 
 - wird das letzte erfolgreich gerenderte Video als Attachment auf die Confluence-Seite hochgeladen
 - wird auf der Confluence-Seite ein verwalteter Block geschrieben oder aktualisiert
-- oder bei fehlender Page-ID eine neue Unterseite unter der in `scenario.config.json` definierten Parent-Seite angelegt
+- oder bei fehlender Page-ID zuerst die in Lunettes hinterlegte `confluence_page_id` fuer die Scenario-ID abgefragt und nur falls dort ebenfalls nichts hinterlegt ist eine neue Unterseite unter der in `scenario.config.json` definierten Parent-Seite angelegt
 - und bei neu angelegter Seite deren `confluence_page_id` an Lunettes zurueckgemeldet
 
 Der Seiteninhalt hat diesen Aufbau:

@@ -52,6 +52,7 @@ Fuer Google-TTS per Secret-JSON optional:
 ## Optionale Worker-Variablen
 
 - `WATCHER_TYPES`
+- `WATCHER_SOFTWARE`
 - `WATCHER_POLL_INTERVAL_MS`
 - `WATCHER_LEASE_SECONDS`
 - `WATCHER_WORKER_ID`
@@ -73,6 +74,7 @@ Vor dem Start schreibt `prepare-runtime-config.mjs` die Env-Overrides nach `scen
 Wichtig:
 
 - `LUNETTES_BASE_URL` wird sowohl auf `scenario["lunettes-job-watcher"].base_url` als auch auf `scenario["test-script"].lunettes_api.base_url` gesetzt.
+- `WATCHER_SOFTWARE` wird auf `scenario["lunettes-job-watcher"].software` gesetzt und schraenkt Claim-Requests auf bestimmte Software-Werte ein, z. B. `Lunettes`.
 - Dadurch verwenden Watcher und Testscript-Generator dieselbe Lunettes-API-Basis.
 - Mit `SCENARIO_CONFIG_PATCH_JSON` kannst du zusaetzlich beliebige Teile der zentralen Config deep-merge'n.
 

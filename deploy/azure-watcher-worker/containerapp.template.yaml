@@ -45,6 +45,8 @@ properties:
             secretRef: google-application-credentials-json
           - name: WATCHER_TYPES
             value: testscript,videoscript,publish
+          - name: WATCHER_SOFTWARE
+            value: Lunettes
           - name: WATCHER_POLL_INTERVAL_MS
             value: "15000"
           - name: WATCHER_LEASE_SECONDS

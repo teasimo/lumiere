@@ -45,7 +45,7 @@ class JobCanceledError extends Error {
 
 function printUsage() {
   console.log(`Usage:
-  node lunettes-job-watcher/watch-lunettes-jobs.mjs [--once] [--types=testscript,videoscript,publish] [--worker-id=<id>] [--lease-seconds=<sec>] [--poll-interval-ms=<ms>]
+  node lunettes-job-watcher/watch-lunettes-jobs.mjs [--once] [--types=testscript,videoscript,publish] [--software=<name[,name...]>] [--worker-id=<id>] [--lease-seconds=<sec>] [--poll-interval-ms=<ms>]
 
 Environment:
   LUNETTES_API_USERNAME
@@ -56,6 +56,7 @@ Config:
   scenario.config.json > scenario["lunettes-job-watcher"] can override:
     - base_url
     - types
+    - software
     - worker_id
     - lease_seconds
     - poll_interval_ms
@@ -67,6 +68,7 @@ function parseArgs(argv) {
   const options = {
     once: false,
     types: null,
+    software: null,
     workerId: null,
     leaseSeconds: null,
     pollIntervalMs: null,
@@ -86,6 +88,11 @@ function parseArgs(argv) {
 
     if (token.startsWith('--types=')) {
       options.types = token.slice('--types='.length)
+      continue
+    }
+
+    if (token.startsWith('--software=')) {
+      options.software = token.slice('--software='.length)
       continue
     }
 
@@ -144,6 +151,21 @@ function normalizeTypes(value) {
     .filter((entry) => allowedTypes.has(entry))
 
   return types.length > 0 ? [...new Set(types)] : ['testscript', 'videoscript', 'publish']
+}
+
+function normalizeSoftwareFilters(value) {
+  const rawValues = Array.isArray(value)
+    ? value
+    : String(value || '')
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+
+  const values = rawValues
+    .map((entry) => String(entry || '').trim())
+    .filter(Boolean)
+
+  return values.length > 0 ? [...new Set(values)] : []
 }
 
 function sanitizeFileToken(value, fallback = 'scenario') {
@@ -287,6 +309,8 @@ async function claimNextJob(context) {
         worker_id: context.workerId,
         lease_seconds: context.leaseSeconds,
         types: context.types,
+        ...(context.software.length === 1 ? { software: context.software[0] } : {}),
+        ...(context.software.length > 1 ? { software: context.software } : {}),
       },
     })
   } catch (error) {
@@ -1359,6 +1383,7 @@ function buildWatcherContext(cliOptions) {
   ).trim()
 
   const types = normalizeTypes(cliOptions.types || watcherConfig.types)
+  const software = normalizeSoftwareFilters(cliOptions.software || watcherConfig.software)
   const leaseSeconds = clampNumber(cliOptions.leaseSeconds || watcherConfig.lease_seconds, 30, 86400, 14400)
   const pollIntervalMs = clampNumber(cliOptions.pollIntervalMs || watcherConfig.poll_interval_ms, 1000, 600000, 15000)
   const videoProfile = resolveDefaultVideoProfile(videoScriptConfig, watcherConfig)
@@ -1369,6 +1394,7 @@ function buildWatcherContext(cliOptions) {
     authHeader: buildBasicAuthHeader(username, password),
     workerId,
     types,
+    software,
     leaseSeconds,
     pollIntervalMs,
     videoProfile,
@@ -1387,7 +1413,7 @@ async function main() {
   await ensureDir(jobsRoot)
   await ensureDir(scenarioCacheRoot)
 
-  console.log(`Lunettes Job Watcher aktiv: worker_id=${context.workerId}, types=${context.types.join(',')}, lease=${context.leaseSeconds}s`)
+  console.log(`Lunettes Job Watcher aktiv: worker_id=${context.workerId}, types=${context.types.join(',')}, software=${context.software.length > 0 ? context.software.join(',') : 'all'}, lease=${context.leaseSeconds}s`)
   console.log(`[watcher] base_url=${context.baseUrl} (${context.baseUrlSource})`)
 
   while (true) {

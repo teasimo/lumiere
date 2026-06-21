@@ -77,6 +77,7 @@ function parsePatchEnv() {
 function buildEnvPatch() {
   const lunettesBaseUrl = String(process.env.LUNETTES_BASE_URL || process.env.WATCHER_BASE_URL || '').trim()
   const watcherTypes = parseCsvEnv('WATCHER_TYPES')
+  const watcherSoftware = parseCsvEnv('WATCHER_SOFTWARE')
   const watcherWorkerId = String(process.env.WATCHER_WORKER_ID || '').trim()
   const watcherLeaseSeconds = parseIntegerEnv('WATCHER_LEASE_SECONDS')
   const watcherPollIntervalMs = parseIntegerEnv('WATCHER_POLL_INTERVAL_MS')
@@ -97,6 +98,10 @@ function buildEnvPatch() {
 
   if (watcherTypes) {
     patch['lunettes-job-watcher'].types = watcherTypes
+  }
+
+  if (watcherSoftware) {
+    patch['lunettes-job-watcher'].software = watcherSoftware
   }
 
   if (watcherWorkerId) {

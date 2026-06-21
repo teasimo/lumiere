@@ -372,6 +372,84 @@ function readLunettesApiContext(software) {
   }
 }
 
+function tryReadLunettesApiContext(software) {
+  try {
+    return readLunettesApiContext(software)
+  } catch {
+    return null
+  }
+}
+
+function extractConfluencePageIdFromLunettesPayload(payload) {
+  if (payload == null) {
+    return null
+  }
+
+  if (typeof payload === 'string') {
+    const value = payload.trim()
+    return value || null
+  }
+
+  const candidates = [
+    payload?.confluence_page_id,
+    payload?.confluencePageId,
+    payload?.page_id,
+    payload?.pageId,
+    payload?.data?.confluence_page_id,
+    payload?.data?.confluencePageId,
+    payload?.data?.page_id,
+    payload?.data?.pageId,
+  ]
+
+  for (const candidate of candidates) {
+    const value = String(candidate || '').trim()
+    if (value) {
+      return value
+    }
+  }
+
+  return null
+}
+
+async function fetchConfluencePageIdFromLunettes({ scenarioId, software }) {
+  const context = tryReadLunettesApiContext(software)
+  if (!context) {
+    return null
+  }
+
+  const url = `${context.baseUrl}/api/anfo/szenario/${encodeURIComponent(String(scenarioId))}/confluence-page-id`
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      Authorization: context.authHeader,
+    },
+  })
+
+  if (response.status === 404) {
+    return null
+  }
+
+  if (!response.ok) {
+    const body = await response.text()
+    throw new Error(`Lunettes-Abfrage der vorhandenen confluence_page_id fehlgeschlagen (${response.status} ${response.statusText}): ${body}`)
+  }
+
+  const responseText = await response.text()
+  if (!responseText.trim()) {
+    return null
+  }
+
+  let payload = null
+  try {
+    payload = JSON.parse(responseText)
+  } catch {
+    payload = responseText
+  }
+
+  return extractConfluencePageIdFromLunettesPayload(payload)
+}
+
 async function notifyLunettesAboutConfluencePage({ scenarioId, confluencePageId, software }) {
   const context = readLunettesApiContext(software)
   const url = `${context.baseUrl}/api/anfo/szenario/${encodeURIComponent(String(scenarioId))}/confluence-page-id`
@@ -565,6 +643,10 @@ async function main() {
     })
     let pageId = pageIdFromCli
     let createdPageId = null
+
+    if (!pageId) {
+      pageId = await fetchConfluencePageIdFromLunettes({ scenarioId, software })
+    }
 
     const latestRender = await findLatestSuccessfulRender({ scenarioId }).catch(() => null)
     const latestRawVideo = await findLatestTestRawVideo({ scenarioId }).catch(() => null)

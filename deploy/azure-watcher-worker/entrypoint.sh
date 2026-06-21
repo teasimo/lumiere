@@ -132,6 +132,10 @@ build_watcher_args() {
     args+=("--types=${WATCHER_TYPES}")
   fi
 
+  if [[ -n "${WATCHER_SOFTWARE:-}" ]]; then
+    args+=("--software=${WATCHER_SOFTWARE}")
+  fi
+
   if [[ -n "${WATCHER_WORKER_ID:-}" ]]; then
     args+=("--worker-id=${WATCHER_WORKER_ID}")
   fi
