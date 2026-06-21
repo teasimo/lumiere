@@ -35,6 +35,8 @@ Optional:
       "software": ["Lunettes"],
       "lease_seconds": 14400,
       "poll_interval_ms": 15000,
+      "script_inactivity_timeout_ms": 900000,
+      "script_termination_grace_period_ms": 120000,
       "video_profile": "all-channels"
     }
   }

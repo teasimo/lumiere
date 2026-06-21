@@ -51,6 +51,10 @@ properties:
             value: "15000"
           - name: WATCHER_LEASE_SECONDS
             value: "14400"
+          - name: WATCHER_SCRIPT_INACTIVITY_TIMEOUT_MS
+            value: "900000"
+          - name: WATCHER_SCRIPT_TERMINATION_GRACE_PERIOD_MS
+            value: "120000"
           - name: WATCHER_TESTSCRIPT_MODE
             value: video
           - name: WATCHER_VIDEO_PROFILE

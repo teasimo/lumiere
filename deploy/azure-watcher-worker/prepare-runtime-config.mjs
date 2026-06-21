@@ -81,6 +81,8 @@ function buildEnvPatch() {
   const watcherWorkerId = String(process.env.WATCHER_WORKER_ID || '').trim()
   const watcherLeaseSeconds = parseIntegerEnv('WATCHER_LEASE_SECONDS')
   const watcherPollIntervalMs = parseIntegerEnv('WATCHER_POLL_INTERVAL_MS')
+  const watcherScriptInactivityTimeoutMs = parseIntegerEnv('WATCHER_SCRIPT_INACTIVITY_TIMEOUT_MS')
+  const watcherScriptTerminationGracePeriodMs = parseIntegerEnv('WATCHER_SCRIPT_TERMINATION_GRACE_PERIOD_MS')
   const watcherTestscriptMode = String(process.env.WATCHER_TESTSCRIPT_MODE || '').trim()
   const watcherVideoProfile = String(process.env.WATCHER_VIDEO_PROFILE || '').trim()
 
@@ -114,6 +116,14 @@ function buildEnvPatch() {
 
   if (watcherPollIntervalMs !== null) {
     patch['lunettes-job-watcher'].poll_interval_ms = watcherPollIntervalMs
+  }
+
+  if (watcherScriptInactivityTimeoutMs !== null) {
+    patch['lunettes-job-watcher'].script_inactivity_timeout_ms = watcherScriptInactivityTimeoutMs
+  }
+
+  if (watcherScriptTerminationGracePeriodMs !== null) {
+    patch['lunettes-job-watcher'].script_termination_grace_period_ms = watcherScriptTerminationGracePeriodMs
   }
 
   if (watcherTestscriptMode) {

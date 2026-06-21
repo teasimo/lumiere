@@ -55,6 +55,8 @@ Fuer Google-TTS per Secret-JSON optional:
 - `WATCHER_SOFTWARE`
 - `WATCHER_POLL_INTERVAL_MS`
 - `WATCHER_LEASE_SECONDS`
+- `WATCHER_SCRIPT_INACTIVITY_TIMEOUT_MS`
+- `WATCHER_SCRIPT_TERMINATION_GRACE_PERIOD_MS`
 - `WATCHER_WORKER_ID`
 - `WATCHER_TESTSCRIPT_MODE`
 - `WATCHER_VIDEO_PROFILE`
@@ -75,6 +77,8 @@ Wichtig:
 
 - `LUNETTES_BASE_URL` wird sowohl auf `scenario["lunettes-job-watcher"].base_url` als auch auf `scenario["test-script"].lunettes_api.base_url` gesetzt.
 - `WATCHER_SOFTWARE` wird auf `scenario["lunettes-job-watcher"].software` gesetzt und schraenkt Claim-Requests auf bestimmte Software-Werte ein, z. B. `Lunettes`.
+- `WATCHER_SCRIPT_INACTIVITY_TIMEOUT_MS` wird auf `scenario["lunettes-job-watcher"].script_inactivity_timeout_ms` gesetzt.
+- `WATCHER_SCRIPT_TERMINATION_GRACE_PERIOD_MS` wird auf `scenario["lunettes-job-watcher"].script_termination_grace_period_ms` gesetzt.
 - Dadurch verwenden Watcher und Testscript-Generator dieselbe Lunettes-API-Basis.
 - Mit `SCENARIO_CONFIG_PATCH_JSON` kannst du zusaetzlich beliebige Teile der zentralen Config deep-merge'n.
 

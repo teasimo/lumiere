@@ -33,8 +33,8 @@ const tailLimitChars = 12000
 const jobEventLogBatchSize = 5
 const jobEventLogLineMaxLength = 800
 const jobEventLogFlushIntervalMs = 60000
-const scriptInactivityTimeoutMs = 180000
-const scriptTerminationGracePeriodMs = 60000
+const defaultScriptInactivityTimeoutMs = 180000
+const defaultScriptTerminationGracePeriodMs = 60000
 
 class JobCanceledError extends Error {
   constructor(message = 'Job wurde serverseitig abgebrochen.') {
@@ -348,11 +348,11 @@ function terminateChildProcess(child, signal = 'SIGTERM') {
   }
 }
 
-function terminateChildProcessWithGrace(child) {
+function terminateChildProcessWithGrace(child, gracePeriodMs = defaultScriptTerminationGracePeriodMs) {
   terminateChildProcess(child, 'SIGTERM')
   setTimeout(() => {
     terminateChildProcess(child, 'SIGKILL')
-  }, scriptTerminationGracePeriodMs)
+  }, gracePeriodMs)
 }
 
 async function ensureDir(pathValue) {
@@ -535,7 +535,7 @@ async function runCommandWithLog({
         terminateChildProcess(child, 'SIGTERM')
         forceKillTimer = setTimeout(() => {
           terminateChildProcess(child, 'SIGKILL')
-        }, scriptTerminationGracePeriodMs)
+        }, context.scriptTerminationGracePeriodMs)
       }, inactivityTimeoutMs)
     }
 
@@ -722,7 +722,7 @@ async function runCommandWithLogAndEvents({ command, args, env, logPath, context
       onRemoteCancel: () => {
         remoteCanceled = true
         console.warn(`[job ${jobId}] Lunettes meldet job_canceled. Prozess wird beendet.`)
-        terminateChildProcessWithGrace(childRef)
+        terminateChildProcessWithGrace(childRef, context.scriptTerminationGracePeriodMs)
       },
     },
     jobId,
@@ -737,11 +737,11 @@ async function runCommandWithLogAndEvents({ command, args, env, logPath, context
     },
     onStdout: (text) => reporter.pushChunk(text, 'stdout'),
     onStderr: (text) => reporter.pushChunk(text, 'stderr'),
-    inactivityTimeoutMs: scriptInactivityTimeoutMs,
+    inactivityTimeoutMs: context.scriptInactivityTimeoutMs,
     onInactivityTimeout: () => {
-      console.error(`[job ${jobId}] Script-Inaktivitaet > ${Math.floor(scriptInactivityTimeoutMs / 1000)}s, Prozess wird mit SIGTERM beendet. Nach ${Math.floor(scriptTerminationGracePeriodMs / 1000)}s folgt SIGKILL, falls noetig.`)
+      console.error(`[job ${jobId}] Script-Inaktivitaet > ${Math.floor(context.scriptInactivityTimeoutMs / 1000)}s, Prozess wird mit SIGTERM beendet. Nach ${Math.floor(context.scriptTerminationGracePeriodMs / 1000)}s folgt SIGKILL, falls noetig.`)
       reporter.pushChunk(
-        `Watcher: Keine Konsolenausgabe seit ${Math.floor(scriptInactivityTimeoutMs / 1000)} Sekunden. Prozess wird mit SIGTERM beendet. Nach ${Math.floor(scriptTerminationGracePeriodMs / 1000)} Sekunden folgt SIGKILL, falls noetig.\n`,
+        `Watcher: Keine Konsolenausgabe seit ${Math.floor(context.scriptInactivityTimeoutMs / 1000)} Sekunden. Prozess wird mit SIGTERM beendet. Nach ${Math.floor(context.scriptTerminationGracePeriodMs / 1000)} Sekunden folgt SIGKILL, falls noetig.\n`,
         'stderr',
       )
     },
@@ -1271,7 +1271,7 @@ async function processJob(job, context) {
     if (commandResult.exitCode !== 0) {
       const errorMessage = commandResult.timedOut
         ? truncateText(
-          commandResult.outputTail || `Keine Konsolenausgabe fuer mehr als ${Math.floor(scriptInactivityTimeoutMs / 1000)} Sekunden.`,
+          commandResult.outputTail || `Keine Konsolenausgabe fuer mehr als ${Math.floor(context.scriptInactivityTimeoutMs / 1000)} Sekunden.`,
           1500,
         )
         : truncateText(
@@ -1386,6 +1386,8 @@ function buildWatcherContext(cliOptions) {
   const software = normalizeSoftwareFilters(cliOptions.software || watcherConfig.software)
   const leaseSeconds = clampNumber(cliOptions.leaseSeconds || watcherConfig.lease_seconds, 30, 86400, 14400)
   const pollIntervalMs = clampNumber(cliOptions.pollIntervalMs || watcherConfig.poll_interval_ms, 1000, 600000, 15000)
+  const scriptInactivityTimeoutMs = clampNumber(watcherConfig.script_inactivity_timeout_ms, 1000, 86400000, defaultScriptInactivityTimeoutMs)
+  const scriptTerminationGracePeriodMs = clampNumber(watcherConfig.script_termination_grace_period_ms, 1000, 86400000, defaultScriptTerminationGracePeriodMs)
   const videoProfile = resolveDefaultVideoProfile(videoScriptConfig, watcherConfig)
 
   return {
@@ -1397,6 +1399,8 @@ function buildWatcherContext(cliOptions) {
     software,
     leaseSeconds,
     pollIntervalMs,
+    scriptInactivityTimeoutMs,
+    scriptTerminationGracePeriodMs,
     videoProfile,
   }
 }
