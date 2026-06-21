@@ -10,6 +10,7 @@ RUN apt-get update \
     awscli \
     ffmpeg \
     unzip \
+    libxml2-utils \
     fonts-dejavu-core \
   && rm -rf /var/lib/apt/lists/*
 
