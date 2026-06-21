@@ -981,40 +981,108 @@ async function buildJobExecutionPlan(job, context, scenarioInput) {
 
   if (job.type === 'testscript') {
     return {
-      label: 'Testscript ausfuehren',
-      ...buildTestscriptCommand({
-        scenarioPath: scenarioInput.scenarioPath,
-        payload,
-        context,
-      }),
+      label: 'Testscript ausfuehren und publizieren',
+      steps: [
+        {
+          key: 'testscript',
+          label: 'Testscript ausfuehren',
+          continueOnFailure: true,
+          ...buildTestscriptCommand({
+            scenarioPath: scenarioInput.scenarioPath,
+            payload,
+            context,
+          }),
+        },
+        {
+          key: 'publish',
+          label: 'Confluence-Publish ausfuehren',
+          ...buildPublishCommand({
+            scenarioPath: scenarioInput.scenarioPath,
+            payload,
+          }),
+        },
+      ],
     }
   }
 
   if (job.type === 'videoscript') {
     return {
-      label: 'Videoscript rendern',
-      ...buildVideoscriptCommand({
-        scenarioPath: scenarioInput.scenarioPath,
-        payload,
-        context,
-      }),
+      label: 'Videoscript rendern und publizieren',
+      steps: [
+        {
+          key: 'videoscript',
+          label: 'Videoscript rendern',
+          ...buildVideoscriptCommand({
+            scenarioPath: scenarioInput.scenarioPath,
+            payload,
+            context,
+          }),
+        },
+        {
+          key: 'publish',
+          label: 'Confluence-Publish ausfuehren',
+          ...buildPublishCommand({
+            scenarioPath: scenarioInput.scenarioPath,
+            payload,
+          }),
+        },
+      ],
     }
   }
 
   if (job.type === 'publish') {
     return {
       label: 'Publish ausfuehren',
-      ...buildPublishCommand({
-        scenarioPath: scenarioInput.scenarioPath,
-        payload,
-      }),
+      steps: [
+        {
+          key: 'publish',
+          label: 'Publish ausfuehren',
+          ...buildPublishCommand({
+            scenarioPath: scenarioInput.scenarioPath,
+            payload,
+          }),
+        },
+      ],
     }
   }
 
   throw new Error(`Nicht unterstuetzter Job-Typ: ${job.type}`)
 }
 
-async function buildJobResult(job, scenarioInput, logPath) {
+function parsePublishOutput(outputTail, payload = {}) {
+  const text = String(outputTail || '')
+  const confluencePageId = text.match(/^Confluence-Seite aktualisiert:\s*(.+)$/m)?.[1]?.trim() || String(payload?.confluence_page_id || '').trim() || null
+  const title = text.match(/^Titel:\s*(.+)$/m)?.[1]?.trim() || null
+  const createdPageId = text.match(/^Lunettes-Rueckmeldung:\s*(.+)$/m)?.[1]?.trim() || null
+  const videoPath = text.match(/^Video:\s*(.+)$/m)?.[1]?.trim() || null
+  const rawVideoPath = text.match(/^Test-Rohvideo:\s*(.+)$/m)?.[1]?.trim() || null
+
+  return {
+    confluence_page_id: confluencePageId,
+    confluence_title: title,
+    created_page_id: createdPageId,
+    published_video: videoPath && videoPath !== 'keines verfuegbar, nur Szenarioscript veroeffentlicht' ? videoPath : null,
+    published_raw_video: rawVideoPath || null,
+  }
+}
+
+function buildExecutionSummary(stepResults, payload = {}) {
+  const steps = stepResults.map((stepResult) => ({
+    key: stepResult.key,
+    label: stepResult.label,
+    duration_ms: stepResult.durationMs,
+    exit_code: stepResult.exitCode,
+  }))
+
+  const publishStep = stepResults.find((entry) => entry.key === 'publish')
+
+  return {
+    steps,
+    publish: publishStep ? parsePublishOutput(publishStep.outputTail, payload) : null,
+  }
+}
+
+async function buildJobResult(job, scenarioInput, logPath, executionSummary = null) {
   const scenarioPathRelative = relative(workspaceRoot, scenarioInput.scenarioPath)
   const payload = job?.payload && typeof job.payload === 'object' ? job.payload : {}
   const scenarioId = sanitizeFileToken(payload?.szenario_id, scenarioInput.scenarioMeta.scenarioId || 'scenario')
@@ -1025,6 +1093,7 @@ async function buildJobResult(job, scenarioInput, logPath) {
     scenario_path: scenarioPathRelative,
     xml_source: scenarioInput.source,
     log_path: relative(workspaceRoot, logPath),
+    ...(executionSummary ? { execution: executionSummary } : {}),
   }
 
   if (job.type === 'testscript') {
@@ -1110,7 +1179,11 @@ async function processJob(job, context) {
         worker_id: context.workerId,
         scenario_path: scenarioPathRelative,
         xml_source: scenarioInput.source,
-        command: [plan.command, ...plan.args].join(' '),
+        steps: plan.steps.map((step) => ({
+          key: step.key,
+          label: step.label,
+          command: [step.command, ...step.args].join(' '),
+        })),
       },
     })
   } catch (error) {
@@ -1121,38 +1194,118 @@ async function processJob(job, context) {
   }
 
   console.log(`[job ${job.id}] ${plan.label}: ${scenarioPathRelative}`)
-  const commandResult = await runCommandWithLogAndEvents({
-    command: plan.command,
-    args: plan.args,
-    env: plan.env,
-    logPath,
-    context,
-    jobId: job.id,
-  })
+  const stepResults = []
+  let totalDurationMs = 0
+  let deferredFailure = null
 
-  if (commandResult.remoteCanceled) {
-    throw new JobCanceledError('Job wurde waehrend der Skriptausfuehrung serverseitig abgebrochen.')
-  }
+  for (let index = 0; index < plan.steps.length; index += 1) {
+    const step = plan.steps[index]
+    try {
+      await postJobEvent(context, job.id, {
+        eventType: 'progress',
+        status: 'running',
+        message: `${step.label} gestartet (${index + 1}/${plan.steps.length}).`,
+        data: {
+          step_key: step.key,
+          step_label: step.label,
+          step_index: index + 1,
+          step_count: plan.steps.length,
+          command: [step.command, ...step.args].join(' '),
+        },
+      })
+    } catch (error) {
+      if (isJobCanceledConflict(error)) {
+        throw new JobCanceledError('Job wurde vor dem Script-Start serverseitig abgebrochen.')
+      }
+      throw error
+    }
 
-  if (commandResult.exitCode !== 0) {
-    if (commandResult.timedOut) {
-      throw new Error(
-        truncateText(
+    const commandResult = await runCommandWithLogAndEvents({
+      command: step.command,
+      args: step.args,
+      env: step.env,
+      logPath,
+      context,
+      jobId: job.id,
+    })
+
+    if (commandResult.remoteCanceled) {
+      throw new JobCanceledError('Job wurde waehrend der Skriptausfuehrung serverseitig abgebrochen.')
+    }
+
+    totalDurationMs += commandResult.durationMs
+    stepResults.push({
+      key: step.key,
+      label: step.label,
+      continueOnFailure: step.continueOnFailure === true,
+      durationMs: commandResult.durationMs,
+      exitCode: commandResult.exitCode,
+      outputTail: commandResult.outputTail,
+      timedOut: commandResult.timedOut,
+    })
+
+    if (commandResult.exitCode !== 0) {
+      const errorMessage = commandResult.timedOut
+        ? truncateText(
           commandResult.outputTail || `Keine Konsolenausgabe fuer mehr als ${Math.floor(scriptInactivityTimeoutMs / 1000)} Sekunden.`,
           1500,
         )
-      )
+        : truncateText(
+          commandResult.outputTail || `${step.label} fehlgeschlagen (Exit-Code ${commandResult.exitCode}).`,
+          1500,
+        )
+
+      if (step.continueOnFailure === true) {
+        deferredFailure = {
+          stepKey: step.key,
+          stepLabel: step.label,
+          errorMessage,
+        }
+        await postJobEvent(context, job.id, {
+          eventType: 'progress',
+          status: 'running',
+          message: `${step.label} fehlgeschlagen, Folge-Schritte laufen trotzdem weiter.`,
+          data: {
+            step_key: step.key,
+            step_label: step.label,
+            step_index: index + 1,
+            step_count: plan.steps.length,
+            exit_code: commandResult.exitCode,
+          },
+          errorMessage,
+        })
+        continue
+      }
+
+      if (commandResult.timedOut) {
+        throw new Error(errorMessage)
+      }
+      throw new Error(errorMessage)
     }
-    throw new Error(
-      truncateText(
-        commandResult.outputTail || `${plan.label} fehlgeschlagen (Exit-Code ${commandResult.exitCode}).`,
-        1500,
-      )
-    )
   }
 
-  const result = await buildJobResult(job, scenarioInput, logPath)
-  result.duration_ms = commandResult.durationMs
+  const executionSummary = buildExecutionSummary(stepResults, job?.payload)
+  const result = await buildJobResult(job, scenarioInput, logPath, executionSummary)
+  result.duration_ms = totalDurationMs
+
+  if (deferredFailure) {
+    try {
+      await completeJob(context, job.id, {
+        status: 'failed',
+        message: `${deferredFailure.stepLabel} fehlgeschlagen; nachgelagerte Schritte wurden trotzdem ausgefuehrt.`,
+        result,
+        errorMessage: deferredFailure.errorMessage,
+      })
+    } catch (error) {
+      if (isJobCanceledConflict(error)) {
+        throw new JobCanceledError('Job wurde nach Skriptausfuehrung serverseitig abgebrochen.')
+      }
+      throw error
+    }
+
+    console.log(`[job ${job.id}] abgeschlossen mit Fehler in Schritt ${deferredFailure.stepKey}`)
+    return
+  }
 
   try {
     await completeJob(context, job.id, {

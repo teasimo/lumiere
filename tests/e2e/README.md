@@ -416,26 +416,30 @@ TTS-MP3s werden zentral unter `temp/tts` gecacht.
 
 Wenn sich der zu vertonende Inhalt nicht aendert, wird die vorhandene MP3 wiederverwendet und nicht neu erzeugt.
 
-### Google TTS vs. Fallback erkennen
+### Azure TTS erkennen
 
 Der Wrapper schreibt am Ende explizit, welche Engine genutzt wurde:
 
-- `TTS-Engine: google-cloud-text-to-speech`
-- `TTS-Engine: ffmpeg-flite`
+- `TTS-Engine: azure-speech-services`
 
-Wenn im ffmpeg-Log Eingaben wie `lavfi`/`flite=textfile=...:voice=slt` auftauchen, lief der Fallback `ffmpeg-flite`.
+Azure Speech Services wird genutzt, wenn beides gesetzt ist:
 
-Google TTS wird nur genutzt, wenn beides erfuellt ist:
-
-1. Paket installiert: `@google-cloud/text-to-speech`
-2. `GOOGLE_APPLICATION_CREDENTIALS` zeigt auf eine gueltige Service-Account-JSON
+1. `AZURE_SPEECHSERVICES_KEY` oder `AZURE_SPEECHSERVICES_TOKEN` ist gesetzt
+2. `AZURE_SPEECHSERVICES_ENDPOINT` zeigt auf den regionalen Endpoint, z. B. `https://westeurope.api.cognitive.microsoft.com/`
 
 Pruefkommandos:
 
 ```bash
-npm ls @google-cloud/text-to-speech
-echo "$GOOGLE_APPLICATION_CREDENTIALS"
-ls -l "$GOOGLE_APPLICATION_CREDENTIALS"
+echo "$AZURE_SPEECHSERVICES_KEY"
+echo "$AZURE_SPEECHSERVICES_TOKEN"
+echo "$AZURE_SPEECHSERVICES_ENDPOINT"
+npm run check:azure-speech
+```
+
+Optional kann der reine Endpoint-/Token-Test auch ohne Synthese aufgerufen werden:
+
+```bash
+npm run check:azure-speech -- --skip-synthesis
 ```
 
 ### 2. Manueller Zweischritt (falls benoetigt)

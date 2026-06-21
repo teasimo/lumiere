@@ -11,6 +11,14 @@ import {
   buildSemanticRemotionTsx,
   buildSemanticVideoPlan,
 } from './semantic-remotion.mjs'
+import {
+  buildAzureSpeechAuthContext,
+  buildAzureSpeechSsml as buildSharedAzureSpeechSsml,
+  DEFAULT_AZURE_TTS_OUTPUT_FORMAT,
+  DEFAULT_AZURE_TTS_VOICE,
+  normalizeAzureTtsVoiceName,
+  resolveAzureSpeechEndpoint,
+} from '../shared/azure-speech.mjs'
 import { getVideoScriptConfig, loadCentralConfig } from '../shared/central-config.mjs'
 import { buildScenarioOutputFolderName, buildScenarioOutputRoot, sanitizeScenarioOutputToken } from '../shared/scenario-output.mjs'
 import { appendFragmentSourceArg, normalizeFragmentSource, resolveFragmentSourceForScenario } from '../shared/lunettes-fragment-source.mjs'
@@ -34,8 +42,6 @@ const DEFAULT_SLOWMO_MS = 1000
 const DEFAULT_VIDEO_INTRO_PATH = resolve('neo', 'assets', 'video-intro.mp4')
 const SCENARIO_SCRIPT_XSD_PATH = resolve('schemas', 'szenarioscript.xsd')
 const SEMANTIC_VIDEO_PLAN_SCHEMA_PATH = resolve('schemas', 'lumiere-semantic-video-plan.schema.json')
-
-let googleTtsModulePromise
 
 function resolveChapterFadeInDurationMs(chapterDurationMs) {
   const durationSec = Math.max(1, Number(chapterDurationMs || 0) / 1000)
@@ -2505,28 +2511,22 @@ async function resolveNarrationsFromDemoDir(demoDir, options = {}) {
   return resolved
 }
 
-async function loadGoogleTtsModule() {
-  if (googleTtsModulePromise === undefined) {
-    googleTtsModulePromise = import('@google-cloud/text-to-speech')
-      .then((module) => module.default)
-      .catch(() => null)
+async function resolveTtsEngineName() {
+  if (buildAzureSpeechAuthContext() && resolveAzureSpeechEndpoint()) {
+    return 'azure-speech-services'
   }
-  return googleTtsModulePromise
+  throw new Error('Keine verfuegbare TTS-Engine gefunden. Bitte AZURE_SPEECHSERVICES_KEY oder AZURE_SPEECHSERVICES_TOKEN sowie AZURE_SPEECHSERVICES_ENDPOINT konfigurieren.')
 }
 
-async function resolveTtsEngineName() {
-  const textToSpeech = await loadGoogleTtsModule()
-  if (textToSpeech && process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-    return 'google-cloud-text-to-speech'
-  }
-  throw new Error('Keine verfuegbare TTS-Engine gefunden. Bitte Google TTS konfigurieren.')
+function normalizeTtsVoiceName(voice) {
+  return normalizeAzureTtsVoiceName(voice)
 }
 
 function getEffectiveTtsVoice({ narration, voiceOverride, engine }) {
-  if (engine !== 'google-cloud-text-to-speech') {
+  if (engine !== 'azure-speech-services') {
     throw new Error(`Nicht unterstuetzte TTS-Engine: ${engine}`)
   }
-  return voiceOverride || narration.voice || 'de-DE-Neural2-B'
+  return normalizeTtsVoiceName(voiceOverride || narration.voice || DEFAULT_AZURE_TTS_VOICE)
 }
 
 async function loadTtsCacheIndex() {
@@ -2564,28 +2564,36 @@ function buildTtsCacheKey(record) {
   return createHash('sha256').update(JSON.stringify(record)).digest('hex')
 }
 
-async function synthesizeWithGoogleTts(narration, outPath, voiceOverride = null) {
-  const textToSpeech = await loadGoogleTtsModule()
-  if (!textToSpeech) {
+async function synthesizeWithAzureSpeech(narration, outPath, voiceOverride = null) {
+  const authContext = buildAzureSpeechAuthContext()
+  const endpoint = resolveAzureSpeechEndpoint()
+  if (!authContext || !endpoint) {
     return false
   }
 
-  if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-    return false
-  }
-
-  const client = new textToSpeech.TextToSpeechClient()
-  const [response] = await client.synthesizeSpeech({
-    input: narration.ssml ? { ssml: narration.ssml } : { text: narration.text },
-    voice: {
-      languageCode: 'de-DE',
-      name: voiceOverride || narration.voice || 'de-DE-Neural2-B',
+  const voice = normalizeTtsVoiceName(voiceOverride || narration.voice || DEFAULT_AZURE_TTS_VOICE)
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      ...authContext.headers,
+      'Content-Type': 'application/ssml+xml',
+      'X-Microsoft-OutputFormat': DEFAULT_AZURE_TTS_OUTPUT_FORMAT,
+      'User-Agent': 'lumiere-scenario-test-generator',
     },
-    audioConfig: {
-      audioEncoding: 'MP3',
-    },
+    body: buildSharedAzureSpeechSsml({
+      text: narration.text || '',
+      ssml: narration.ssml || '',
+      voice,
+    }),
   })
-  await writeFile(outPath, response.audioContent)
+
+  if (!response.ok) {
+    const errorBody = await response.text().catch(() => '')
+    throw new Error(`Azure Speech Services TTS fehlgeschlagen (${response.status} ${response.statusText}): ${errorBody || 'keine Fehlerdetails'}`)
+  }
+
+  const audioContent = new Uint8Array(await response.arrayBuffer())
+  await writeFile(outPath, audioContent)
   return true
 }
 
@@ -2613,12 +2621,12 @@ async function synthesizeNarrations(demoDir, narrations, voiceOverride = null) {
     if (existingEntry && existingEntry.file === cacheFileName && existsSync(outPath)) {
       cacheHits += 1
     } else {
-      if (engine !== 'google-cloud-text-to-speech') {
+      if (engine !== 'azure-speech-services') {
         throw new Error(`Nicht unterstuetzte TTS-Engine: ${engine}`)
       }
-      const synthesizedWithGoogle = await synthesizeWithGoogleTts(narration, outPath, voiceOverride)
-      if (!synthesizedWithGoogle) {
-        throw new Error('Google-TTS wurde als Engine ausgewaehlt, konnte aber nicht ausgefuehrt werden.')
+      const synthesizedWithAzure = await synthesizeWithAzureSpeech(narration, outPath, voiceOverride)
+      if (!synthesizedWithAzure) {
+        throw new Error('Azure Speech Services wurde als Engine ausgewaehlt, konnte aber nicht ausgefuehrt werden.')
       }
       cacheMisses += 1
     }

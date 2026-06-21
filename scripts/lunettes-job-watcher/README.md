@@ -42,8 +42,8 @@ Optional:
 
 ## Verhalten
 
-- `testscript`: startet `scripts/test-script-generator/run-generated-testfile.mjs`, uebergibt `payload.szenario_id` als `--scenario-id`, erzwingt mit `--force` eine Neugenerierung, verwendet einen eigenen `--out-dir` pro Szenario unter `temp/lunettes-job-watcher/testfiles/<szenario_id>`, loest Fragmente ausschliesslich ueber die Lunettes-API auf und erzwingt immer `--mode video`
-- `videoscript`: startet `scripts/video-script-generator/remotion-render.mjs` und uebergibt `payload.szenario_id` als `--scenario-id`
+- `testscript`: startet zuerst `scripts/test-script-generator/run-generated-testfile.mjs`, uebergibt `payload.szenario_id` als `--scenario-id`, erzwingt mit `--force` eine Neugenerierung, verwendet einen eigenen `--out-dir` pro Szenario unter `temp/lunettes-job-watcher/testfiles/<szenario_id>`, loest Fragmente ausschliesslich ueber die Lunettes-API auf und erzwingt immer `--mode video`; im selben Job folgt danach automatisch `scripts/publish-to-confluence/publish-scenario-to-confluence.mjs`. Falls das Testscript fehlschlaegt, wird der Publish-Schritt trotzdem noch ausgefuehrt; der Gesamtjob endet danach weiterhin mit Status `failed`.
+- `videoscript`: startet zuerst `scripts/video-script-generator/remotion-render.mjs` und uebergibt `payload.szenario_id` als `--scenario-id`; im selben Job folgt danach automatisch `scripts/publish-to-confluence/publish-scenario-to-confluence.mjs`
 - `publish`: startet `scripts/publish-to-confluence/publish-scenario-to-confluence.mjs` und uebergibt `payload.szenario_id` sowie `payload.titel`; `payload.confluence_page_id` ist optional und bei fehlendem Wert wird die in `scenario.config.json > scenario["publish-to-confluence"].parent_page_id` konfigurierte Parent-Seite verwendet
 
 Beispiel fuer einen Publish-Payload:
@@ -62,7 +62,7 @@ Empfangene XMLs werden unter `neo/interactions/_lunettes-job-watcher/szenario-<s
 
 Die stdout/stderr-Ausgaben der gestarteten Skripte werden zusaetzlich als gebuendelte `progress`-Events an die Render-Job-API gesendet: spaetestens nach 5 Zeilen oder nach 60 Sekunden, auch wenn bis dahin weniger Zeilen angefallen sind.
 
-Bei erfolgreichem Abschluss eines `testscript`-Jobs sendet der Watcher im `complete`-Request zusaetzlich ein `result`-Objekt mit den wichtigsten Artefaktpfaden und der aufgeloesten Timeline des Testlaufs. Relevant sind insbesondere:
+Bei erfolgreichem Abschluss eines `testscript`-Jobs sendet der Watcher im `complete`-Request zusaetzlich ein `result`-Objekt mit den wichtigsten Artefaktpfaden und der aufgeloesten Timeline des Testlaufs. Da `testscript` und `videoscript` jetzt mehrstufig sind, enthaelt `result.execution` ausserdem die ausgefuehrten Schritte inklusive Laufzeiten und - falls ein Publish-Schritt gelaufen ist - die aus der Publish-Ausgabe extrahierten Confluence-Metadaten. Relevant sind insbesondere:
 
 - `run_root`: Run-Wurzel unter `output/<szenario_id>/runs/<runId>`
 - `artifacts_dir`: Artefaktordner des Playwright-Laufs

@@ -10,7 +10,7 @@
         "step_timeout_ms": 30000
       },
       "lunettes_api": {
-        "base_url": ""
+        "base_url": "https://exigences-h9c6b9fweraub4eg.swedencentral-01.azurewebsites.net/"
       },
       "video": {
         "wait_between_steps": 1000,
