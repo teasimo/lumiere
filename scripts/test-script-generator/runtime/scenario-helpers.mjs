@@ -343,6 +343,196 @@ export function createStepDomIdentifierLogger({ page, testInfo, enabled = false,
   return { capture, flush }
 }
 
+function buildTargetSelectorSummaryParts(target = {}, options = {}) {
+  const parts = []
+  const pushPart = (label, value, { regex = false } = {}) => {
+    if (value == null) {
+      return
+    }
+    const text = String(value).replace(/\s+/g, ' ').trim()
+    if (!text) {
+      return
+    }
+    parts.push(regex ? `${label}=/${text}/` : `${label}=${text}`)
+  }
+
+  const useRegex = parseTargetRegexFlag(target)
+  pushPart('testid', target.testid, { regex: useRegex })
+  pushPart('id', target.id)
+  pushPart('data-id', target['data-id'], { regex: useRegex })
+  pushPart('label', target.label, { regex: useRegex })
+  pushPart('aria-label', target['aria-label'], { regex: useRegex })
+  pushPart('role', target.role)
+  pushPart('text', target.text, { regex: useRegex })
+  pushPart('komponententyp', target.komponententyp)
+  pushPart('target-index', resolveTargetIndex(target))
+  if (options.genericSelector) {
+    pushPart('selector', options.genericSelector)
+  }
+  return parts
+}
+
+async function countLocatorMatches(locator, target = {}) {
+  const komponententypSelector = resolveKomponententypSelector(target?.komponententyp)
+  if (!komponententypSelector) {
+    return locator.count()
+  }
+
+  const matchIndexes = await locator.evaluateAll((elements, payload) => {
+    const indexes = []
+    elements.forEach((element, index) => {
+      try {
+        if (element.matches(payload.komponententypSelector) || element.querySelector(payload.komponententypSelector)) {
+          indexes.push(index)
+        }
+      } catch {
+        // Ignore invalid selector matches for this candidate.
+      }
+    })
+    return indexes
+  }, { komponententypSelector })
+
+  return matchIndexes.length
+}
+
+async function countAttributeMatches(page, attrName, value, target = {}, options = {}) {
+  const useRegex = parseTargetRegexFlag(target)
+  const preferredControl = options?.preferredControl || null
+  const komponententypSelector = resolveKomponententypSelector(target?.komponententyp)
+  const baseLocator = page.locator(`[${attrName}]`)
+  const matchIndexes = await baseLocator.evaluateAll((elements, payload) => {
+    const indexes = []
+    elements.forEach((element, index) => {
+      const attrValue = element.getAttribute(payload.attrName)
+      if (attrValue == null) {
+        return
+      }
+
+      const isMatch = payload.useRegex
+        ? new RegExp(String(payload.pattern ?? '')).test(attrValue)
+        : attrValue === String(payload.pattern ?? '')
+
+      if (!isMatch) {
+        return
+      }
+
+      const tagName = String(element?.tagName || '').toLowerCase()
+      const role = String(element?.getAttribute?.('role') || '').toLowerCase()
+      const className = String(element?.className || '')
+      const isContentEditable = Boolean(element?.isContentEditable)
+      const hasPopup = String(element?.getAttribute?.('aria-haspopup') || '').length > 0
+
+      let matchesPreferredControl = true
+      if (payload.preferredControl === 'fill') {
+        matchesPreferredControl =
+          tagName === 'input'
+          || tagName === 'textarea'
+          || tagName === 'select'
+          || isContentEditable
+          || role === 'textbox'
+          || Boolean(element?.querySelector?.('input, textarea, select, [contenteditable="true"], [role="textbox"]'))
+      } else if (payload.preferredControl === 'select') {
+        matchesPreferredControl =
+          tagName === 'select'
+          || role === 'combobox'
+          || className.includes('q-field__native')
+          || hasPopup
+          || Boolean(element?.querySelector?.('select, [role="combobox"], input.q-field__native, .q-field__native, input'))
+      }
+
+      let matchesKomponententyp = true
+      if (payload.komponententypSelector) {
+        try {
+          matchesKomponententyp =
+            element.matches(payload.komponententypSelector)
+            || Boolean(element.querySelector(payload.komponententypSelector))
+        } catch {
+          matchesKomponententyp = false
+        }
+      }
+
+      if (matchesPreferredControl && matchesKomponententyp) {
+        indexes.push(index)
+      }
+    })
+    return indexes
+  }, {
+    attrName,
+    pattern: String(value ?? ''),
+    useRegex,
+    preferredControl,
+    komponententypSelector,
+  })
+
+  return matchIndexes.length
+}
+
+export async function describeTargetAvailability(page, target = {}, options = {}) {
+  const textMode = String(options?.textMode || 'text')
+  const useRegex = parseTargetRegexFlag(target)
+  const preferredControl = options?.preferredControl || null
+  const genericSelector = String(options?.genericSelector || '').trim()
+  const selectors = buildTargetSelectorSummaryParts(target, { genericSelector })
+
+  let count = 0
+  let strategy = 'unknown'
+  if (target.testid) {
+    strategy = 'testid'
+    count = await countLocatorMatches(buildTestIdLocator(page, target.testid, target), target)
+  } else if (target.id) {
+    strategy = 'id'
+    count = await countLocatorMatches(page.locator(buildExactAttributeSelector('id', target.id)), target)
+  } else if (target['data-id']) {
+    strategy = 'data-id'
+    count = await countAttributeMatches(page, 'data-id', target['data-id'], target, { preferredControl })
+  } else if (target.label) {
+    strategy = 'label'
+    count = await countAttributeMatches(page, 'label', target.label, target, { preferredControl })
+  } else if (target['aria-label']) {
+    strategy = 'aria-label'
+    count = await countAttributeMatches(page, 'aria-label', target['aria-label'], target, { preferredControl })
+  } else if (target.role) {
+    strategy = 'role'
+    const roleName = String(target.role)
+    const locator = target.text
+      ? (
+          useRegex
+            ? page.getByRole(roleName, { name: buildRegexMatcher(target.text) })
+            : page.getByRole(roleName, { name: String(target.text), exact: true })
+        )
+      : page.getByRole(roleName)
+    count = await countLocatorMatches(locator, target)
+  } else if (target.text) {
+    strategy = textMode === 'label' ? 'label-text' : 'text'
+    const locator = textMode === 'label'
+      ? (
+          useRegex
+            ? page.getByLabel(buildRegexMatcher(target.text))
+            : page.getByLabel(String(target.text), { exact: true })
+        )
+      : (
+          useRegex
+            ? page.getByText(buildRegexMatcher(target.text))
+            : page.getByText(String(target.text), { exact: true })
+        )
+    count = await countLocatorMatches(locator, target)
+  } else if (genericSelector) {
+    strategy = 'generic-selector'
+    count = await countLocatorMatches(page.locator(genericSelector), target)
+  } else {
+    throw new Error('Target could not be resolved to a locator.')
+  }
+
+  return {
+    count,
+    strategy,
+    selectors,
+    preferredControl,
+    textMode,
+    targetIndex: resolveTargetIndex(target),
+  }
+}
+
 async function readValueFromElement(locator, elementInfo) {
   if (elementInfo.tagName === 'input' || elementInfo.tagName === 'textarea') {
     return locator.inputValue()
@@ -433,6 +623,150 @@ function parseTargetRegexFlag(target = {}) {
 
 function buildRegexMatcher(pattern) {
   return new RegExp(String(pattern ?? ''))
+}
+
+function buildTestIdLocator(page, rawTestId, target = {}) {
+  const matcher = parseTargetRegexFlag(target)
+    ? buildRegexMatcher(rawTestId)
+    : String(rawTestId)
+  return page.getByTestId(matcher)
+}
+
+function buildConditionCandidateSelector(target = {}) {
+  if (target.testid) {
+    return '[data-testid]'
+  }
+  if (target.id) {
+    return '[id]'
+  }
+  if (target['data-id']) {
+    return '[data-id]'
+  }
+  if (target['aria-label']) {
+    return '[aria-label]'
+  }
+  if (target.label) {
+    return '[label], [aria-label], input, textarea, select, [role="textbox"]'
+  }
+  if (target.role) {
+    return `[role=${JSON.stringify(String(target.role))}]`
+  }
+  return '*'
+}
+
+async function evaluateTargetVisibilityState(page, target = {}, options = {}) {
+  const payload = {
+    selector: buildConditionCandidateSelector(target),
+    useRegex: parseTargetRegexFlag(target),
+    textMode: String(options?.textMode || 'text'),
+    targetIndex: resolveTargetIndex(target),
+    target: {
+      testid: target.testid == null ? null : String(target.testid),
+      id: target.id == null ? null : String(target.id),
+      dataId: target['data-id'] == null ? null : String(target['data-id']),
+      label: target.label == null ? null : String(target.label),
+      ariaLabel: target['aria-label'] == null ? null : String(target['aria-label']),
+      role: target.role == null ? null : String(target.role),
+      text: target.text == null ? null : String(target.text),
+      komponententyp: target.komponententyp == null ? null : String(target.komponententyp),
+    },
+  }
+
+  return page.locator(payload.selector).evaluateAll((elements, config) => {
+    const normalize = (value) => String(value || '').replace(/\s+/g, ' ').trim()
+    const matchesText = (actualValue, expectedValue, useRegex) => {
+      if (expectedValue == null) {
+        return true
+      }
+      const actual = String(actualValue || '')
+      const expected = String(expectedValue || '')
+      return useRegex ? new RegExp(expected).test(actual) : actual === expected
+    }
+    const isVisible = (element) => {
+      const rect = element.getBoundingClientRect()
+      const style = window.getComputedStyle(element)
+      return Boolean(
+        rect
+        && rect.width > 0
+        && rect.height > 0
+        && style
+        && style.display !== 'none'
+        && style.visibility !== 'hidden'
+      )
+    }
+
+    const matchedIndexes = []
+    elements.forEach((element, index) => {
+      if (!matchesText(element.getAttribute('data-testid'), config.target.testid, config.useRegex)) {
+        return
+      }
+      if (!matchesText(element.id || '', config.target.id, config.useRegex)) {
+        return
+      }
+      if (!matchesText(element.getAttribute('data-id'), config.target.dataId, config.useRegex)) {
+        return
+      }
+      if (!matchesText(element.getAttribute('label'), config.target.label, config.useRegex)) {
+        return
+      }
+      if (!matchesText(element.getAttribute('aria-label'), config.target.ariaLabel, config.useRegex)) {
+        return
+      }
+      if (config.target.role != null && String(element.getAttribute('role') || '') !== config.target.role) {
+        return
+      }
+
+      if (config.target.text != null) {
+        const actualText = config.textMode === 'label'
+          ? normalize(element.getAttribute('aria-label') || element.getAttribute('label') || '')
+          : normalize(element.textContent || '')
+        const expectedText = config.textMode === 'label'
+          ? String(config.target.text)
+          : normalize(config.target.text)
+        if (!matchesText(actualText, expectedText, config.useRegex)) {
+          return
+        }
+      }
+
+      if (config.target.komponententyp) {
+        try {
+          if (!element.matches(config.target.komponententyp) && !element.querySelector(config.target.komponententyp)) {
+            return
+          }
+        } catch {
+          return
+        }
+      }
+
+      matchedIndexes.push(index)
+    })
+
+    if (matchedIndexes.length === 0) {
+      return { count: 0, visibleCount: 0 }
+    }
+
+    const requestedIndex = Number.isInteger(config.targetIndex) ? config.targetIndex : null
+    const effectiveIndexes = requestedIndex == null
+      ? matchedIndexes
+      : (() => {
+          const resolvedIndex = requestedIndex >= 0
+            ? requestedIndex
+            : matchedIndexes.length + requestedIndex
+          if (resolvedIndex < 0 || resolvedIndex >= matchedIndexes.length) {
+            return []
+          }
+          return [matchedIndexes[resolvedIndex]]
+        })()
+
+    const visibleCount = effectiveIndexes.reduce((count, index) => {
+      return count + (isVisible(elements[index]) ? 1 : 0)
+    }, 0)
+
+    return {
+      count: effectiveIndexes.length,
+      visibleCount,
+    }
+  }, payload)
 }
 
 function buildExactAttributeSelector(attrName, value) {
@@ -608,7 +942,7 @@ export async function resolveTargetLocator(page, target = {}, options = {}) {
   const preferredControl = options?.preferredControl || null
 
   if (target.testid) {
-    return pickLocatorWithKomponententyp(page.getByTestId(String(target.testid)), target, `data-testid=${JSON.stringify(String(target.testid))}`)
+    return pickLocatorWithKomponententyp(buildTestIdLocator(page, target.testid, target), target, `data-testid=${JSON.stringify(String(target.testid))}`)
   }
   if (target.id) {
     return pickLocatorWithKomponententyp(page.locator(buildExactAttributeSelector('id', target.id)), target, `id=${JSON.stringify(String(target.id))}`)
@@ -656,7 +990,7 @@ export async function resolveTargetLocator(page, target = {}, options = {}) {
 }
 
 export async function assertElementValueByTestId(page, testId, expectedValue, options = {}) {
-  const locator = await pickLocator(page.getByTestId(testId), options)
+  const locator = await pickLocator(buildTestIdLocator(page, testId, options), options)
   await assertComparableValue(locator, `data-testid="${testId}"`, expectedValue)
 }
 
@@ -698,12 +1032,20 @@ async function evaluateSingleCondition(page, rawCondition) {
     return currentUrl === expectedUrl
   }
 
+  if (state.visible === true || state.visible === false) {
+    const visibilityState = await evaluateTargetVisibilityState(page, target, { textMode: 'text' })
+    if (state.visible === true) {
+      return visibilityState.visibleCount > 0
+    }
+    return visibilityState.visibleCount === 0
+  }
+
   let locator = null
 
   if (parseTargetRegexFlag(target) || target.label || target['aria-label']) {
     locator = await resolveTargetLocator(page, target, { textMode: 'text' })
   } else if (target.testid) {
-    locator = await pickLocator(page.getByTestId(String(target.testid)), target)
+    locator = await pickLocator(buildTestIdLocator(page, target.testid, target), target)
   } else if (target.id) {
     locator = await pickLocator(page.locator(`[id=${JSON.stringify(String(target.id))}]`), target)
   } else if (target["data-id"]) {
@@ -718,23 +1060,8 @@ async function evaluateSingleCondition(page, rawCondition) {
     throw new Error("Condition target must contain one of target.testid, target.id, target.data-id, target.text, or target.url.")
   }
 
-  if (state.visible === true) {
-    if (waitMs > 0) {
-      try {
-        await locator.waitFor({ state: "visible", timeout: waitMs })
-        return true
-      } catch {
-        return false
-      }
-    }
-    return locator.isVisible()
-  }
-
   const count = await locator.count()
   if (count === 0) {
-    if (state.visible === false) {
-      return true
-    }
     return false
   }
 
@@ -748,11 +1075,6 @@ async function evaluateSingleCondition(page, rawCondition) {
         break
       }
     }
-  }
-
-  if (state.visible === false) {
-    const isVisible = await locator.isVisible().catch(() => false)
-    return !isVisible
   }
 
   if (state["value-present"] === true) {
@@ -898,8 +1220,9 @@ export async function scrollToLocator(page, locator, options = {}) {
   const maxSteps = Math.max(20, Number(options.maxSteps ?? 220) || 220)
   const focus = options.focus === true
   const onlyIfNotVisible = options.onlyIfNotVisible === true
+  const attachTimeoutMs = Math.max(250, Number(options.attachTimeoutMs ?? 2500) || 2500)
 
-  await locator.waitFor({ state: "attached" })
+  await locator.waitFor({ state: "attached", timeout: attachTimeoutMs })
 
   const scrollResult = await locator.evaluate(async (element, config) => {
     function delay(ms) {
@@ -980,8 +1303,13 @@ export async function scrollToLocator(page, locator, options = {}) {
   return { didScroll: Boolean(scrollResult.moved || !scrollResult.reachedTarget) }
 }
 
-export async function isLocatorInViewport(page, locator) {
-  await locator.waitFor({ state: "attached" })
+export async function isLocatorInViewport(page, locator, options = {}) {
+  const attachTimeoutMs = Math.max(250, Number(options.attachTimeoutMs ?? 2500) || 2500)
+  try {
+    await locator.waitFor({ state: "attached", timeout: attachTimeoutMs })
+  } catch {
+    return false
+  }
   return locator.evaluate((element) => {
     const rect = element.getBoundingClientRect()
     if (!rect || rect.width <= 0 || rect.height <= 0) {
@@ -1133,7 +1461,7 @@ async function applyDefaultSelectStrategy(page, locator, expectedValue, elementI
 }
 
 export async function applyFillValue(page, testId, value, options = {}) {
-  const locator = await pickLocator(page.getByTestId(testId), options)
+  const locator = await pickLocator(buildTestIdLocator(page, testId, options), options)
   return applyFillValueToLocator(page, locator, value, { targetLabel: `data-testid="${testId}"` }, options)
 }
 
@@ -1225,7 +1553,7 @@ export async function applyFillValueById(page, elementId, value, selectorType = 
 }
 
 export async function applySelectValue(page, testId, value, options = {}) {
-  const locator = await pickLocator(page.getByTestId(testId), options)
+  const locator = await pickLocator(buildTestIdLocator(page, testId, options), options)
   return applySelectValueToLocator(page, locator, value, { targetLabel: `data-testid="${testId}"` }, options)
 }
 
@@ -1317,7 +1645,7 @@ export async function applySelectValueById(page, elementId, value, selectorType 
 }
 
 export async function applyUploadValue(page, testId, value, options = {}) {
-  const rootLocator = await pickLocator(page.getByTestId(testId), options)
+  const rootLocator = await pickLocator(buildTestIdLocator(page, testId, options), options)
   return applyUploadValueToLocator(page, rootLocator, value, options)
 }
 
@@ -1342,7 +1670,7 @@ export async function applyUploadValueById(page, elementId, value, selectorType 
 }
 
 export async function applyAppendValue(page, testId, value, options = {}) {
-  const locator = await pickLocator(page.getByTestId(testId), options)
+  const locator = await pickLocator(buildTestIdLocator(page, testId, options), options)
   return applyAppendValueToLocator(page, locator, value, { targetLabel: `data-testid="${testId}"` }, options)
 }
 

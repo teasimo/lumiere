@@ -44,7 +44,7 @@ function resolveChapterFadeInDurationMs(chapterDurationMs) {
 
 function printUsage() {
   console.log(`Verwendung:
-  node scripts/video-script-generator/run-annotated-video.mjs --scenario-tts <scenario.xml> --profile=<profil> [output.mp4] [--tts-voice=<name>]
+  node scripts/video-script-generator/run-annotated-video.mjs --scenario-tts <scenario.xml> --profile=<profil> [output.mp4] [--software=<name>] [--tts-voice=<name>]
   node scripts/video-script-generator/run-annotated-video.mjs <testfile> [output.mp4] [--slowmo=<ms>] [--tts] [--tts-voice=<name>] [weitere Playwright-Argumente]
   node scripts/video-script-generator/run-annotated-video.mjs --rerender <testfile> [output.mp4] [--tts] [--tts-voice=<name>]
   node scripts/video-script-generator/run-annotated-video.mjs --annotate-only <trace.zip> <video.webm> <demoDir> [output.mp4] [--tts] [--tts-voice=<name>]
@@ -89,6 +89,7 @@ function parseArgs(argv) {
     let ttsVoice = null
     let scenarioId = null
     let fragmentSource = 'local'
+    let software = null
     let remotionPlanOnly = false
     const positionalArgs = []
     const unsupportedArgs = []
@@ -107,6 +108,10 @@ function parseArgs(argv) {
       }
       if (arg.startsWith('--fragment-source=')) {
         fragmentSource = arg.slice('--fragment-source='.length).trim()
+        continue
+      }
+      if (arg.startsWith('--software=')) {
+        software = arg.slice('--software='.length).trim()
         continue
       }
       if (arg === '--remotion-plan-only') {
@@ -150,6 +155,7 @@ function parseArgs(argv) {
       scenarioTts: true,
       scenarioPath,
       scenarioId,
+      software,
       fragmentSource: resolveFragmentSourceForScenario(fragmentSource, scenarioPath, 'lunettes'),
       profile,
       outputVideo,
@@ -3790,8 +3796,8 @@ async function exportScenarioTtsDebugArtifacts({
   return debugDir
 }
 
-async function runScenarioTtsMode({ scenarioPath, scenarioId, fragmentSource = 'local', profileName, outputVideo, ttsVoice = null, remotionPlanOnly = false }) {
-  const central = loadCentralConfig(process.cwd())
+async function runScenarioTtsMode({ scenarioPath, scenarioId, fragmentSource = 'local', profileName, outputVideo, ttsVoice = null, remotionPlanOnly = false, software = null }) {
+  const central = loadCentralConfig(process.cwd(), { software })
   const videoScriptConfig = getVideoScriptConfig(central.config)
   const videoIntroConfig = resolveVideoIntroConfig(videoScriptConfig)
   const videoRenderConfig = resolveVideoRenderConfig(videoScriptConfig)
@@ -4293,7 +4299,7 @@ async function runScenarioTtsMode({ scenarioPath, scenarioId, fragmentSource = '
 
 async function main() {
   const parsed = parseArgs(process.argv.slice(2))
-  const central = loadCentralConfig(process.cwd())
+  const central = loadCentralConfig(process.cwd(), { software: parsed.software })
   const videoScriptConfig = getVideoScriptConfig(central.config)
   const videoIntroConfig = resolveVideoIntroConfig(videoScriptConfig)
   const videoRenderConfig = resolveVideoRenderConfig(videoScriptConfig)
@@ -4307,6 +4313,7 @@ async function main() {
     await runScenarioTtsMode({
       scenarioPath: parsed.scenarioPath,
       scenarioId: parsed.scenarioId,
+      software: parsed.software,
       profileName: parsed.profile,
       outputVideo: parsed.outputVideo,
       ttsVoice: parsed.ttsVoice,

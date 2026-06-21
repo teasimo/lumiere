@@ -16,6 +16,7 @@ const SCENARIO_HELPER_EXPORT_NAMES = [
   'configureScenarioHelpers',
   'createScenarioTimelineRuntime',
   'createStepDomIdentifierLogger',
+  'describeTargetAvailability',
   'isLocatorInViewport',
   'pickIndexedLocator',
   'resolveTargetLocator',

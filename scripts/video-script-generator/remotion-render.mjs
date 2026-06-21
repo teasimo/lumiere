@@ -62,9 +62,11 @@ async function main() {
   const profileArg = argv.find((arg) => arg.startsWith('--profile='))
   const scenarioIdArg = argv.find((arg) => arg.startsWith('--scenario-id='))
   const fragmentSourceArg = argv.find((arg) => arg.startsWith('--fragment-source='))
+  const softwareArg = argv.find((arg) => arg.startsWith('--software='))
   const profileName = String(profileArg ? profileArg.slice('--profile='.length) : 'all-channels').trim() || 'all-channels'
   const scenarioPathArg = argv.find((arg) => !arg.startsWith('-'))
   const scenarioId = sanitizeScenarioOutputToken(scenarioIdArg ? scenarioIdArg.slice('--scenario-id='.length) : '', '')
+  const software = String(softwareArg ? softwareArg.slice('--software='.length) : '').trim()
   const fragmentSource = resolveFragmentSourceForScenario(
     fragmentSourceArg ? fragmentSourceArg.slice('--fragment-source='.length) : null,
     scenarioPathArg,
@@ -72,7 +74,7 @@ async function main() {
   )
   const wantsHelp = argv.includes('--help') || argv.includes('-h')
   if (!scenarioPathArg || wantsHelp) {
-    console.log('Usage: node scripts/video-script-generator/remotion-render.mjs <scenario.xml> --scenario-id=<id> [--profile=<name>] [--tts-voice=<name>] [--keep-temp-project]')
+    console.log('Usage: node scripts/video-script-generator/remotion-render.mjs <scenario.xml> --scenario-id=<id> [--software=<name>] [--profile=<name>] [--tts-voice=<name>] [--keep-temp-project]')
     process.exit(wantsHelp ? 0 : 1)
   }
   if (!scenarioId) {
@@ -98,6 +100,9 @@ async function main() {
     `--scenario-id=${scenarioId}`,
     `--profile=${profileName}`,
   ], fragmentSource)
+  if (software) {
+    bootstrapArgs.push(`--software=${software}`)
+  }
   if (ttsVoiceArg) {
     bootstrapArgs.push(ttsVoiceArg)
   }

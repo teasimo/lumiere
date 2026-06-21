@@ -10,7 +10,7 @@
         "step_timeout_ms": 30000
       },
       "lunettes_api": {
-        "base_url": "https://exigences-h9c6b9fweraub4eg.swedencentral-01.azurewebsites.net/"
+        "base_url": ""
       },
       "video": {
         "wait_between_steps": 1000,
@@ -26,7 +26,7 @@
     "video-script": {
       "intro": {
         "enabled": true,
-        "path": "neo/assets/video-intro-remotion-safe.mp4"
+        "path": "neo/assets/video-intro.mp4"
       },
       "render": {
         "fps": null,
@@ -89,6 +89,46 @@
           "narration_freeze_after_ms": 0
         }
       }]
+    },
+    "publish-to-confluence": {
+      "parent_page_id": ""
+    },
+    "lunettes-job-watcher": {
+      "base_url": "https://exigences-h9c6b9fweraub4eg.swedencentral-01.azurewebsites.net/"
+    },
+    "software": {
+      "NEO Niedersachsen": {
+        "test-script": {
+          "lunettes_api": {
+            "base_url": "https://exigences-h9c6b9fweraub4eg.swedencentral-01.azurewebsites.net/"
+          },
+          "video": {
+            "resolution": {
+              "width": 1880,
+              "height": 2000
+            }
+          }
+        },
+        "video-script": {
+          "intro": {
+            "enabled": true,
+            "path": "neo/assets/video-intro-remotion-safe.mp4"
+          }
+        },
+        "publish-to-confluence": {
+          "parent_page_id": "2133819393"
+        }
+      },
+      "Lunettes": {
+        "test-script": {
+          "lunettes_api": {
+            "base_url": "https://exigences-h9c6b9fweraub4eg.swedencentral-01.azurewebsites.net/"
+          }
+        },
+        "publish-to-confluence": {
+          "parent_page_id": "2133819393"
+        }
+      }
     }
   }
 }

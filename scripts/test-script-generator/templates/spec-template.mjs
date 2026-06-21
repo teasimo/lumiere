@@ -774,6 +774,126 @@ function buildScrollTargetSummary(target) {
   return parts.join(' | ')
 }
 
+function buildTargetSelectorDescriptions(target) {
+  if (!target || typeof target !== 'object') {
+    return []
+  }
+
+  const rawRegexFlag = target['selektor-regex']
+  const regexEnabled = rawRegexFlag === true || ['true', '1', 'yes'].includes(String(rawRegexFlag || '').trim().toLowerCase())
+  const fields = ['testid', 'data-id', 'id', 'role', 'text', 'label', 'aria-label', 'selektor-regex', 'treffer-index', 'komponententyp', 'click_child_selector']
+  const selectors = []
+
+  for (const field of fields) {
+    const value = target[field]
+    if (value == null) {
+      continue
+    }
+
+    const text = String(value).replace(/\s+/g, ' ').trim()
+    if (!text) {
+      continue
+    }
+
+    if (regexEnabled && ['testid', 'data-id', 'text', 'label', 'aria-label'].includes(field)) {
+      selectors.push(`${field}=/${text}/`)
+      continue
+    }
+
+    selectors.push(`${field}=${text}`)
+  }
+
+  const genericSelector = buildGenericTargetSelector(target)
+  if (genericSelector) {
+    selectors.push(`selector=${genericSelector}`)
+  }
+
+  return selectors
+}
+
+function buildTimelineStepDescription(step) {
+  const stepTitle = typeof step?.resolvedTitle === 'string' ? step.resolvedTitle.trim() : ''
+  const interaction = step?.interaction || {}
+  const selectors = buildTargetSelectorDescriptions(interaction.target)
+  if (interaction.type === 'search-and-select' && interaction.resultSelector) {
+    selectors.push(`resultSelector=${String(interaction.resultSelector).trim()}`)
+  }
+
+  if (selectors.length === 0) {
+    return stepTitle
+  }
+
+  return stepTitle
+    ? `${stepTitle} | selectors: ${selectors.join(' ; ')}`
+    : `selectors: ${selectors.join(' ; ')}`
+}
+
+function buildStepMeta(step) {
+  const interaction = step?.interaction || {}
+  const selectors = buildTargetSelectorDescriptions(interaction.target)
+  if (interaction.type === 'search-and-select' && interaction.resultSelector) {
+    selectors.push(`resultSelector=${String(interaction.resultSelector).trim()}`)
+  }
+
+  return {
+    interactionType: interaction.type ? String(interaction.type) : null,
+    selectors,
+  }
+}
+
+function buildTargetAvailabilityLogLines(step, options = {}) {
+  const interaction = step?.interaction || {}
+  const target = interaction.target || {}
+  const interactionType = String(interaction.type || '').trim().toLowerCase()
+  const stepRuntimeRef = options.stepRuntimeRef || '__scenarioStep'
+  const genericSelector = buildGenericTargetSelector(target)
+  const lines = []
+  const supportedInteractionTypes = new Set(['click', 'fill', 'append', 'select', 'upload', 'scroll', 'assert', 'search-and-select'])
+
+  if (!supportedInteractionTypes.has(interactionType) || !target || typeof target !== 'object' || Object.keys(target).length === 0) {
+    return lines
+  }
+
+  if (target.url && Object.keys(target).every((key) => key === 'url' || key === 'state')) {
+    return lines
+  }
+
+  const availabilityOptions = {}
+  if (genericSelector) {
+    availabilityOptions.genericSelector = genericSelector
+  }
+
+  if (interactionType === 'fill' || interactionType === 'append' || interactionType === 'upload') {
+    if (targetNeedsRuntimeLocator(target)) {
+      availabilityOptions.textMode = 'label'
+      availabilityOptions.preferredControl = 'fill'
+    }
+  } else if (interactionType === 'select') {
+    if (targetNeedsRuntimeLocator(target) || target['data-id'] || target.label || target['aria-label']) {
+      availabilityOptions.textMode = 'label'
+      availabilityOptions.preferredControl = 'select'
+    }
+  } else if (interactionType === 'scroll') {
+    if (targetNeedsRuntimeLocator(target) && !target.role) {
+      availabilityOptions.textMode = 'label'
+    }
+  }
+
+  lines.push(`const __scenarioTargetAvailability = await describeTargetAvailability(page, ${buildTargetObjectExpression(target, { runtimeVariables: true })}, ${toLiteral(availabilityOptions)}).catch((error) => ({ count: 0, strategy: 'unresolved', selectors: [], error: String(error && error.message ? error.message : error) }))`)
+  lines.push(`await ${stepRuntimeRef}.log("info", "target-availability", {`)
+  lines.push(`  interactionType: ${toLiteral(interactionType)},`)
+  lines.push('  availableCount: __scenarioTargetAvailability.count,')
+  lines.push('  selectorStrategy: __scenarioTargetAvailability.strategy,')
+  lines.push('  selectors: __scenarioTargetAvailability.selectors,')
+  lines.push('  preferredControl: __scenarioTargetAvailability.preferredControl ?? null,')
+  lines.push('  textMode: __scenarioTargetAvailability.textMode ?? null,')
+  lines.push('  targetIndex: __scenarioTargetAvailability.targetIndex ?? null,')
+  lines.push('  error: __scenarioTargetAvailability.error ?? null,')
+  lines.push('})')
+
+  return lines
+}
+
 function buildInjectedAutoScrollResolvedTitle(step) {
   const interaction = step?.interaction || {}
   const targetSummary = buildScrollTargetSummary(interaction.target)
@@ -1122,6 +1242,7 @@ function buildInteractionLines(step, options = {}) {
   const lines = []
   const scrollDelayRef = options.scrollDelayRef || '35'
   const smoothScrollEnabledRef = options.smoothScrollEnabledRef || 'false'
+  const stepRuntimeRef = options.stepRuntimeRef || '__scenarioStep'
 
   if (!interactionType) {
     if (hasChapter) {
@@ -1131,6 +1252,11 @@ function buildInteractionLines(step, options = {}) {
       return lines
     }
     throw new Error(`Step "${step.id}" defines neither an interaction nor a supported chapter block.`)
+  }
+
+  const targetAvailabilityLogLines = buildTargetAvailabilityLogLines(step, { stepRuntimeRef })
+  for (const line of targetAvailabilityLogLines) {
+    lines.push(line)
   }
 
   if (interactionType === 'open') {
@@ -1144,11 +1270,11 @@ function buildInteractionLines(step, options = {}) {
         `Step "${step.id}" has misplaced fill value. Put "value" under "interaction", not under "interaction.target".`
       )
     }
-    if (target.testid) {
-      lines.push(`await applyFillValue(page, ${toLiteral(String(target.testid))}, resolveRuntimeTemplateString(${toLiteral(String(interaction.value || ''))}, runtimeVariables), { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true, targetIndex: ${getTargetIndex(target) ?? 'undefined'} })`)
-    } else if (targetNeedsRuntimeLocator(target)) {
+    if (targetNeedsRuntimeLocator(target)) {
       lines.push(`const __scenarioFillLocator = await resolveTargetLocator(page, ${buildTargetObjectExpression(target, { runtimeVariables: true })}, { textMode: 'label', preferredControl: 'fill' })`)
       lines.push(`await applyFillValueToLocator(page, __scenarioFillLocator, resolveRuntimeTemplateString(${toLiteral(String(interaction.value || ''))}, runtimeVariables), { targetLabel: ${toLiteral(buildScrollTargetSummary(target) || '<target>')} }, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true })`)
+    } else if (target.testid) {
+      lines.push(`await applyFillValue(page, ${toLiteral(String(target.testid))}, resolveRuntimeTemplateString(${toLiteral(String(interaction.value || ''))}, runtimeVariables), { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true, targetIndex: ${getTargetIndex(target) ?? 'undefined'} })`)
     } else if (target.text) {
       // Fill by visible text (first matching input/textarea/select)
       lines.push(`await ${buildIndexedLocatorExpression(`page.getByLabel(resolveRuntimeTemplateString(${toLiteral(String(target.text))}, runtimeVariables), { exact: true })`, target)}.fill(resolveRuntimeTemplateString(${toLiteral(String(interaction.value || ''))}, runtimeVariables))`)
@@ -1171,11 +1297,11 @@ function buildInteractionLines(step, options = {}) {
         `Step "${step.id}" has misplaced append value. Put "value" under "interaction", not under "interaction.target".`
       )
     }
-    if (target.testid) {
-      lines.push(`await applyAppendValue(page, ${toLiteral(String(target.testid))}, ${toLiteral(String(interaction.value || ''))}, { targetIndex: ${getTargetIndex(target) ?? 'undefined'} })`)
-    } else if (targetNeedsRuntimeLocator(target)) {
+    if (targetNeedsRuntimeLocator(target)) {
       lines.push(`const __scenarioAppendLocator = await resolveTargetLocator(page, ${buildTargetObjectExpression(target, { runtimeVariables: true })}, { textMode: 'label', preferredControl: 'fill' })`)
       lines.push(`await applyAppendValueToLocator(page, __scenarioAppendLocator, ${toLiteral(String(interaction.value || ''))}, { targetLabel: ${toLiteral(buildScrollTargetSummary(target) || '<target>')} })`)
+    } else if (target.testid) {
+      lines.push(`await applyAppendValue(page, ${toLiteral(String(target.testid))}, ${toLiteral(String(interaction.value || ''))}, { targetIndex: ${getTargetIndex(target) ?? 'undefined'} })`)
     } else {
       const selectorType = target['data-id'] ? 'data-id' : 'id'
       const value = target['data-id'] || target.id
@@ -1228,11 +1354,11 @@ function buildInteractionLines(step, options = {}) {
         `Step "${step.id}" has misplaced select value. Put "value" under "interaction", not under "interaction.target".`
       )
     }
-    if (target.testid) {
-      lines.push(`await applySelectValue(page, ${toLiteral(String(target.testid))}, ${toLiteral(String(interaction.value || ''))}, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true, targetIndex: ${getTargetIndex(target) ?? 'undefined'} })`)
-    } else if (targetNeedsRuntimeLocator(target)) {
+    if (targetNeedsRuntimeLocator(target)) {
       lines.push(`const __scenarioSelectLocator = await resolveTargetLocator(page, ${buildTargetObjectExpression(target, { runtimeVariables: true })}, { textMode: 'label', preferredControl: 'select' })`)
       lines.push(`await applySelectValueToLocator(page, __scenarioSelectLocator, ${toLiteral(String(interaction.value || ''))}, { targetLabel: ${toLiteral(buildScrollTargetSummary(target) || '<target>')} }, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true })`)
+    } else if (target.testid) {
+      lines.push(`await applySelectValue(page, ${toLiteral(String(target.testid))}, ${toLiteral(String(interaction.value || ''))}, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true, targetIndex: ${getTargetIndex(target) ?? 'undefined'} })`)
     } else {
       const selectorType = target['data-id'] ? 'data-id' : 'id'
       const value = target['data-id'] || target.id
@@ -1246,11 +1372,11 @@ function buildInteractionLines(step, options = {}) {
       throw new Error(`Step "${step.id}" has interaction type "upload" but no file value. Use the XML text content to name the file in neo/assets.`)
     }
     const resolvedFileExpr = `resolveRuntimeTemplateString(${toLiteral(String(interaction.value || ''))}, runtimeVariables)`
-    if (target.testid) {
-      lines.push(`await applyUploadValue(page, ${toLiteral(String(target.testid))}, ${resolvedFileExpr}, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true, targetIndex: ${getTargetIndex(target) ?? 'undefined'} })`)
-    } else if (targetNeedsRuntimeLocator(target)) {
+    if (targetNeedsRuntimeLocator(target)) {
       lines.push(`const __scenarioUploadLocator = await resolveTargetLocator(page, ${buildTargetObjectExpression(target, { runtimeVariables: true })}, { textMode: 'label' })`)
       lines.push(`await applyUploadValueToLocator(page, __scenarioUploadLocator, ${resolvedFileExpr}, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true })`)
+    } else if (target.testid) {
+      lines.push(`await applyUploadValue(page, ${toLiteral(String(target.testid))}, ${resolvedFileExpr}, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true, targetIndex: ${getTargetIndex(target) ?? 'undefined'} })`)
     } else if (buildGenericTargetSelector(target)) {
       lines.push(`await applyUploadValueById(page, ${toLiteral(buildGenericTargetSelector(target))}, ${resolvedFileExpr}, "selector", { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true, targetIndex: ${getTargetIndex(target) ?? 'undefined'} })`)
     } else {
@@ -1322,11 +1448,11 @@ function buildInteractionLines(step, options = {}) {
       }
 
       const expectedValue = interaction.value ?? ''
-      if (target.testid) {
-        lines.push(`await assertElementValueByTestId(page, ${toLiteral(String(target.testid))}, ${toLiteral(String(expectedValue))}, { targetIndex: ${getTargetIndex(target) ?? 'undefined'} })`)
-      } else if (targetNeedsRuntimeLocator(target)) {
+      if (targetNeedsRuntimeLocator(target)) {
         lines.push(`const __scenarioAssertLocator = await resolveTargetLocator(page, ${buildTargetObjectExpression(target, { runtimeVariables: true })}, { textMode: 'label' })`)
         lines.push(`await assertElementValueByLocator(__scenarioAssertLocator, ${toLiteral(String(expectedValue))}, ${toLiteral(buildScrollTargetSummary(target) || '<target>')})`)
+      } else if (target.testid) {
+        lines.push(`await assertElementValueByTestId(page, ${toLiteral(String(target.testid))}, ${toLiteral(String(expectedValue))}, { targetIndex: ${getTargetIndex(target) ?? 'undefined'} })`)
       } else {
         const selectorType = target['data-id'] ? 'data-id' : 'id'
         const value = target['data-id'] || target.id
@@ -1462,12 +1588,8 @@ export function renderScenarioSpecTemplate({
       const interactionType = String(interaction.type || '').trim().toLowerCase()
       const stepId = typeof step?.resolvedId === 'string' ? step.resolvedId.trim() : '';
       const stepTitle = typeof step?.resolvedTitle === 'string' ? step.resolvedTitle.trim() : ''
-      const shouldGuardAutoScrollTimelineStep = interactionType === 'scroll'
-        && interaction.only_if_not_visible === true
-        && String(step?.id || '').trim().endsWith('__autoscroll')
-      const autoScrollLocatorExpression = shouldGuardAutoScrollTimelineStep
-        ? buildScrollLocatorExpression(interaction.target)
-        : null
+      const stepDescription = buildTimelineStepDescription(step)
+      const stepMeta = buildStepMeta(step)
 
       const conditionalCondition = step?.condition && typeof step.condition === 'object' ? step.condition : null
       const conditionalThenFlow = Array.isArray(step?.flow) ? step.flow : []
@@ -1480,10 +1602,7 @@ export function renderScenarioSpecTemplate({
       const ifConditions = toConditionList(step.if, 'if', stepId)
       const ifNotConditions = toConditionList(step.ifnot, 'ifnot', stepId)
 
-      if (shouldGuardAutoScrollTimelineStep) {
-        parts.push(`${indent}if (!(await isLocatorInViewport(page, ${autoScrollLocatorExpression}))) {`)
-      }
-      parts.push(`${indent}await timelineRuntime.runStep(${toLiteral(stepId)},${toLiteral(stepTitle)} ,async () => {`)
+      parts.push(`${indent}await timelineRuntime.runStep(${toLiteral(stepId)}, ${toLiteral(stepDescription)}, async (__scenarioStep) => {`)
       if (stepId || stepTitle) {
         parts.push(`${indent}  // ${[stepId, stepTitle].filter(Boolean).join(' | ')}`)
       }
@@ -1523,7 +1642,7 @@ export function renderScenarioSpecTemplate({
       } else if (nestedFlow.length > 0) {
         emitFlowSteps(nestedFlow, `${indent}  `)
       } else {
-        const interactionLines = buildInteractionLines(step, { scrollDelayRef: 'scrollDelayMs', smoothScrollEnabledRef: 'smoothScrollEnabled' })
+        const interactionLines = buildInteractionLines(step, { scrollDelayRef: 'scrollDelayMs', smoothScrollEnabledRef: 'smoothScrollEnabled', stepRuntimeRef: '__scenarioStep' })
         for (const line of interactionLines) {
           parts.push(`${indent}  ${line}`)
         }
@@ -1535,10 +1654,7 @@ export function renderScenarioSpecTemplate({
       }
 
       parts.push(`${indent}  await stepIdentifierLogger.capture(${toLiteral(stepId)}, "after")`)
-      parts.push(`${indent}})`)
-      if (shouldGuardAutoScrollTimelineStep) {
-        parts.push(`${indent}}`)
-      }
+      parts.push(`${indent}}, ${toLiteral(stepMeta)})`)
       parts.push('')
     }
   }

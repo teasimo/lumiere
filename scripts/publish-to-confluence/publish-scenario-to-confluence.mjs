@@ -6,6 +6,7 @@ import { basename, extname, join, resolve } from 'path'
 import { Buffer } from 'buffer'
 import { XMLParser } from 'fast-xml-parser'
 import { buildScenarioOutputFolderName } from '../shared/scenario-output.mjs'
+import { loadCentralConfig } from '../shared/central-config.mjs'
 
 const CREDENTIALS_ENV_NAME = 'CONFLUENCE_PUBLISHHELPER_CREDENTIALS'
 const MANAGED_BLOCK_START = '<!-- lumiere-publishhelper:start -->'
@@ -13,7 +14,7 @@ const MANAGED_BLOCK_END = '<!-- lumiere-publishhelper:end -->'
 
 function printUsage() {
   console.log(`Verwendung:
-  node scripts/publish-to-confluence/publish-scenario-to-confluence.mjs <szenarioscript.xml> <confluence-page-id> --scenario-id=<id>
+  node scripts/publish-to-confluence/publish-scenario-to-confluence.mjs <szenarioscript.xml> [confluence-page-id] --scenario-id=<id>
 
 Voraussetzungen:
   - Optional: Es existiert ein erfolgreich gerendertes Remotion-Video im output/.../videogenerator Ordner
@@ -237,6 +238,14 @@ function buildAuthorizationHeader({ email, apiToken }) {
   return `Basic ${Buffer.from(`${email}:${apiToken}`).toString('base64')}`
 }
 
+function buildBasicAuthHeader(username, password) {
+  return `Basic ${Buffer.from(`${username}:${password}`, 'utf8').toString('base64')}`
+}
+
+function normalizeBaseUrl(value) {
+  return String(value || '').trim().replace(/\/+$/, '')
+}
+
 function buildApiContext(credentials) {
   if (credentials.mode === 'cloud') {
     return {
@@ -268,7 +277,16 @@ async function confluenceJsonRequest(url, options, errorPrefix) {
     return null
   }
 
-  return response.json()
+  const responseText = await response.text()
+  if (!responseText.trim()) {
+    return null
+  }
+
+  try {
+    return JSON.parse(responseText)
+  } catch {
+    return responseText
+  }
 }
 
 async function fetchPage({ pageApiBaseUrl, authHeader, pageId }) {
@@ -284,6 +302,7 @@ async function fetchPage({ pageApiBaseUrl, authHeader, pageId }) {
   const title = String(page?.title || '').trim()
   const versionNumber = Number(page?.version?.number)
   const bodyStorage = String(page?.body?.storage?.value || '')
+  const spaceId = String(page?.spaceId || '').trim()
 
   if (!title || !Number.isFinite(versionNumber)) {
     throw new Error(`Confluence-Seite ${pageId} lieferte keine gueltigen Titel-/Versionsdaten.`)
@@ -293,7 +312,81 @@ async function fetchPage({ pageApiBaseUrl, authHeader, pageId }) {
     title,
     versionNumber,
     bodyStorage,
+    spaceId,
   }
+}
+
+async function createPage({ pageApiBaseUrl, authHeader, title, parentPageId, bodyStorage, spaceId }) {
+  const url = `${pageApiBaseUrl}/pages`
+  const page = await confluenceJsonRequest(url, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      Authorization: authHeader,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      status: 'current',
+      title,
+      parentId: String(parentPageId),
+      spaceId: String(spaceId),
+      body: {
+        representation: 'storage',
+        value: bodyStorage,
+      },
+    }),
+  }, `Confluence-Seite unter Parent ${parentPageId} konnte nicht angelegt werden`)
+
+  const pageId = String(page?.id || '').trim()
+  if (!pageId) {
+    throw new Error(`Neu angelegte Confluence-Seite unter Parent ${parentPageId} lieferte keine gueltige ID.`)
+  }
+
+  return {
+    pageId,
+  }
+}
+
+function readLunettesApiContext(software) {
+  const workspaceRoot = process.cwd()
+  const centralConfig = loadCentralConfig(workspaceRoot, { software })
+  const testScriptConfig = centralConfig?.config?.['test-script'] || {}
+  const watcherConfig = centralConfig?.config?.['lunettes-job-watcher'] || {}
+  const baseUrl = watcherConfig?.base_url
+    ? normalizeBaseUrl(watcherConfig.base_url)
+    : normalizeBaseUrl(testScriptConfig?.lunettes_api?.base_url)
+
+  if (!baseUrl) {
+    throw new Error('Lunettes API base_url fehlt. Erwartet fuer die Rueckmeldung: scenario.config.json > scenario["lunettes-job-watcher"].base_url oder scenario["test-script"].lunettes_api.base_url')
+  }
+
+  const username = String(process.env.LUNETTES_API_USERNAME || '').trim()
+  const password = String(process.env.LUNETTES_API_PASSWORD || '')
+  if (!username || !password) {
+    throw new Error('LUNETTES_API_USERNAME oder LUNETTES_API_PASSWORD fehlt fuer die Lunettes-Rueckmeldung der confluence_page_id.')
+  }
+
+  return {
+    baseUrl,
+    authHeader: buildBasicAuthHeader(username, password),
+  }
+}
+
+async function notifyLunettesAboutConfluencePage({ scenarioId, confluencePageId, software }) {
+  const context = readLunettesApiContext(software)
+  const url = `${context.baseUrl}/api/anfo/szenario/${encodeURIComponent(String(scenarioId))}/confluence-page-id`
+
+  await confluenceJsonRequest(url, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      Authorization: context.authHeader,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      confluence_page_id: String(confluencePageId),
+    }),
+  }, `Lunettes-Rueckmeldung fuer Confluence-Seite ${confluencePageId} fehlgeschlagen`)
 }
 
 async function uploadAttachment({ attachmentApiBaseUrl, authHeader, pageId, attachmentName, videoPath }) {
@@ -376,12 +469,28 @@ async function updatePageBody({ pageApiBaseUrl, authHeader, pageId, title, curre
   }, `Confluence-Seite ${pageId} konnte nicht aktualisiert werden`)
 }
 
-function parseConfluencePageId(value) {
+function parseOptionalConfluencePageId(value) {
   const pageId = String(value || '').trim()
-  if (!pageId) {
-    throw new Error('Confluence-Page-ID fehlt. Erwartet als zweiter CLI-Parameter.')
-  }
   return pageId
+}
+
+function parseCliArgs(argv) {
+  const positionalArgs = []
+  const optionArgs = []
+
+  for (const token of argv) {
+    if (token.startsWith('--')) {
+      optionArgs.push(token)
+    } else {
+      positionalArgs.push(token)
+    }
+  }
+
+  return {
+    scenarioPath: positionalArgs[0] || '',
+    pageIdArg: positionalArgs[1] || '',
+    optionArgs,
+  }
 }
 
 function parseRequiredScenarioId(argv) {
@@ -401,17 +510,34 @@ function parseOptionalScenarioTitle(argv) {
   return String(token ? token.slice('--scenario-title='.length) : '').trim()
 }
 
+function parseOptionalSoftware(argv) {
+  const token = argv.find((entry) => entry.startsWith('--software='))
+  return String(token ? token.slice('--software='.length) : '').trim()
+}
+
+function readPublishConfig(software) {
+  const workspaceRoot = process.cwd()
+  const centralConfig = loadCentralConfig(workspaceRoot, { software })
+  const publishConfig = centralConfig?.config?.['publish-to-confluence']
+
+  return {
+    parentPageId: String(publishConfig?.parent_page_id || '').trim(),
+    sourcePathRelative: centralConfig?.sourcePathRelative || 'scenario.config.json',
+  }
+}
+
 function buildConfluencePageTitle({ scenarioTitle, scenarioId }) {
   return `[Szenario] ${String(scenarioTitle || scenarioId || '').trim()}`
 }
 
 async function main() {
   const argv = process.argv.slice(2)
-  const scenarioPath = argv[0]
-  const pageIdArg = argv[1]
-  if (!scenarioPath || scenarioPath === '--help' || scenarioPath === '-h') {
+  const showHelp = argv.includes('--help') || argv.includes('-h')
+  const cliArgs = parseCliArgs(argv)
+  const scenarioPath = cliArgs.scenarioPath
+  if (showHelp || !scenarioPath) {
     printUsage()
-    process.exit(scenarioPath ? 0 : 1)
+    process.exit(showHelp ? 0 : 1)
   }
 
   const scenarioAbsolutePath = resolve(scenarioPath)
@@ -426,14 +552,55 @@ async function main() {
   try {
     const credentials = parseCredentialsFromEnv()
     const apiContext = buildApiContext(credentials)
-    const pageId = parseConfluencePageId(pageIdArg)
-    const scenarioId = parseRequiredScenarioId(argv)
-    const scenarioTitleOverride = parseOptionalScenarioTitle(argv)
+    const pageIdFromCli = parseOptionalConfluencePageId(cliArgs.pageIdArg)
+    const scenarioId = parseRequiredScenarioId(cliArgs.optionArgs)
+    const scenarioTitleOverride = parseOptionalScenarioTitle(cliArgs.optionArgs)
+    const software = parseOptionalSoftware(cliArgs.optionArgs)
     const scenarioScriptRaw = await readFile(scenarioAbsolutePath, 'utf8')
     const scenario = parseScenarioScript(scenarioScriptRaw)
+    const publishConfig = readPublishConfig(software)
+    const nextTitle = buildConfluencePageTitle({
+      scenarioTitle: scenarioTitleOverride || scenario.title,
+      scenarioId,
+    })
+    let pageId = pageIdFromCli
+    let createdPageId = null
 
     const latestRender = await findLatestSuccessfulRender({ scenarioId }).catch(() => null)
     const latestRawVideo = await findLatestTestRawVideo({ scenarioId }).catch(() => null)
+    const initialManagedBlock = buildManagedStorageBlock({
+      attachmentName: null,
+      rawAttachmentName: null,
+      scenarioScriptRaw,
+    })
+
+    if (!pageId) {
+      const parentPageId = publishConfig.parentPageId
+      if (!parentPageId) {
+        throw new Error(`Confluence-Page-ID fehlt. Setze entweder den zweiten CLI-Parameter oder ${publishConfig.sourcePathRelative} > scenario["publish-to-confluence"].parent_page_id.`)
+      }
+
+      const parentPage = await fetchPage({
+        pageApiBaseUrl: apiContext.pageApiBaseUrl,
+        authHeader: apiContext.authHeader,
+        pageId: parentPageId,
+      })
+      if (!parentPage.spaceId) {
+        throw new Error(`Parent-Confluence-Seite ${parentPageId} lieferte keine spaceId. Eine Unterseite kann nicht angelegt werden.`)
+      }
+
+      const createdPage = await createPage({
+        pageApiBaseUrl: apiContext.pageApiBaseUrl,
+        authHeader: apiContext.authHeader,
+        title: nextTitle,
+        parentPageId,
+        spaceId: parentPage.spaceId,
+        bodyStorage: initialManagedBlock,
+      })
+      pageId = createdPage.pageId
+      createdPageId = createdPage.pageId
+    }
+
     const page = await fetchPage({
       pageApiBaseUrl: apiContext.pageApiBaseUrl,
       authHeader: apiContext.authHeader,
@@ -470,10 +637,6 @@ async function main() {
       scenarioScriptRaw,
     })
     const nextBody = mergeManagedBlock(page.bodyStorage, managedBlock)
-    const nextTitle = buildConfluencePageTitle({
-      scenarioTitle: scenarioTitleOverride || scenario.title,
-      scenarioId,
-    })
 
     await updatePageBody({
       pageApiBaseUrl: apiContext.pageApiBaseUrl,
@@ -484,9 +647,21 @@ async function main() {
       bodyStorage: nextBody,
     })
 
+    if (createdPageId) {
+      await notifyLunettesAboutConfluencePage({
+        scenarioId,
+        confluencePageId: createdPageId,
+        software,
+      })
+    }
+
     console.log(`Confluence-Seite aktualisiert: ${pageId}`)
     console.log(`Titel: ${nextTitle}`)
     console.log(`Auth-Modus: ${apiContext.authModeLabel}`)
+    if (createdPageId) {
+      console.log(`Neu angelegte Seite unter Parent: ${publishConfig.parentPageId}`)
+      console.log(`Lunettes-Rueckmeldung: ${createdPageId}`)
+    }
     if (latestRender?.videoPath && attachmentName) {
       console.log(`Video: ${latestRender.videoPath}`)
       console.log(`Anhang: ${attachmentName}`)

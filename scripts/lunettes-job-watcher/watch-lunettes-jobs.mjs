@@ -29,7 +29,6 @@ const xmlParser = new XMLParser({
   trimValues: true,
 })
 const allowedTypes = new Set(['testscript', 'videoscript', 'publish'])
-const allowedTestModes = new Set(['check', 'video'])
 const tailLimitChars = 12000
 const jobEventLogBatchSize = 5
 const jobEventLogLineMaxLength = 800
@@ -60,7 +59,6 @@ Config:
     - worker_id
     - lease_seconds
     - poll_interval_ms
-    - testscript_mode
     - video_profile
 `)
 }
@@ -777,6 +775,62 @@ async function findLatestScenarioRunMeta(scenarioId) {
   return candidates[0] || null
 }
 
+async function resolveScenarioTimelineForRunMeta(latestRun) {
+  const artifactsRelative = String(latestRun?.parsed?.exportedTo?.artifactsRelative || '').trim()
+  if (!artifactsRelative) {
+    return {
+      timeline_path: null,
+      timeline_report: null,
+    }
+  }
+
+  const artifactsAbsolutePath = resolve(workspaceRoot, artifactsRelative)
+  const directTimelinePath = join(artifactsAbsolutePath, 'scenario-step-timeline.json')
+  let timelineAbsolutePath = directTimelinePath
+
+  if (!existsSync(timelineAbsolutePath)) {
+    const entries = await readdir(artifactsAbsolutePath, { withFileTypes: true }).catch(() => [])
+    const candidatePaths = []
+    for (const entry of entries) {
+      if (!entry.isDirectory()) {
+        continue
+      }
+      const candidatePath = join(artifactsAbsolutePath, entry.name, 'scenario-step-timeline.json')
+      if (!existsSync(candidatePath)) {
+        continue
+      }
+      const fileStat = await stat(candidatePath).catch(() => null)
+      candidatePaths.push({
+        path: candidatePath,
+        mtimeMs: Number(fileStat?.mtimeMs || 0),
+      })
+    }
+
+    candidatePaths.sort((left, right) => right.mtimeMs - left.mtimeMs)
+    timelineAbsolutePath = candidatePaths[0]?.path || ''
+  }
+
+  if (!timelineAbsolutePath || !existsSync(timelineAbsolutePath)) {
+    return {
+      timeline_path: null,
+      timeline_report: null,
+    }
+  }
+
+  try {
+    const raw = await readFile(timelineAbsolutePath, 'utf8')
+    return {
+      timeline_path: relative(workspaceRoot, timelineAbsolutePath),
+      timeline_report: JSON.parse(raw),
+    }
+  } catch {
+    return {
+      timeline_path: relative(workspaceRoot, timelineAbsolutePath),
+      timeline_report: null,
+    }
+  }
+}
+
 async function findLatestVideoRenderMeta(scenarioId) {
   const folderName = buildScenarioOutputFolderName({ scenarioId, fallbackName: 'scenario' })
   const ttsDir = resolve(workspaceRoot, 'output', folderName, 'videogenerator')
@@ -828,13 +882,14 @@ function buildTestscriptCommand({ scenarioPath, payload, context }) {
     outDir,
     '--force',
     '--mode',
-    allowedTestModes.has(String(payload?.mode || '').trim())
-      ? String(payload.mode).trim()
-      : context.testscriptMode,
+    'video',
   ], 'lunettes')
 
   if (payload?.verbose === true) {
     args.push('--verbose')
+  }
+  if (typeof payload?.software === 'string' && payload.software.trim()) {
+    args.push(`--software=${payload.software.trim()}`)
   }
 
   if (Array.isArray(payload?.playwright_args) && payload.playwright_args.length > 0) {
@@ -871,6 +926,9 @@ function buildVideoscriptCommand({ scenarioPath, payload, context }) {
   if (payload?.verbose === true) {
     args.push('--verbose')
   }
+  if (typeof payload?.software === 'string' && payload.software.trim()) {
+    args.push(`--software=${payload.software.trim()}`)
+  }
 
   return {
     command: 'node',
@@ -886,22 +944,32 @@ function buildPublishCommand({ scenarioPath, payload }) {
   const scenarioId = sanitizeFileToken(payload?.szenario_id, '')
   const confluencePageId = String(payload?.confluence_page_id || '').trim()
   const scenarioTitle = String(payload?.titel || '').trim()
+  const software = String(payload?.software || '').trim()
   if (!scenarioId) {
     throw new Error('Publish-Job enthaelt keine szenario_id im Payload.')
   }
-  if (!confluencePageId) {
-    throw new Error('Publish-Job enthaelt keine confluence_page_id im Payload.')
+
+  const args = [
+    'scripts/publish-to-confluence/publish-scenario-to-confluence.mjs',
+    scenarioPathArg,
+  ]
+
+  if (confluencePageId) {
+    args.push(confluencePageId)
+  }
+
+  args.push(
+    `--scenario-id=${scenarioId}`,
+    `--scenario-title=${scenarioTitle}`,
+  )
+
+  if (software) {
+    args.push(`--software=${software}`)
   }
 
   return {
     command: 'node',
-    args: [
-      'scripts/publish-to-confluence/publish-scenario-to-confluence.mjs',
-      scenarioPathArg,
-      confluencePageId,
-      `--scenario-id=${scenarioId}`,
-      `--scenario-title=${scenarioTitle}`,
-    ],
+    args,
     env: {
       ...process.env,
     },
@@ -961,6 +1029,7 @@ async function buildJobResult(job, scenarioInput, logPath) {
 
   if (job.type === 'testscript') {
     const latestRun = await findLatestScenarioRunMeta(scenarioId)
+    const timelineResult = await resolveScenarioTimelineForRunMeta(latestRun)
     return {
       ...baseResult,
       ...(latestRun?.parsed?.exportedTo
@@ -971,6 +1040,8 @@ async function buildJobResult(job, scenarioInput, logPath) {
         }
         : {}),
       run_meta_path: latestRun ? relative(workspaceRoot, latestRun.runMetaPath) : null,
+      scenario_step_timeline_path: timelineResult.timeline_path,
+      scenario_step_timeline: timelineResult.timeline_report,
     }
   }
 
@@ -989,6 +1060,37 @@ async function buildJobResult(job, scenarioInput, logPath) {
   }
 
   return baseResult
+}
+
+async function buildFailureResult(job, logPath) {
+  const payload = job?.payload && typeof job.payload === 'object' ? job.payload : {}
+  const scenarioId = sanitizeFileToken(payload?.szenario_id || job?.szenario_id, 'scenario')
+  const result = {
+    job_type: job?.type || null,
+    szenario_id: job?.szenario_id ?? null,
+    payload_szenario_id: scenarioId,
+    log_path: existsSync(logPath) ? relative(workspaceRoot, logPath) : null,
+  }
+
+  if (job?.type !== 'testscript') {
+    return result
+  }
+
+  const latestRun = await findLatestScenarioRunMeta(scenarioId)
+  const timelineResult = await resolveScenarioTimelineForRunMeta(latestRun)
+  return {
+    ...result,
+    ...(latestRun?.parsed?.exportedTo
+      ? {
+        run_root: latestRun.parsed.exportedTo.rootRelative || null,
+        artifacts_dir: latestRun.parsed.exportedTo.artifactsRelative || null,
+        generated_dir: latestRun.parsed.exportedTo.generatedRelative || null,
+      }
+      : {}),
+    run_meta_path: latestRun ? relative(workspaceRoot, latestRun.runMetaPath) : null,
+    scenario_step_timeline_path: timelineResult.timeline_path,
+    scenario_step_timeline: timelineResult.timeline_report,
+  }
 }
 
 async function processJob(job, context) {
@@ -1106,8 +1208,6 @@ function buildWatcherContext(cliOptions) {
   const types = normalizeTypes(cliOptions.types || watcherConfig.types)
   const leaseSeconds = clampNumber(cliOptions.leaseSeconds || watcherConfig.lease_seconds, 30, 86400, 14400)
   const pollIntervalMs = clampNumber(cliOptions.pollIntervalMs || watcherConfig.poll_interval_ms, 1000, 600000, 15000)
-  const testscriptModeRaw = String(watcherConfig.testscript_mode || 'video').trim().toLowerCase()
-  const testscriptMode = allowedTestModes.has(testscriptModeRaw) ? testscriptModeRaw : 'video'
   const videoProfile = resolveDefaultVideoProfile(videoScriptConfig, watcherConfig)
 
   return {
@@ -1118,7 +1218,6 @@ function buildWatcherContext(cliOptions) {
     types,
     leaseSeconds,
     pollIntervalMs,
-    testscriptMode,
     videoProfile,
   }
 }
@@ -1174,14 +1273,15 @@ async function main() {
       const errorMessage = truncateText(error?.message || String(error), 1500) || 'Unbekannter Fehler'
       console.error(`[job ${job.id}] fehlgeschlagen: ${errorMessage}`)
       try {
+        const failureResult = await buildFailureResult(job, logPath).catch(() => ({
+          job_type: job.type,
+          szenario_id: job.szenario_id,
+          log_path: existsSync(logPath) ? relative(workspaceRoot, logPath) : null,
+        }))
         await completeJob(context, job.id, {
           status: 'failed',
           message: `Job fehlgeschlagen: ${errorMessage}`,
-          result: {
-            job_type: job.type,
-            szenario_id: job.szenario_id,
-            log_path: existsSync(logPath) ? relative(workspaceRoot, logPath) : null,
-          },
+          result: failureResult,
           errorMessage,
         })
       } catch (completeError) {

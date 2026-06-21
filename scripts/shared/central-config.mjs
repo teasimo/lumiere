@@ -60,6 +60,9 @@ const DEFAULTS = {
     },
     tts: [],
   },
+  'publish-to-confluence': {
+    parent_page_id: '',
+  },
 }
 
 function isPlainObject(value) {
@@ -87,28 +90,79 @@ function deepMerge(base, override) {
   return out
 }
 
-export function loadCentralConfig(workspaceRoot) {
-  const configAbsolutePath = resolve(workspaceRoot, 'scenario.config.json')
-  if (!existsSync(configAbsolutePath)) {
+export function normalizeSoftwareConfigToken(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+function parseConfigFile(workspaceRoot, configAbsolutePath) {
+  const raw = readFileSync(configAbsolutePath, 'utf8')
+  const parsed = JSON.parse(raw)
+  const payload = isPlainObject(parsed.scenario) ? parsed.scenario : parsed
+  return {
+    payload: normalizeScenarioConfigPayload(payload),
+    sourcePathRelative: relative(workspaceRoot, configAbsolutePath),
+  }
+}
+
+function extractSoftwareConfigOverride(payload, software) {
+  const normalizedSoftware = normalizeSoftwareConfigToken(software)
+  if (!normalizedSoftware || !isPlainObject(payload?.software)) {
+    return {}
+  }
+
+  const softwareEntries = payload.software
+  const matchingKey = Object.keys(softwareEntries).find((key) => normalizeSoftwareConfigToken(key) === normalizedSoftware)
+  if (!matchingKey || !isPlainObject(softwareEntries[matchingKey])) {
+    return {}
+  }
+
+  return normalizeScenarioConfigPayload(softwareEntries[matchingKey])
+}
+
+export function loadCentralConfig(workspaceRoot, { software = null } = {}) {
+  const normalizedSoftware = normalizeSoftwareConfigToken(software)
+  const softwareConfigAbsolutePath = normalizedSoftware
+    ? resolve(workspaceRoot, `scenario.config.${normalizedSoftware}.json`)
+    : null
+  const defaultConfigAbsolutePath = resolve(workspaceRoot, 'scenario.config.json')
+  const hasDefaultConfig = existsSync(defaultConfigAbsolutePath)
+  const hasSoftwareConfig = Boolean(softwareConfigAbsolutePath && existsSync(softwareConfigAbsolutePath))
+  const preferredConfigAbsolutePath = hasSoftwareConfig ? softwareConfigAbsolutePath : defaultConfigAbsolutePath
+
+  if (!existsSync(preferredConfigAbsolutePath)) {
     return {
       config: DEFAULTS,
-      sourcePathRelative: relative(workspaceRoot, configAbsolutePath),
+      sourcePathRelative: relative(workspaceRoot, preferredConfigAbsolutePath),
       exists: false,
     }
   }
 
   try {
-    const raw = readFileSync(configAbsolutePath, 'utf8')
-    const parsed = JSON.parse(raw)
-    const payload = normalizeScenarioConfigPayload(isPlainObject(parsed.scenario) ? parsed.scenario : parsed)
-    const merged = deepMerge(DEFAULTS, payload)
+    const defaultConfigFile = hasDefaultConfig ? parseConfigFile(workspaceRoot, defaultConfigAbsolutePath) : null
+    const softwareConfigFile = hasSoftwareConfig ? parseConfigFile(workspaceRoot, softwareConfigAbsolutePath) : null
+    const selectedConfigFile = softwareConfigFile || defaultConfigFile
+    const basePayload = defaultConfigFile?.payload ? { ...defaultConfigFile.payload } : {}
+    const selectedPayload = selectedConfigFile?.payload ? { ...selectedConfigFile.payload } : {}
+    const mergedBasePayload = hasSoftwareConfig
+      ? deepMerge(basePayload, selectedPayload)
+      : selectedPayload
+    const softwareOverride = deepMerge(
+      extractSoftwareConfigOverride(basePayload, software),
+      extractSoftwareConfigOverride(selectedPayload, software),
+    )
+    delete mergedBasePayload.software
+    const merged = deepMerge(deepMerge(DEFAULTS, mergedBasePayload), softwareOverride)
     return {
       config: merged,
-      sourcePathRelative: relative(workspaceRoot, configAbsolutePath),
+      sourcePathRelative: selectedConfigFile?.sourcePathRelative || relative(workspaceRoot, preferredConfigAbsolutePath),
       exists: true,
     }
   } catch (error) {
-    throw new Error(`Failed to parse central config JSON at ${relative(workspaceRoot, configAbsolutePath)}: ${error.message}`)
+    throw new Error(`Failed to parse central config JSON at ${relative(workspaceRoot, preferredConfigAbsolutePath)}: ${error.message}`)
   }
 }
 

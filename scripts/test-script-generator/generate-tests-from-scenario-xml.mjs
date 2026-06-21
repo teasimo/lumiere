@@ -62,12 +62,46 @@ const RESOLVED_TITLE_SOURCE_ATTRS = [
   'status',
 ]
 
+function buildLineStarts(text) {
+  const starts = [0]
+  for (let index = 0; index < text.length; index += 1) {
+    if (text[index] === '\n') {
+      starts.push(index + 1)
+    }
+  }
+  return starts
+}
+
+function offsetToLine(lineStarts, offset) {
+  let lo = 0
+  let hi = lineStarts.length - 1
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1
+    if (lineStarts[mid] <= offset) {
+      lo = mid
+    } else {
+      hi = mid - 1
+    }
+  }
+  return lo + 1
+}
+
+function extractOpeningTagPositions(rawXml, lineStarts) {
+  const re = /<([A-Za-z][A-Za-z0-9_:-]*)(?:\s[^>]*)?\/?>/g
+  const positions = []
+  let match
+  while ((match = re.exec(rawXml)) !== null) {
+    positions.push({ tag: match[1], line: offsetToLine(lineStarts, match.index) })
+  }
+  return positions
+}
+
 function printUsage() {
   console.log([
     'Usage:',
-    '  node scripts/test-script-generator/generate-tests-from-scenario-xml.mjs [<scenario-xml>] [--xsd <path>] [--out-dir <path>]',
-    '  node scripts/test-script-generator/generate-tests-from-scenario-xml.mjs --all [--scenario-dir <path>] [--xsd <path>] [--out-dir <path>]',
-    '  node scripts/test-script-generator/generate-tests-from-scenario-xml.mjs --clean [--out-dir <path>]',
+    '  node scripts/test-script-generator/generate-tests-from-scenario-xml.mjs [<scenario-xml>] [--software <name>] [--xsd <path>] [--out-dir <path>]',
+    '  node scripts/test-script-generator/generate-tests-from-scenario-xml.mjs --all [--software <name>] [--scenario-dir <path>] [--xsd <path>] [--out-dir <path>]',
+    '  node scripts/test-script-generator/generate-tests-from-scenario-xml.mjs --clean [--software <name>] [--out-dir <path>]',
     '',
     'Examples:',
     '  node scripts/test-script-generator/generate-tests-from-scenario-xml.mjs neo/interactions/dubletten-aufloesen/FR1-case-sus-dubletten-zusammenfuehren.xml',
@@ -85,6 +119,7 @@ function parseArgs(argv) {
     outDir: null,
     xsdPath: null,
     fragmentSource: 'lunettes',
+    software: null,
   }
 
   while (args.length) {
@@ -127,6 +162,16 @@ function parseArgs(argv) {
 
     if (token.startsWith('--fragment-source=')) {
       options.fragmentSource = token.slice('--fragment-source='.length)
+      continue
+    }
+
+    if (token === '--software') {
+      options.software = args.shift() || null
+      continue
+    }
+
+    if (token.startsWith('--software=')) {
+      options.software = token.slice('--software='.length)
       continue
     }
 
@@ -366,10 +411,19 @@ function normalizeAttributeRecord(rawAttributes) {
   return attrs
 }
 
-function toElementTreeFromNode(node) {
+function toElementTreeFromNode(node, tagPositions = null, cursor = null) {
   const tag = getNodeTag(node)
   if (!tag) {
     return null
+  }
+
+  let sourceLine = null
+  if (Array.isArray(tagPositions) && cursor && Number.isInteger(cursor.idx)) {
+    while (cursor.idx < tagPositions.length && tagPositions[cursor.idx].tag !== tag) {
+      cursor.idx += 1
+    }
+    sourceLine = cursor.idx < tagPositions.length ? Number(tagPositions[cursor.idx].line) : null
+    cursor.idx += 1
   }
 
   const attrs = normalizeAttributeRecord(node[':@'] || {})
@@ -397,7 +451,7 @@ function toElementTreeFromNode(node) {
       continue
     }
 
-    const childElement = toElementTreeFromNode(rawChild)
+    const childElement = toElementTreeFromNode(rawChild, tagPositions, cursor)
     if (childElement) {
       children.push(childElement)
     }
@@ -408,6 +462,10 @@ function toElementTreeFromNode(node) {
     attrs,
     text: textParts.join(''),
     children,
+    meta: {
+      sourceLine,
+      fragmentOriginChain: [],
+    },
   }
 }
 
@@ -440,6 +498,9 @@ function toPreserveOrderNode(element) {
 
 async function loadXmlDocument(filePath) {
   const source = await readFile(filePath, 'utf8')
+  const lineStarts = buildLineStarts(source)
+  const tagPositions = extractOpeningTagPositions(source, lineStarts)
+  const cursor = { idx: 0 }
   const parsed = parser.parse(source)
   if (!Array.isArray(parsed)) {
     throw new Error(`Invalid XML structure in ${filePath}`)
@@ -450,7 +511,7 @@ async function loadXmlDocument(filePath) {
     throw new Error(`No root XML element found in ${filePath}`)
   }
 
-  const root = toElementTreeFromNode(rootNode)
+  const root = toElementTreeFromNode(rootNode, tagPositions, cursor)
   if (!root) {
     throw new Error(`Could not parse XML root in ${filePath}`)
   }
@@ -459,6 +520,9 @@ async function loadXmlDocument(filePath) {
 }
 
 function parseXmlDocumentFromSource(source, sourceLabel = 'inline-xml') {
+  const lineStarts = buildLineStarts(source)
+  const tagPositions = extractOpeningTagPositions(source, lineStarts)
+  const cursor = { idx: 0 }
   const parsed = parser.parse(source)
   if (!Array.isArray(parsed)) {
     throw new Error(`Invalid XML structure in ${sourceLabel}`)
@@ -469,7 +533,7 @@ function parseXmlDocumentFromSource(source, sourceLabel = 'inline-xml') {
     throw new Error(`No root XML element found in ${sourceLabel}`)
   }
 
-  const root = toElementTreeFromNode(rootNode)
+  const root = toElementTreeFromNode(rootNode, tagPositions, cursor)
   if (!root) {
     throw new Error(`Could not parse XML root in ${sourceLabel}`)
   }
@@ -483,6 +547,12 @@ function cloneElement(element) {
     attrs: { ...(element.attrs || {}) },
     text: String(element.text || ''),
     children: (element.children || []).map(cloneElement),
+    meta: {
+      ...(element.meta || {}),
+      fragmentOriginChain: Array.isArray(element?.meta?.fragmentOriginChain)
+        ? element.meta.fragmentOriginChain.map((entry) => ({ ...entry }))
+        : [],
+    },
   }
 }
 
@@ -492,6 +562,12 @@ function resolveElementTemplates(element, context, dataFunctions) {
     attrs: resolveTemplatesDeep(element.attrs || {}, context, dataFunctions),
     text: resolveTemplateString(String(element.text || ''), context, dataFunctions),
     children: (element.children || []).map((child) => resolveElementTemplates(child, context, dataFunctions)),
+    meta: {
+      ...(element.meta || {}),
+      fragmentOriginChain: Array.isArray(element?.meta?.fragmentOriginChain)
+        ? element.meta.fragmentOriginChain.map((entry) => ({ ...entry }))
+        : [],
+    },
   }
 }
 
@@ -904,8 +980,108 @@ function buildResolvedInteractionTitle(element) {
   return title.length > 220 ? `${title.slice(0, 217)}...` : title
 }
 
+function assignScenarioOriginMetadata(element, rootScenarioId) {
+  if (!element || typeof element !== 'object') {
+    return element
+  }
+
+  element.meta = {
+    ...(element.meta || {}),
+    rootScenarioId: String(rootScenarioId || '').trim() || null,
+    fragmentOriginChain: Array.isArray(element?.meta?.fragmentOriginChain)
+      ? element.meta.fragmentOriginChain.map((entry) => ({ ...entry }))
+      : [],
+  }
+
+  for (const child of element.children || []) {
+    assignScenarioOriginMetadata(child, rootScenarioId)
+  }
+
+  return element
+}
+
+function normalizeRootStepLabelCandidate(value) {
+  const normalized = String(value || '').trim()
+  if (!normalized) {
+    return ''
+  }
+
+  if (normalized.toLowerCase() === 'source') {
+    return ''
+  }
+
+  return normalized
+}
+
+function resolveRootStepLabel(rootElement, scenarioAbsolutePath) {
+  const rootAttrs = rootElement?.attrs || {}
+  const fragmentId = normalizeRootStepLabelCandidate(
+    rootAttrs['fragment-id']
+    || rootAttrs.fragment_id
+    || rootAttrs.fragmentId
+    || rootAttrs['fragment-id-ref']
+    || rootAttrs.fragment_id_ref
+    || rootAttrs.fragmentIdRef
+    || '',
+  )
+  if (fragmentId) {
+    return fragmentId
+  }
+
+  const rootId = normalizeRootStepLabelCandidate(rootAttrs.id || '')
+  const isFragmentRoot = ['true', '1', 'yes'].includes(String(rootAttrs.fragment || '').trim().toLowerCase())
+  if (isFragmentRoot && rootId) {
+    return rootId
+  }
+
+  const normalizedScenarioPath = String(scenarioAbsolutePath || '').replace(/\\/g, '/')
+  const watcherScenarioMatch = normalizedScenarioPath.match(/\/szenario-([^/]+)\//i)
+  if (watcherScenarioMatch?.[1]) {
+    return `Szenario-${watcherScenarioMatch[1]}`
+  }
+
+  const lunettesScenarioId = normalizeRootStepLabelCandidate(rootAttrs['lunettes-id'] || rootAttrs.lunettes_id || '')
+  if (lunettesScenarioId) {
+    return `Szenario-${lunettesScenarioId}`
+  }
+
+  if (rootId) {
+    return `Szenario-${rootId}`
+  }
+
+  return `Szenario-${basename(normalizedScenarioPath, extname(normalizedScenarioPath)) || 'unknown'}`
+}
+
+function buildResolvedInteractionId(element) {
+  const sourceLine = Number(element?.meta?.sourceLine)
+  const normalizedSourceLine = Number.isFinite(sourceLine) && sourceLine > 0
+    ? Math.floor(sourceLine)
+    : null
+  const rootScenarioId = String(element?.meta?.rootScenarioId || '').trim()
+  const fragmentOriginChain = Array.isArray(element?.meta?.fragmentOriginChain)
+    ? element.meta.fragmentOriginChain
+    : []
+
+  const rootLabel = rootScenarioId || 'Szenario'
+  if (fragmentOriginChain.length === 0) {
+    return `[${rootLabel}]-Zeile-${normalizedSourceLine != null ? normalizedSourceLine : 0}`
+  }
+
+  const parts = [`[${rootLabel}]`]
+
+  for (let index = 0; index < fragmentOriginChain.length; index += 1) {
+    const entry = fragmentOriginChain[index]
+    const includeLine = Number(entry?.includedAtLine)
+    parts.push(`Zeile-${Number.isFinite(includeLine) && includeLine > 0 ? Math.floor(includeLine) : 0}`)
+    parts.push(`[${String(entry?.fragmentId || 'Fragment').trim() || 'Fragment'}]`)
+  }
+
+  parts.push(`Zeile-${normalizedSourceLine != null ? normalizedSourceLine : 0}`)
+  return parts.join('-')
+}
+
 function annotateResolvedInteractionMetadata(rootElement) {
-  let sequence = 0
+  const seenResolvedIds = new Map()
 
   function visit(node) {
     if (!node || typeof node !== 'object') {
@@ -913,8 +1089,10 @@ function annotateResolvedInteractionMetadata(rootElement) {
     }
 
     if (isInteractionElement(node)) {
-      sequence += 1
-      const resolvedId = `R${String(sequence).padStart(4, '0')}`
+      const baseResolvedId = buildResolvedInteractionId(node)
+      const currentCount = (seenResolvedIds.get(baseResolvedId) || 0) + 1
+      seenResolvedIds.set(baseResolvedId, currentCount)
+      const resolvedId = currentCount === 1 ? baseResolvedId : `${baseResolvedId}-${currentCount}`
       const resolvedTitle = buildResolvedInteractionTitle(node)
 
       node.attrs = {
@@ -1261,6 +1439,27 @@ function filterChildrenForFragmentInclusion(children) {
   return filtered
 }
 
+function assignFragmentOriginChain(element, fragmentOriginChain) {
+  if (!element || typeof element !== 'object') {
+    return element
+  }
+
+  const nextChain = Array.isArray(fragmentOriginChain)
+    ? fragmentOriginChain.map((entry) => ({ ...entry }))
+    : []
+
+  element.meta = {
+    ...(element.meta || {}),
+    fragmentOriginChain: nextChain,
+  }
+
+  for (const child of element.children || []) {
+    assignFragmentOriginChain(child, nextChain)
+  }
+
+  return element
+}
+
 async function expandFragmentsInChildren(children, {
   context,
   dataFunctions,
@@ -1308,8 +1507,22 @@ async function expandFragmentsInChildren(children, {
 
       const fragmentGroups = findChildren(fragmentDocument.root, 'Gruppe')
       const fragmentPayloadChildren = []
+      const parentFragmentOriginChain = Array.isArray(child?.meta?.fragmentOriginChain)
+        ? child.meta.fragmentOriginChain
+        : []
+      const includeLine = Number(child?.meta?.sourceLine)
+      const nextFragmentOriginChain = [
+        ...parentFragmentOriginChain.map((entry) => ({ ...entry })),
+        {
+          fragmentId: fragmentName,
+          includedAtLine: Number.isFinite(includeLine) && includeLine > 0 ? Math.floor(includeLine) : null,
+        },
+      ]
       for (const group of fragmentGroups) {
-        fragmentPayloadChildren.push(...filterChildrenForFragmentInclusion(group.children || []))
+        const filteredChildren = filterChildrenForFragmentInclusion(group.children || [])
+        for (const filteredChild of filteredChildren) {
+          fragmentPayloadChildren.push(assignFragmentOriginChain(filteredChild, nextFragmentOriginChain))
+        }
       }
 
       const nestedExpansion = await expandFragmentsInChildren(fragmentPayloadChildren, {
@@ -1466,6 +1679,10 @@ async function scenarioToSpecSource({ scenarioPath, xsdPath, centralConfig, gene
   const resolvedRootElement = upsertResolvedData(
     resolveElementTemplates(expandedRoot, templateContext, dataFunctions),
     resolvedData,
+  )
+  assignScenarioOriginMetadata(
+    resolvedRootElement,
+    resolveRootStepLabel(resolvedRootElement, absoluteScenarioPath),
   )
   annotateResolvedInteractionMetadata(resolvedRootElement)
 
@@ -1701,9 +1918,9 @@ async function generateOne(scenarioFilePath, outDirPath, options, centralConfig)
 }
 
 async function main() {
-  const central = loadCentralConfig(workspaceRoot)
-  const testScriptConfig = getTestScriptConfig(central.config)
   const rawOptions = parseArgs(process.argv.slice(2))
+  const central = loadCentralConfig(workspaceRoot, { software: rawOptions.software })
+  const testScriptConfig = getTestScriptConfig(central.config)
   const options = applyConfigDefaults(rawOptions, testScriptConfig)
 
   if (options.help) {

@@ -4,7 +4,7 @@ Dieses Verzeichnis enthaelt ein Script, das ein Szenarioscript auf eine Confluen
 
 ## Was das Script macht
 
-Das Script erwartet ein XML-Szenarioscript als ersten Parameter und die Confluence-Page-ID als zweiten Parameter.
+Das Script erwartet ein XML-Szenarioscript als ersten Parameter. Die Confluence-Page-ID als zweiter Parameter ist optional.
 
 Es prueft:
 
@@ -15,6 +15,8 @@ Wenn alles vorhanden ist, dann:
 
 - wird das letzte erfolgreich gerenderte Video als Attachment auf die Confluence-Seite hochgeladen
 - wird auf der Confluence-Seite ein verwalteter Block geschrieben oder aktualisiert
+- oder bei fehlender Page-ID eine neue Unterseite unter der in `scenario.config.json` definierten Parent-Seite angelegt
+- und bei neu angelegter Seite deren `confluence_page_id` an Lunettes zurueckgemeldet
 
 Der Seiteninhalt hat diesen Aufbau:
 
@@ -80,6 +82,12 @@ Direkt:
 node scripts/publish-to-confluence/publish-scenario-to-confluence.mjs neo/interactions/demo.xml 2105671681 --scenario-id=1
 ```
 
+Ohne bestehende Zielseite:
+
+```bash
+node scripts/publish-to-confluence/publish-scenario-to-confluence.mjs neo/interactions/demo.xml --scenario-id=1
+```
+
 Oder ueber `npm`:
 
 ```bash
@@ -90,11 +98,30 @@ npm run publish:scenario:confluence -- neo/interactions/demo.xml 2105671681 --sc
 
 - Node.js 20 oder neuer
 - ein erfolgreich erzeugtes Remotion-Video unter `output/<szenario>/videogenerator`
-- Confluence-Page-ID als CLI-Parameter
+- entweder Confluence-Page-ID als CLI-Parameter
+- oder `scenario.config.json > scenario["publish-to-confluence"].parent_page_id`
 - Scenario-ID als CLI-Parameter `--scenario-id=<id>`
 - Confluence Cloud API-Zugriff
 - entweder `baseUrl` plus `cloudId` und `accessToken`
 - oder `baseUrl` plus `email` und `apiToken`
+- fuer die Rueckmeldung neu angelegter Seiten: `LUNETTES_API_USERNAME` und `LUNETTES_API_PASSWORD`
+- sowie `scenario.config.json > scenario["lunettes-job-watcher"].base_url` oder `scenario["test-script"].lunettes_api.base_url`
+
+## Konfiguration in `scenario.config.json`
+
+Beispiel:
+
+```json
+{
+  "scenario": {
+    "publish-to-confluence": {
+      "parent_page_id": "2100000000"
+    }
+  }
+}
+```
+
+Wenn weder eine Zielseite per CLI/Payload noch `parent_page_id` gesetzt ist, bricht das Script mit einer Fehlermeldung ab.
 
 ## Hinweis zur Video-Auswahl
 

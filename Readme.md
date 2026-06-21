@@ -2,6 +2,10 @@
 
 Dieses Projekt generiert und fuehrt Playwright-Tests aus XML-Szenarien aus.
 
+Eine dedizierte Autoren-Doku fuer XML-SzenarioScripts steht hier:
+
+- [documentation/szenarioscript/README.md](/home/simon/Documents/Programming/ssvn-controlling/lumiere/documentation/szenarioscript/README.md)
+
 ## Voraussetzungen
 
 - Node.js 20+
@@ -176,6 +180,35 @@ Das ist keine JSON-Konfig, aber ebenfalls eine Hierarchie, die fuer das Verhalte
 ### 4. Video-Skripte
 
 Die Video-Skripte verwenden `scenario.config.json > scenario["video-script"]` als eigene Default-Quelle, aktuell insbesondere fuer TTS-Profile sowie Render-/Encoding-Parameter. Sie konsumieren zusaetzlich bereits erzeugte Test-/Timeline-Artefakte. Fuer die eigentliche UI-Interaktionslogik greifen sie jedoch nicht in die Testscript-Konfigurationshierarchie ein.
+
+### 5. Software-spezifische Overrides
+
+Zusaetzlich kann `scenario.config.json > scenario.software` softwareabhaengige Overrides definieren. Diese werden aktiv, sobald ein Skript mit `--software=<name>` gestartet wird oder der Lunettes-Job-Payload ein `software`-Feld enthaelt.
+
+Beispielstruktur:
+
+```json
+{
+  "scenario": {
+    "software": {
+      "NEO Niedersachsen": {
+        "publish-to-confluence": {
+          "parent_page_id": "2133819393"
+        }
+      },
+      "Lunettes": {
+        "test-script": {
+          "lunettes_api": {
+            "base_url": "https://example.invalid"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+Die Eintraege unter `scenario.software` verwenden dieselben Schluessel wie die globale Konfiguration, zum Beispiel `test-script`, `video-script`, `publish-to-confluence` oder `lunettes-job-watcher`. Der Softwarename wird intern normalisiert, daher matchen `NEO Niedersachsen` und `neo-niedersachsen` auf denselben Eintrag.
 
 Wichtig zur Trennung:
 

@@ -15,8 +15,8 @@ const fallbackOutputDir = 'temp/testfiles'
 function printUsage() {
   console.log([
     'Usage:',
-    '  npm run check:testfile -- [<scenario-xml>] --scenario-id <id> [--force] [--out-dir <path>] [-- <playwright-args>]',
-    '  npm run run:testfile-script -- [<scenario-xml>] --scenario-id <id> [--force] [--out-dir <path>] [-- <playwright-args>]',
+    '  npm run check:testfile -- [<scenario-xml>] --scenario-id <id> [--software <name>] [--force] [--out-dir <path>] [-- <playwright-args>]',
+    '  npm run run:testfile-script -- [<scenario-xml>] --scenario-id <id> [--software <name>] [--force] [--out-dir <path>] [-- <playwright-args>]',
     '',
     'Examples:',
     '  npm run check:testfile -- neo/interactions/dubletten-aufloesen/FR1-case-sus-dubletten-zusammenfuehren.xml --scenario-id 123',
@@ -36,6 +36,7 @@ function parseArgs(argv) {
     verbose: false,
     scenarioId: null,
     fragmentSource: 'lunettes',
+    software: null,
     playwrightArgs: [],
   }
 
@@ -99,6 +100,16 @@ function parseArgs(argv) {
 
     if (token.startsWith('--fragment-source=')) {
       options.fragmentSource = token.slice('--fragment-source='.length)
+      continue
+    }
+
+    if (token === '--software') {
+      options.software = args.shift() || null
+      continue
+    }
+
+    if (token.startsWith('--software=')) {
+      options.software = token.slice('--software='.length)
       continue
     }
 
@@ -447,13 +458,14 @@ function warnIfGeneratedSpecIsStale({ scenarioAbsolute, outputSpecAbsolute }) {
   }
 }
 
-function ensureGeneratedSpec({ scenarioPath, outDir, force, fragmentSource = 'local' }) {
+function ensureGeneratedSpec({ scenarioPath, outDir, force, fragmentSource = 'local', software = null }) {
   const scenarioAbsolute = resolve(workspaceRoot, scenarioPath)
   const outputDirAbsolute = resolve(workspaceRoot, outDir)
   const generatorInvocation = buildScenarioXmlGeneratorInvocation({
     scenarioPath: scenarioAbsolute,
     outDir: outputDirAbsolute,
     fragmentSource,
+    software,
   })
   const outputSpecAbsolute = generatorInvocation.paths.specPath
 
@@ -559,9 +571,9 @@ function runPlaywright(specAbsolutePath, playwrightArgs, mode, scenarioPath, cen
 }
 
 async function main() {
-  const central = loadCentralConfig(workspaceRoot)
-  const testScriptConfig = getTestScriptConfig(central.config)
   const rawOptions = parseArgs(process.argv.slice(2))
+  const central = loadCentralConfig(workspaceRoot, { software: rawOptions.software })
+  const testScriptConfig = getTestScriptConfig(central.config)
   const options = applyConfigDefaults(rawOptions, testScriptConfig)
   if (options.help) {
     printUsage()
@@ -573,6 +585,7 @@ async function main() {
     outDir: options.outDir,
     force: options.force || options.verbose,
     fragmentSource: options.fragmentSource,
+    software: options.software,
   })
 
   const scenarioId = parseRequiredScenarioId(options.scenarioId)

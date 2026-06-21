@@ -18,18 +18,23 @@ export function getScenarioXmlGeneratedPaths({ scenarioPath, outDir = DEFAULT_OU
   }
 }
 
-export function buildScenarioXmlGeneratorInvocation({ scenarioPath, outDir = DEFAULT_OUT_DIR, fragmentSource = null } = {}) {
+export function buildScenarioXmlGeneratorInvocation({ scenarioPath, outDir = DEFAULT_OUT_DIR, fragmentSource = null, software = null } = {}) {
   const paths = getScenarioXmlGeneratedPaths({ scenarioPath, outDir })
   const resolvedFragmentSource = resolveFragmentSourceForScenario(fragmentSource, scenarioPath, 'lunettes')
+  const args = appendFragmentSourceArg([
+    'scripts/test-script-generator/generate-tests-from-scenario-xml.mjs',
+    paths.scenarioAbsolutePath,
+    '--out-dir',
+    paths.outputDirAbsolute,
+  ], resolvedFragmentSource)
+
+  if (String(software || '').trim()) {
+    args.push(`--software=${String(software).trim()}`)
+  }
 
   return {
     command: 'node',
-    args: appendFragmentSourceArg([
-      'scripts/test-script-generator/generate-tests-from-scenario-xml.mjs',
-      paths.scenarioAbsolutePath,
-      '--out-dir',
-      paths.outputDirAbsolute,
-    ], resolvedFragmentSource),
+    args,
     fragmentSource: resolvedFragmentSource,
     paths,
   }
