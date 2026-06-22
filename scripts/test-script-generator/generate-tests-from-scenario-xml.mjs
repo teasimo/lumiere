@@ -46,6 +46,7 @@ const INTERACTION_TAGS = new Set([
   'Upload',
   'Anzeige',
   'Auslesen',
+  'PinBriefMailAuslesen',
   'Warten',
   'Oeffnen',
   'SucheAuswahl',
@@ -1197,7 +1198,51 @@ function mapInteractionElementToStep(element, makeStepId) {
       })
     }
 
+    if (['text', 'value', 'url'].includes(source)) {
+      return withResolvedMeta({
+        id: makeStepId(element, 'read'),
+        interaction: {
+          type: 'read-ui-value',
+          source,
+          output,
+          target: buildTargetFromAttributes(attrs, { includeText: true, includeUrl: true }),
+        },
+      })
+    }
+
     throw new Error(`Auslesen quelle="${source}" is currently not supported by the test generator.`)
+  }
+
+  if (tag === 'PinBriefMailAuslesen') {
+    const output = String(attrs['in-variable'] || attrs.variable || '').trim()
+    const vorname = String(attrs.vorname || '').trim()
+    const nachname = String(attrs.nachname || '').trim()
+    const zeilenIndexRaw = attrs['zeilen-index']
+    const hasZeilenIndex = zeilenIndexRaw != null && String(zeilenIndexRaw).trim() !== ''
+    const zeilenIndex = hasZeilenIndex ? Number(zeilenIndexRaw) : null
+
+    if (!output) {
+      throw new Error('PinBriefMailAuslesen requires "in-variable" (preferred) or "variable".')
+    }
+
+    if (hasZeilenIndex) {
+      if (!Number.isInteger(zeilenIndex) || zeilenIndex < 0) {
+        throw new Error('PinBriefMailAuslesen requires a non-negative integer "zeilen-index".')
+      }
+    } else if (!vorname || !nachname) {
+      throw new Error('PinBriefMailAuslesen requires either "zeilen-index" or non-empty "vorname" and "nachname" attributes.')
+    }
+
+    return withResolvedMeta({
+      id: makeStepId(element, 'pin-brief-mail-auslesen'),
+      interaction: {
+        type: 'read-pin-brief-mail',
+        output,
+        vorname,
+        nachname,
+        zeilenIndex,
+      },
+    })
   }
 
   if (tag === 'Anzeige') {

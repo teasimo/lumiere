@@ -244,6 +244,167 @@ export function setRuntimeVariable(runtimeVariables, outputPath, value) {
   cursor[keys[keys.length - 1]] = value
 }
 
+function parseCsvRow(line, delimiter) {
+  const values = []
+  let current = ''
+  let inQuotes = false
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index]
+    const nextChar = line[index + 1]
+
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        current += '"'
+        index += 1
+        continue
+      }
+      inQuotes = !inQuotes
+      continue
+    }
+
+    if (char === delimiter && !inQuotes) {
+      values.push(current)
+      current = ''
+      continue
+    }
+
+    current += char
+  }
+
+  values.push(current)
+  return values.map((value) => String(value || '').trim())
+}
+
+function parseCsvTable(csvText) {
+  const normalized = String(csvText || '').replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  const lines = normalized.split('\n').map((line) => line.trim()).filter(Boolean)
+  if (lines.length === 0) {
+    return { headers: [], rows: [] }
+  }
+
+  const headerLine = lines[0]
+  const semicolonCount = (headerLine.match(/;/g) || []).length
+  const commaCount = (headerLine.match(/,/g) || []).length
+  const delimiter = semicolonCount >= commaCount ? ';' : ','
+  const headers = parseCsvRow(headerLine, delimiter)
+  const rows = lines.slice(1).map((line) => parseCsvRow(line, delimiter))
+  return { headers, rows }
+}
+
+function normalizeCsvHeader(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '')
+}
+
+function normalizeNameValue(value) {
+  return String(value || '').trim().toLowerCase()
+}
+
+export async function readActivationCodeFromMailhog({
+  mailhogUrl,
+  vorname,
+  nachname,
+  zeilenIndex = null,
+  attachmentPartIndex = 2,
+  activationCodeColumn = 'aktivierungscode',
+  timeoutMs = 10000,
+  pollMs = 500,
+}) {
+  const baseUrl = String(mailhogUrl || '').trim().replace(/\/+$/, '')
+  if (!baseUrl) {
+    throw new Error('MAILHOG_URL fehlt. Erwartet als Umgebungsvariable.')
+  }
+
+  const deadlineAt = Date.now() + Math.max(0, Number(timeoutMs) || 0)
+  const effectivePollMs = Math.max(50, Number(pollMs) || 500)
+  const normalizedZeilenIndex = zeilenIndex == null || zeilenIndex === ''
+    ? null
+    : Number(zeilenIndex)
+  const normalizedVorname = normalizeNameValue(vorname)
+  const normalizedNachname = normalizeNameValue(nachname)
+  let lastError = null
+
+  while (Date.now() <= deadlineAt) {
+    try {
+      const response = await fetch(`${baseUrl}/api/v1/messages`)
+      if (!response.ok) {
+        throw new Error(`MailHog messages API fehlgeschlagen (${response.status} ${response.statusText}).`)
+      }
+
+      const payload = await response.json()
+      const messages = Array.isArray(payload?.messages)
+        ? payload.messages
+        : (Array.isArray(payload?.items) ? payload.items : [])
+      if (messages.length === 0) {
+        throw new Error('MailHog liefert keine Nachrichten.')
+      }
+
+      const messageId = String(messages[0]?.ID || messages[0]?.id || '').trim()
+      if (!messageId) {
+        throw new Error('MailHog-Nachricht enthaelt keine ID.')
+      }
+
+      const attachmentResponse = await fetch(`${baseUrl}/api/v1/message/${encodeURIComponent(messageId)}/part/${Number(attachmentPartIndex) || 2}`)
+      if (!attachmentResponse.ok) {
+        throw new Error(`MailHog attachment API fehlgeschlagen (${attachmentResponse.status} ${attachmentResponse.statusText}).`)
+      }
+
+      const csvText = await attachmentResponse.text()
+      const { headers, rows } = parseCsvTable(csvText)
+      if (headers.length === 0) {
+        throw new Error('MailHog-CSV ist leer oder enthaelt keine Header-Zeile.')
+      }
+
+      const normalizedHeaders = headers.map(normalizeCsvHeader)
+      const vornameIndex = normalizedHeaders.indexOf('vorname')
+      const nachnameIndex = normalizedHeaders.indexOf('nachname')
+      const activationCodeIndex = normalizedHeaders.indexOf(normalizeCsvHeader(activationCodeColumn))
+
+      if (vornameIndex < 0 || nachnameIndex < 0 || activationCodeIndex < 0) {
+        throw new Error(`MailHog-CSV enthaelt nicht die erwarteten Spalten vorname, nachname, ${activationCodeColumn}.`)
+      }
+
+      let matchingRow = null
+      if (normalizedZeilenIndex != null) {
+        if (!Number.isInteger(normalizedZeilenIndex) || normalizedZeilenIndex < 0) {
+          throw new Error('zeilen-index muss eine nicht-negative Ganzzahl sein.')
+        }
+        matchingRow = rows[normalizedZeilenIndex] || null
+        if (!matchingRow) {
+          throw new Error(`Kein CSV-Eintrag fuer zeilen-index ${normalizedZeilenIndex} gefunden.`)
+        }
+      } else {
+        matchingRow = rows.find((row) => (
+          normalizeNameValue(row[vornameIndex]) === normalizedVorname
+          && normalizeNameValue(row[nachnameIndex]) === normalizedNachname
+        ))
+      }
+
+      if (!matchingRow) {
+        throw new Error(`Kein CSV-Eintrag fuer ${vorname} ${nachname} gefunden.`)
+      }
+
+      const activationCode = String(matchingRow[activationCodeIndex] || '').trim()
+      if (!activationCode) {
+        throw new Error(`CSV-Eintrag fuer ${vorname} ${nachname} enthaelt keinen Aktivierungscode.`)
+      }
+
+      return activationCode
+    } catch (error) {
+      lastError = error
+      if (Date.now() > deadlineAt) {
+        break
+      }
+      await new Promise((resolve) => setTimeout(resolve, effectivePollMs))
+    }
+  }
+
+  throw lastError || new Error(`Aktivierungscode fuer ${vorname} ${nachname} konnte nicht aus MailHog gelesen werden.`)
+}
+
 export function createStepDomIdentifierLogger({ page, testInfo, enabled = false, maxNodesPerStep = 1200 }) {
   const entries = []
   const isEnabled = Boolean(enabled)

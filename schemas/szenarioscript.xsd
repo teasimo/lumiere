@@ -106,6 +106,7 @@
             <xs:element name="Upload" type="KomponentInputType"/>
             <xs:element name="Anzeige" type="InteractionType"/>
             <xs:element name="Auslesen" type="AuslesenType"/>
+            <xs:element name="PinBriefMailAuslesen" type="PinBriefMailAuslesenType"/>
             <xs:element name="Gruppe" type="GruppeType"/>
             <xs:element name="Warten" type="WartenType"/>
             <xs:element name="Oeffnen" type="OeffnenType"/>
@@ -126,6 +127,7 @@
             <xs:element name="Upload" type="KomponentInputType"/>
             <xs:element name="Anzeige" type="InteractionType"/>
             <xs:element name="Auslesen" type="AuslesenType"/>
+            <xs:element name="PinBriefMailAuslesen" type="PinBriefMailAuslesenType"/>
             <xs:element name="Warten" type="WartenType"/>
             <xs:element name="Oeffnen" type="OeffnenType"/>
             <xs:element name="SucheAuswahl" type="SucheAuswahlType"/>
@@ -213,6 +215,15 @@
                 <xs:attribute name="auslesen-regex" type="xs:string" use="optional"/>
             </xs:extension>
         </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="PinBriefMailAuslesenType">
+        <xs:attribute name="id" type="xs:ID" use="optional"/>
+        <xs:attribute name="vorname" type="xs:string" use="optional"/>
+        <xs:attribute name="nachname" type="xs:string" use="optional"/>
+        <xs:attribute name="zeilen-index" type="xs:nonNegativeInteger" use="optional"/>
+        <xs:attribute name="variable" type="xs:string" use="optional"/>
+        <xs:attribute name="in-variable" type="xs:string" use="optional"/>
     </xs:complexType>
 
     <xs:simpleType name="AuslesenQuelleType">

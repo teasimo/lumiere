@@ -19,6 +19,7 @@ const SCENARIO_HELPER_EXPORT_NAMES = [
   'describeTargetAvailability',
   'isLocatorInViewport',
   'pickIndexedLocator',
+  'readActivationCodeFromMailhog',
   'resolveTargetLocator',
   'resolveRuntimeTemplateString',
   'scrollToLocator',

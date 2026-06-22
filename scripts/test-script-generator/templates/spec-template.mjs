@@ -815,17 +815,27 @@ function buildTimelineStepDescription(step) {
   const stepTitle = typeof step?.resolvedTitle === 'string' ? step.resolvedTitle.trim() : ''
   const interaction = step?.interaction || {}
   const selectors = buildTargetSelectorDescriptions(interaction.target)
+  const descriptionParts = []
   if (interaction.type === 'search-and-select' && interaction.resultSelector) {
     selectors.push(`resultSelector=${String(interaction.resultSelector).trim()}`)
   }
+  if (interaction.type === 'read-ui-value' && interaction.output) {
+    descriptionParts.push(`read->${String(interaction.output).trim()}`)
+  }
+  if (interaction.type === 'read-pin-brief-mail' && interaction.output) {
+    descriptionParts.push(`mailhog->${String(interaction.output).trim()}`)
+  }
+  if (selectors.length > 0) {
+    descriptionParts.push(`selectors: ${selectors.join(' ; ')}`)
+  }
 
-  if (selectors.length === 0) {
+  if (descriptionParts.length === 0) {
     return stepTitle
   }
 
   return stepTitle
-    ? `${stepTitle} | selectors: ${selectors.join(' ; ')}`
-    : `selectors: ${selectors.join(' ; ')}`
+    ? `${stepTitle} | ${descriptionParts.join(' | ')}`
+    : descriptionParts.join(' | ')
 }
 
 function buildStepMeta(step) {
@@ -1494,6 +1504,58 @@ function buildInteractionLines(step, options = {}) {
     lines.push(`const effectivePdfResponse = lastPdfResponse ?? await page.waitForResponse((response) => String(response.headers()['content-type'] || '').includes('application/pdf'), { timeout: 5000 }).catch(() => null)`)
     lines.push(`const extractedValue = await extractCodeFromPdf(${pdfPathExpression}, new RegExp(resolveRuntimeTemplateString(${toLiteral(String(regex))}, runtimeVariables)), { download: effectiveDownload, response: effectivePdfResponse })`)
     lines.push(`setRuntimeVariable(runtimeVariables, ${toLiteral(String(output))}, extractedValue)`)
+  } else if (interactionType === 'read-ui-value') {
+    const output = String(interaction.output || '').trim()
+    const source = String(interaction.source || 'text').trim().toLowerCase()
+    if (!output) {
+      throw new Error(`Step "${step.id}" with type read-ui-value requires output.`)
+    }
+    if (!target || Object.keys(target).length === 0) {
+      throw new Error(`Step "${step.id}" with type read-ui-value requires a target.`)
+    }
+    if (source === 'url') {
+      lines.push('const __scenarioReadValue = page.url()')
+      lines.push(`setRuntimeVariable(runtimeVariables, ${toLiteral(output)}, __scenarioReadValue)`)
+      lines.push(`__scenarioStep.info("runtime-variable-set", { output: ${toLiteral(output)}, value: __scenarioReadValue, source: ${toLiteral(source)} })`)
+      lines.push(`console.log("[scenario-read]", ${toLiteral(output)}, "=", __scenarioReadValue)`)
+    } else {
+      lines.push(`const __scenarioReadLocator = await resolveTargetLocator(page, ${buildTargetObjectExpression(target, { runtimeVariables: true })}, { textMode: 'text' })`)
+      lines.push(`const __scenarioReadValue = await __scenarioReadLocator.evaluate((element, payload) => {
+  const sourceType = String(payload.source || 'text')
+  const tagName = String(element?.tagName || '').toLowerCase()
+  const inputType = String(element?.getAttribute?.('type') || '').toLowerCase()
+  if (sourceType === 'value') {
+    return String(element?.value ?? element?.getAttribute?.('value') ?? '')
+  }
+  if (sourceType === 'text') {
+    if (tagName === 'input' || tagName === 'textarea' || tagName === 'select' || inputType === 'text') {
+      return String(element?.value ?? element?.getAttribute?.('value') ?? '')
+    }
+    return String(element?.innerText ?? element?.textContent ?? '').trim()
+  }
+  return ''
+}, { source: ${toLiteral(source)} })`)
+      lines.push(`setRuntimeVariable(runtimeVariables, ${toLiteral(output)}, __scenarioReadValue)`)
+      lines.push(`__scenarioStep.info("runtime-variable-set", { output: ${toLiteral(output)}, value: __scenarioReadValue, source: ${toLiteral(source)} })`)
+      lines.push(`console.log("[scenario-read]", ${toLiteral(output)}, "=", __scenarioReadValue)`)
+    }
+  } else if (interactionType === 'read-pin-brief-mail') {
+    const output = String(interaction.output || '').trim()
+    const vorname = String(interaction.vorname || '').trim()
+    const nachname = String(interaction.nachname || '').trim()
+    const zeilenIndex = interaction.zeilenIndex
+    if (!output) {
+      throw new Error(`Step "${step.id}" with type read-pin-brief-mail requires output.`)
+    }
+    if ((zeilenIndex == null || zeilenIndex === '') && (!vorname || !nachname)) {
+      throw new Error(`Step "${step.id}" with type read-pin-brief-mail requires either zeilenIndex or vorname and nachname.`)
+    }
+    lines.push('const __scenarioMailhogUrl = String(process.env.MAILHOG_URL || "").trim()')
+    lines.push('if (!__scenarioMailhogUrl) { throw new Error("MAILHOG_URL fehlt. Bitte als Umgebungsvariable setzen.") }')
+    lines.push(`const __scenarioActivationCode = await readActivationCodeFromMailhog({ mailhogUrl: __scenarioMailhogUrl, vorname: ${vorname ? `resolveRuntimeTemplateString(${toLiteral(vorname)}, runtimeVariables)` : '""'}, nachname: ${nachname ? `resolveRuntimeTemplateString(${toLiteral(nachname)}, runtimeVariables)` : '""'}, zeilenIndex: ${zeilenIndex == null ? 'null' : Number(zeilenIndex)} })`)
+    lines.push(`setRuntimeVariable(runtimeVariables, ${toLiteral(output)}, __scenarioActivationCode)`)
+    lines.push(`__scenarioStep.info("runtime-variable-set", { output: ${toLiteral(output)}, value: __scenarioActivationCode, source: "mailhog" })`)
+    lines.push(`console.log("[scenario-read]", ${toLiteral(output)}, "=", __scenarioActivationCode)`)
   } else if (interactionType === 'set-runtime-variable') {
     const output = interaction.output
     if (!output) {

@@ -443,9 +443,12 @@ Wichtig:
 
 Liest Werte aus der UI oder aus Downloads.
 
-Heute vom Testscript-Generator unterstuetzt ist nur:
+Heute vom Testscript-Generator unterstuetzt sind:
 
 - `quelle="download"` zusammen mit `auslesen-regex`
+- `quelle="text"`
+- `quelle="value"`
+- `quelle="url"`
 
 Beispiel:
 
@@ -454,6 +457,14 @@ Beispiel:
   quelle="download"
   in-variable="freischaltcode"
   auslesen-regex="Freischaltcode:\s*([A-Z0-9-]+)"/>
+```
+
+Beispiel fuer UI-Auslesen:
+
+```xml
+<Auslesen
+  data-id="g_benutzerkonto/p_benutzerkonto/b_kennung"
+  in-variable="zugangsname"/>
 ```
 
 Schema-seitig zulaessige `quelle`-Werte:
@@ -466,8 +477,47 @@ Schema-seitig zulaessige `quelle`-Werte:
 
 Wichtig:
 
-- Die Werte `text`, `value`, `attribute` und `url` sind im Schema vorhanden, werden im Testscript-Generator aktuell aber nicht unterstuetzt.
+- `quelle="text"` ist der Default.
+- Bei `quelle="text"` liest der Generator bei Textfeldern (`input`, `textarea`, `select`) automatisch den Feldwert.
+- `quelle="value"` liest explizit den Feldwert.
+- `quelle="url"` liest die aktuelle Seiten-URL.
+- `quelle="attribute"` ist im Schema vorhanden, wird im Testscript-Generator aktuell aber nicht unterstuetzt.
 - Fuer `download` ist `in-variable` empfohlen. `variable` wird als Legacy-Fallback akzeptiert.
+
+### `PinBriefMailAuslesen`
+
+Liest aus einer MailHog-Mail den CSV-Anhang `part/2` und schreibt den Wert aus der Spalte `aktivierungscode` in eine Runtime-Variable.
+
+Beispiel:
+
+```xml
+<PinBriefMailAuslesen
+  vorname="{{person.vorname}}"
+  nachname="{{person.nachname}}"
+  in-variable="freischaltcode"/>
+```
+
+Oder per CSV-Zeile:
+
+```xml
+<PinBriefMailAuslesen
+  zeilen-index="0"
+  in-variable="freischaltcode"/>
+```
+
+Voraussetzung:
+
+- `MAILHOG_URL` muss als Umgebungsvariable gesetzt sein
+
+Wichtig:
+
+- der Generator verwendet intern denselben Ablauf wie:
+  - `GET $MAILHOG_URL/api/v1/messages`
+  - erste Mail-ID lesen
+  - `GET $MAILHOG_URL/api/v1/message/<ID>/part/2`
+- entweder `zeilen-index` verwenden oder `vorname` plus `nachname`
+- `in-variable` ist empfohlen, `variable` wird als Legacy-Fallback akzeptiert
+- der Schritt pollt MailHog kurz an, damit frisch eingetroffene Mails noch gefunden werden
 
 ### `Anzeige`
 
