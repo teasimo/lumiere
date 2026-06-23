@@ -315,7 +315,7 @@ export async function readActivationCodeFromMailhog({
 }) {
   const baseUrl = String(mailhogUrl || '').trim().replace(/\/+$/, '')
   if (!baseUrl) {
-    throw new Error('MAILHOG_URL fehlt. Erwartet als Umgebungsvariable.')
+    throw new Error('MailHog-URL fehlt. Erwartet als "url"-Attribut im Schritt PinBriefMailAuslesen.')
   }
 
   const deadlineAt = Date.now() + Math.max(0, Number(timeoutMs) || 0)

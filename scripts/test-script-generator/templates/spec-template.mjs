@@ -1541,17 +1541,20 @@ function buildInteractionLines(step, options = {}) {
     }
   } else if (interactionType === 'read-pin-brief-mail') {
     const output = String(interaction.output || '').trim()
+    const url = String(interaction.url || '').trim()
     const vorname = String(interaction.vorname || '').trim()
     const nachname = String(interaction.nachname || '').trim()
     const zeilenIndex = interaction.zeilenIndex
     if (!output) {
       throw new Error(`Step "${step.id}" with type read-pin-brief-mail requires output.`)
     }
+    if (!url) {
+      throw new Error(`Step "${step.id}" with type read-pin-brief-mail requires url.`)
+    }
     if ((zeilenIndex == null || zeilenIndex === '') && (!vorname || !nachname)) {
       throw new Error(`Step "${step.id}" with type read-pin-brief-mail requires either zeilenIndex or vorname and nachname.`)
     }
-    lines.push('const __scenarioMailhogUrl = String(process.env.MAILHOG_URL || "").trim()')
-    lines.push('if (!__scenarioMailhogUrl) { throw new Error("MAILHOG_URL fehlt. Bitte als Umgebungsvariable setzen.") }')
+    lines.push(`const __scenarioMailhogUrl = resolveRuntimeTemplateString(${toLiteral(url)}, runtimeVariables)`)
     lines.push(`const __scenarioActivationCode = await readActivationCodeFromMailhog({ mailhogUrl: __scenarioMailhogUrl, vorname: ${vorname ? `resolveRuntimeTemplateString(${toLiteral(vorname)}, runtimeVariables)` : '""'}, nachname: ${nachname ? `resolveRuntimeTemplateString(${toLiteral(nachname)}, runtimeVariables)` : '""'}, zeilenIndex: ${zeilenIndex == null ? 'null' : Number(zeilenIndex)} })`)
     lines.push(`setRuntimeVariable(runtimeVariables, ${toLiteral(output)}, __scenarioActivationCode)`)
     lines.push(`__scenarioStep.info("runtime-variable-set", { output: ${toLiteral(output)}, value: __scenarioActivationCode, source: "mailhog" })`)

@@ -1215,6 +1215,7 @@ function mapInteractionElementToStep(element, makeStepId) {
 
   if (tag === 'PinBriefMailAuslesen') {
     const output = String(attrs['in-variable'] || attrs.variable || '').trim()
+    const url = String(attrs.url || '').trim()
     const vorname = String(attrs.vorname || '').trim()
     const nachname = String(attrs.nachname || '').trim()
     const zeilenIndexRaw = attrs['zeilen-index']
@@ -1223,6 +1224,9 @@ function mapInteractionElementToStep(element, makeStepId) {
 
     if (!output) {
       throw new Error('PinBriefMailAuslesen requires "in-variable" (preferred) or "variable".')
+    }
+    if (!url) {
+      throw new Error('PinBriefMailAuslesen requires a non-empty "url" attribute.')
     }
 
     if (hasZeilenIndex) {
@@ -1238,6 +1242,7 @@ function mapInteractionElementToStep(element, makeStepId) {
       interaction: {
         type: 'read-pin-brief-mail',
         output,
+        url,
         vorname,
         nachname,
         zeilenIndex,

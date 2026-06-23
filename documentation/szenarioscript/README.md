@@ -492,6 +492,7 @@ Beispiel:
 
 ```xml
 <PinBriefMailAuslesen
+  url="https://mailhog.example.internal"
   vorname="{{person.vorname}}"
   nachname="{{person.nachname}}"
   in-variable="freischaltcode"/>
@@ -501,20 +502,22 @@ Oder per CSV-Zeile:
 
 ```xml
 <PinBriefMailAuslesen
+  url="https://mailhog.example.internal"
   zeilen-index="0"
   in-variable="freischaltcode"/>
 ```
 
 Voraussetzung:
 
-- `MAILHOG_URL` muss als Umgebungsvariable gesetzt sein
+- `url` muss auf die MailHog-Basis-URL zeigen
 
 Wichtig:
 
 - der Generator verwendet intern denselben Ablauf wie:
-  - `GET $MAILHOG_URL/api/v1/messages`
+  - `GET <url>/api/v1/messages`
   - erste Mail-ID lesen
-  - `GET $MAILHOG_URL/api/v1/message/<ID>/part/2`
+  - `GET <url>/api/v1/message/<ID>/part/2`
+- `url` ist ein Pflichtattribut
 - entweder `zeilen-index` verwenden oder `vorname` plus `nachname`
 - `in-variable` ist empfohlen, `variable` wird als Legacy-Fallback akzeptiert
 - der Schritt pollt MailHog kurz an, damit frisch eingetroffene Mails noch gefunden werden
