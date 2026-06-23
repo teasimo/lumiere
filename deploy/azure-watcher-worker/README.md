@@ -67,20 +67,47 @@ Fuer Google-TTS per Secret-JSON optional:
 - `S3_SYNC_INTERVAL_SECONDS`
 - `S3_ENDPOINT_URL`
 - `AWS_SESSION_TOKEN`
+- `SCENARIO_CONFIG_JSON`
 - `SCENARIO_CONFIG_PATCH_JSON`
 
 ## Wie die Config im Container entsteht
 
-Vor dem Start schreibt `prepare-runtime-config.mjs` die Env-Overrides nach `scenario.config.json`.
+Vor dem Start schreibt `prepare-runtime-config.mjs` die Runtime-Config nach `scenario.config.json`.
 
 Wichtig:
 
+- Falls `SCENARIO_CONFIG_JSON` gesetzt ist, wird dessen JSON-Inhalt als komplette Basis fuer `scenario.config.json` verwendet.
 - `LUNETTES_BASE_URL` wird sowohl auf `scenario["lunettes-job-watcher"].base_url` als auch auf `scenario["test-script"].lunettes_api.base_url` gesetzt.
 - `WATCHER_SOFTWARE` wird auf `scenario["lunettes-job-watcher"].software` gesetzt und schraenkt Claim-Requests auf bestimmte Software-Werte ein, z. B. `Lunettes`.
 - `WATCHER_SCRIPT_INACTIVITY_TIMEOUT_MS` wird auf `scenario["lunettes-job-watcher"].script_inactivity_timeout_ms` gesetzt.
 - `WATCHER_SCRIPT_TERMINATION_GRACE_PERIOD_MS` wird auf `scenario["lunettes-job-watcher"].script_termination_grace_period_ms` gesetzt.
 - Dadurch verwenden Watcher und Testscript-Generator dieselbe Lunettes-API-Basis.
 - Mit `SCENARIO_CONFIG_PATCH_JSON` kannst du zusaetzlich beliebige Teile der zentralen Config deep-merge'n.
+
+Reihenfolge:
+
+1. `SCENARIO_CONFIG_JSON` falls gesetzt, sonst die im Image enthaltene `scenario.config.json`
+2. env-basierte Standard-Overrides wie `LUNETTES_BASE_URL` oder `WATCHER_SOFTWARE`
+3. `SCENARIO_CONFIG_PATCH_JSON`
+
+Beispiel fuer `SCENARIO_CONFIG_JSON`:
+
+```json
+{
+  "scenario": {
+    "lunettes-job-watcher": {
+      "types": ["testscript", "videoscript"]
+    },
+    "video-script": {
+      "render": {
+        "encoding": {
+          "crf": 20
+        }
+      }
+    }
+  }
+}
+```
 
 Beispiel:
 

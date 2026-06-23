@@ -22,6 +22,8 @@ properties:
         value: __CONFLUENCE_PUBLISHHELPER_CREDENTIALS__
       - name: google-application-credentials-json
         value: __GOOGLE_APPLICATION_CREDENTIALS_JSON__
+      - name: scenario-config-json
+        value: __SCENARIO_CONFIG_JSON__
   template:
     containers:
       - name: worker
@@ -43,6 +45,8 @@ properties:
             secretRef: confluence-publishhelper-credentials
           - name: GOOGLE_APPLICATION_CREDENTIALS_JSON
             secretRef: google-application-credentials-json
+          - name: SCENARIO_CONFIG_JSON
+            secretRef: scenario-config-json
           - name: WATCHER_TYPES
             value: testscript,videoscript,publish
           - name: WATCHER_SOFTWARE

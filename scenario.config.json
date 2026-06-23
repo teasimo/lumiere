@@ -7,13 +7,13 @@
         "output_dir": "temp/testfiles"
       },
       "runtime": {
-        "step_timeout_ms": 30000
+        "step_timeout_ms": 80000
       },
       "lunettes_api": {
         "base_url": "https://exigences-h9c6b9fweraub4eg.swedencentral-01.azurewebsites.net/"
       },
       "video": {
-        "wait_between_steps": 1000,
+        "wait_between_steps": 2000,
         "scroll_delay_ms": 35,
         "scroll_step_px": 20,
         "autoscroll_smooth": false,

@@ -32,6 +32,18 @@ function deepMerge(base, override) {
 }
 
 function readConfig() {
+  const rawFromEnv = String(process.env.SCENARIO_CONFIG_JSON || '').trim()
+  if (rawFromEnv) {
+    const parsed = JSON.parse(rawFromEnv)
+    if (isPlainObject(parsed?.scenario)) {
+      return { scenario: parsed.scenario }
+    }
+    if (isPlainObject(parsed)) {
+      return { scenario: parsed }
+    }
+    return { scenario: {} }
+  }
+
   if (!existsSync(configPath)) {
     return {}
   }
