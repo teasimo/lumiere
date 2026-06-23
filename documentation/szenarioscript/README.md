@@ -493,8 +493,8 @@ Beispiel:
 ```xml
 <PinBriefMailAuslesen
   url="https://mailhog.example.internal"
-  vorname="{{person.vorname}}"
-  nachname="{{person.nachname}}"
+  vornamen="{{person.vorname}}"
+  familienname="{{person.nachname}}"
   in-variable="freischaltcode"/>
 ```
 
@@ -518,7 +518,7 @@ Wichtig:
   - erste Mail-ID lesen
   - `GET <url>/api/v1/message/<ID>/part/2`
 - `url` ist ein Pflichtattribut
-- entweder `zeilen-index` verwenden oder `vorname` plus `nachname`
+- entweder `zeilen-index` verwenden oder `vornamen` plus `familienname`
 - `in-variable` ist empfohlen, `variable` wird als Legacy-Fallback akzeptiert
 - der Schritt pollt MailHog kurz an, damit frisch eingetroffene Mails noch gefunden werden
 

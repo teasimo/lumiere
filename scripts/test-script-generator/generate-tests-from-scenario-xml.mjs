@@ -1216,8 +1216,8 @@ function mapInteractionElementToStep(element, makeStepId) {
   if (tag === 'PinBriefMailAuslesen') {
     const output = String(attrs['in-variable'] || attrs.variable || '').trim()
     const url = String(attrs.url || '').trim()
-    const vorname = String(attrs.vorname || '').trim()
-    const nachname = String(attrs.nachname || '').trim()
+    const vornamen = String(attrs.vornamen || '').trim()
+    const familienname = String(attrs.familienname || '').trim()
     const zeilenIndexRaw = attrs['zeilen-index']
     const hasZeilenIndex = zeilenIndexRaw != null && String(zeilenIndexRaw).trim() !== ''
     const zeilenIndex = hasZeilenIndex ? Number(zeilenIndexRaw) : null
@@ -1233,8 +1233,8 @@ function mapInteractionElementToStep(element, makeStepId) {
       if (!Number.isInteger(zeilenIndex) || zeilenIndex < 0) {
         throw new Error('PinBriefMailAuslesen requires a non-negative integer "zeilen-index".')
       }
-    } else if (!vorname || !nachname) {
-      throw new Error('PinBriefMailAuslesen requires either "zeilen-index" or non-empty "vorname" and "nachname" attributes.')
+    } else if (!vornamen || !familienname) {
+      throw new Error('PinBriefMailAuslesen requires either "zeilen-index" or non-empty "vornamen" and "familienname" attributes.')
     }
 
     return withResolvedMeta({
@@ -1243,8 +1243,8 @@ function mapInteractionElementToStep(element, makeStepId) {
         type: 'read-pin-brief-mail',
         output,
         url,
-        vorname,
-        nachname,
+        vornamen,
+        familienname,
         zeilenIndex,
       },
     })

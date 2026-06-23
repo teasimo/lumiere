@@ -15,6 +15,24 @@ hydrate_google_credentials() {
   export GOOGLE_APPLICATION_CREDENTIALS="${credentials_path}"
 }
 
+derive_worker_identity() {
+  local base_worker_id revision effective_worker_id
+  base_worker_id="${WATCHER_WORKER_ID:-}"
+  revision="${CONTAINER_APP_REVISION:-}"
+
+  if [[ -z "${revision}" ]]; then
+    return
+  fi
+
+  if [[ -n "${base_worker_id}" ]]; then
+    effective_worker_id="${base_worker_id}@${revision}"
+  else
+    effective_worker_id="${revision}"
+  fi
+
+  export WATCHER_WORKER_ID="${effective_worker_id}"
+}
+
 link_runtime_data() {
   if [[ "${PERSIST_RUNTIME_DATA:-1}" != "1" ]]; then
     return
@@ -169,6 +187,7 @@ shutdown() {
 trap shutdown EXIT INT TERM
 
 hydrate_google_credentials
+derive_worker_identity
 link_runtime_data
 restore_runtime_data_from_s3
 node /app/deploy/azure-watcher-worker/prepare-runtime-config.mjs

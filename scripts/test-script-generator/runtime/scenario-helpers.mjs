@@ -303,10 +303,20 @@ function normalizeNameValue(value) {
   return String(value || '').trim().toLowerCase()
 }
 
+function findFirstHeaderIndex(normalizedHeaders, aliases) {
+  for (const alias of aliases) {
+    const index = normalizedHeaders.indexOf(normalizeCsvHeader(alias))
+    if (index >= 0) {
+      return index
+    }
+  }
+  return -1
+}
+
 export async function readActivationCodeFromMailhog({
   mailhogUrl,
-  vorname,
-  nachname,
+  vornamen,
+  familienname,
   zeilenIndex = null,
   attachmentPartIndex = 2,
   activationCodeColumn = 'aktivierungscode',
@@ -323,8 +333,8 @@ export async function readActivationCodeFromMailhog({
   const normalizedZeilenIndex = zeilenIndex == null || zeilenIndex === ''
     ? null
     : Number(zeilenIndex)
-  const normalizedVorname = normalizeNameValue(vorname)
-  const normalizedNachname = normalizeNameValue(nachname)
+  const normalizedVornamen = normalizeNameValue(vornamen)
+  const normalizedFamilienname = normalizeNameValue(familienname)
   let lastError = null
 
   while (Date.now() <= deadlineAt) {
@@ -359,12 +369,12 @@ export async function readActivationCodeFromMailhog({
       }
 
       const normalizedHeaders = headers.map(normalizeCsvHeader)
-      const vornameIndex = normalizedHeaders.indexOf('vorname')
-      const nachnameIndex = normalizedHeaders.indexOf('nachname')
-      const activationCodeIndex = normalizedHeaders.indexOf(normalizeCsvHeader(activationCodeColumn))
+      const vornameIndex = findFirstHeaderIndex(normalizedHeaders, ['vorname', 'vornamen', 'firstname', 'first_name'])
+      const nachnameIndex = findFirstHeaderIndex(normalizedHeaders, ['nachname', 'familienname', 'surname', 'lastname', 'last_name'])
+      const activationCodeIndex = findFirstHeaderIndex(normalizedHeaders, [activationCodeColumn])
 
       if (vornameIndex < 0 || nachnameIndex < 0 || activationCodeIndex < 0) {
-        throw new Error(`MailHog-CSV enthaelt nicht die erwarteten Spalten vorname, nachname, ${activationCodeColumn}.`)
+        throw new Error(`MailHog-CSV enthaelt nicht die erwarteten Spalten fuer Vorname, Nachname und ${activationCodeColumn}.`)
       }
 
       let matchingRow = null
@@ -378,18 +388,18 @@ export async function readActivationCodeFromMailhog({
         }
       } else {
         matchingRow = rows.find((row) => (
-          normalizeNameValue(row[vornameIndex]) === normalizedVorname
-          && normalizeNameValue(row[nachnameIndex]) === normalizedNachname
+          normalizeNameValue(row[vornameIndex]) === normalizedVornamen
+          && normalizeNameValue(row[nachnameIndex]) === normalizedFamilienname
         ))
       }
 
       if (!matchingRow) {
-        throw new Error(`Kein CSV-Eintrag fuer ${vorname} ${nachname} gefunden.`)
+        throw new Error(`Kein CSV-Eintrag fuer ${vornamen} ${familienname} gefunden.`)
       }
 
       const activationCode = String(matchingRow[activationCodeIndex] || '').trim()
       if (!activationCode) {
-        throw new Error(`CSV-Eintrag fuer ${vorname} ${nachname} enthaelt keinen Aktivierungscode.`)
+        throw new Error(`CSV-Eintrag fuer ${vornamen} ${familienname} enthaelt keinen Aktivierungscode.`)
       }
 
       return activationCode
@@ -402,7 +412,7 @@ export async function readActivationCodeFromMailhog({
     }
   }
 
-  throw lastError || new Error(`Aktivierungscode fuer ${vorname} ${nachname} konnte nicht aus MailHog gelesen werden.`)
+  throw lastError || new Error(`Aktivierungscode fuer ${vornamen} ${familienname} konnte nicht aus MailHog gelesen werden.`)
 }
 
 export function createStepDomIdentifierLogger({ page, testInfo, enabled = false, maxNodesPerStep = 1200 }) {

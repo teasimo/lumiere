@@ -1542,8 +1542,8 @@ function buildInteractionLines(step, options = {}) {
   } else if (interactionType === 'read-pin-brief-mail') {
     const output = String(interaction.output || '').trim()
     const url = String(interaction.url || '').trim()
-    const vorname = String(interaction.vorname || '').trim()
-    const nachname = String(interaction.nachname || '').trim()
+    const vornamen = String(interaction.vornamen || '').trim()
+    const familienname = String(interaction.familienname || '').trim()
     const zeilenIndex = interaction.zeilenIndex
     if (!output) {
       throw new Error(`Step "${step.id}" with type read-pin-brief-mail requires output.`)
@@ -1551,11 +1551,11 @@ function buildInteractionLines(step, options = {}) {
     if (!url) {
       throw new Error(`Step "${step.id}" with type read-pin-brief-mail requires url.`)
     }
-    if ((zeilenIndex == null || zeilenIndex === '') && (!vorname || !nachname)) {
-      throw new Error(`Step "${step.id}" with type read-pin-brief-mail requires either zeilenIndex or vorname and nachname.`)
+    if ((zeilenIndex == null || zeilenIndex === '') && (!vornamen || !familienname)) {
+      throw new Error(`Step "${step.id}" with type read-pin-brief-mail requires either zeilenIndex or vornamen and familienname.`)
     }
     lines.push(`const __scenarioMailhogUrl = resolveRuntimeTemplateString(${toLiteral(url)}, runtimeVariables)`)
-    lines.push(`const __scenarioActivationCode = await readActivationCodeFromMailhog({ mailhogUrl: __scenarioMailhogUrl, vorname: ${vorname ? `resolveRuntimeTemplateString(${toLiteral(vorname)}, runtimeVariables)` : '""'}, nachname: ${nachname ? `resolveRuntimeTemplateString(${toLiteral(nachname)}, runtimeVariables)` : '""'}, zeilenIndex: ${zeilenIndex == null ? 'null' : Number(zeilenIndex)} })`)
+    lines.push(`const __scenarioActivationCode = await readActivationCodeFromMailhog({ mailhogUrl: __scenarioMailhogUrl, vornamen: ${vornamen ? `resolveRuntimeTemplateString(${toLiteral(vornamen)}, runtimeVariables)` : '""'}, familienname: ${familienname ? `resolveRuntimeTemplateString(${toLiteral(familienname)}, runtimeVariables)` : '""'}, zeilenIndex: ${zeilenIndex == null ? 'null' : Number(zeilenIndex)} })`)
     lines.push(`setRuntimeVariable(runtimeVariables, ${toLiteral(output)}, __scenarioActivationCode)`)
     lines.push(`__scenarioStep.info("runtime-variable-set", { output: ${toLiteral(output)}, value: __scenarioActivationCode, source: "mailhog" })`)
     lines.push(`console.log("[scenario-read]", ${toLiteral(output)}, "=", __scenarioActivationCode)`)

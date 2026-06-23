@@ -220,8 +220,8 @@
     <xs:complexType name="PinBriefMailAuslesenType">
         <xs:attribute name="id" type="xs:ID" use="optional"/>
         <xs:attribute name="url" type="xs:anyURI" use="required"/>
-        <xs:attribute name="vorname" type="xs:string" use="optional"/>
-        <xs:attribute name="nachname" type="xs:string" use="optional"/>
+        <xs:attribute name="vornamen" type="xs:string" use="optional"/>
+        <xs:attribute name="familienname" type="xs:string" use="optional"/>
         <xs:attribute name="zeilen-index" type="xs:nonNegativeInteger" use="optional"/>
         <xs:attribute name="variable" type="xs:string" use="optional"/>
         <xs:attribute name="in-variable" type="xs:string" use="optional"/>

@@ -70,6 +70,8 @@ Fuer Google-TTS per Secret-JSON optional:
 - `SCENARIO_CONFIG_JSON`
 - `SCENARIO_CONFIG_PATCH_JSON`
 
+Auf Azure Container Apps wird `WATCHER_WORKER_ID` zur Laufzeit automatisch mit `CONTAINER_APP_REVISION` erweitert, also z. B. `azure-worker-01@my-containerapp--20mh1s9`. Ohne gesetzte Basis-ID wird nur die Revision verwendet.
+
 ## Wie die Config im Container entsteht
 
 Vor dem Start schreibt `prepare-runtime-config.mjs` die Runtime-Config nach `scenario.config.json`.
@@ -183,5 +185,5 @@ docker run --rm \
 - Das Image basiert auf dem Playwright-Image, damit Browser und Systembibliotheken fuer Testscript-Laeufe vorhanden sind.
 - `ffmpeg` und `unzip` werden zusaetzlich installiert, weil Video- und Trace-Verarbeitung diese Tools benoetigen.
 - `awscli` ist enthalten und uebernimmt Restore und Sync gegen S3.
-- Der Container ist als einzelner Worker gedacht. Mehrere Replikate sind moeglich, sollten aber bewusst mit unterschiedlicher `WATCHER_WORKER_ID` betrieben werden.
+- Der Container ist als einzelner Worker gedacht. Unter Azure Container Apps wird die Revision automatisch an die Worker-ID angehaengt; ausserhalb davon solltest du bei mehreren Workern weiterhin bewusst unterschiedliche `WATCHER_WORKER_ID` setzen.
 - Azure Container Apps mountet S3 nicht nativ als Dateisystem. Deshalb verwendet diese Struktur bewusst ein lokales Runtime-Verzeichnis plus Objekt-Sync.
