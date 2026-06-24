@@ -411,10 +411,35 @@ function extractConfluencePageIdFromLunettesPayload(payload) {
   return null
 }
 
-async function fetchConfluencePageIdFromLunettes({ scenarioId, software }) {
+function extractScenarioTitleFromLunettesPayload(payload) {
+  if (payload == null || typeof payload !== 'object') {
+    return null
+  }
+
+  const candidates = [
+    payload?.titel,
+    payload?.title,
+    payload?.data?.titel,
+    payload?.data?.title,
+  ]
+
+  for (const candidate of candidates) {
+    const value = String(candidate || '').trim()
+    if (value) {
+      return value
+    }
+  }
+
+  return null
+}
+
+async function fetchScenarioMetadataFromLunettes({ scenarioId, software }) {
   const context = tryReadLunettesApiContext(software)
   if (!context) {
-    return null
+    return {
+      confluencePageId: null,
+      title: null,
+    }
   }
 
   const url = `${context.baseUrl}/api/anfo/szenario/${encodeURIComponent(String(scenarioId))}`
@@ -427,7 +452,10 @@ async function fetchConfluencePageIdFromLunettes({ scenarioId, software }) {
   })
 
   if (response.status === 404) {
-    return null
+    return {
+      confluencePageId: null,
+      title: null,
+    }
   }
 
   if (!response.ok) {
@@ -437,7 +465,10 @@ async function fetchConfluencePageIdFromLunettes({ scenarioId, software }) {
 
   const responseText = await response.text()
   if (!responseText.trim()) {
-    return null
+    return {
+      confluencePageId: null,
+      title: null,
+    }
   }
 
   let payload = null
@@ -447,7 +478,10 @@ async function fetchConfluencePageIdFromLunettes({ scenarioId, software }) {
     payload = responseText
   }
 
-  return extractConfluencePageIdFromLunettesPayload(payload)
+  return {
+    confluencePageId: extractConfluencePageIdFromLunettesPayload(payload),
+    title: extractScenarioTitleFromLunettesPayload(payload),
+  }
 }
 
 async function notifyLunettesAboutConfluencePage({ scenarioId, confluencePageId, software }) {
@@ -637,15 +671,16 @@ async function main() {
     const scenarioScriptRaw = await readFile(scenarioAbsolutePath, 'utf8')
     const scenario = parseScenarioScript(scenarioScriptRaw)
     const publishConfig = readPublishConfig(software)
+    const lunettesScenario = await fetchScenarioMetadataFromLunettes({ scenarioId, software })
     const nextTitle = buildConfluencePageTitle({
-      scenarioTitle: scenarioTitleOverride || scenario.title,
+      scenarioTitle: scenarioTitleOverride || lunettesScenario.title || scenario.title,
       scenarioId,
     })
     let pageId = pageIdFromCli
     let createdPageId = null
 
     if (!pageId) {
-      pageId = await fetchConfluencePageIdFromLunettes({ scenarioId, software })
+      pageId = lunettesScenario.confluencePageId
     }
 
     const latestRender = await findLatestSuccessfulRender({ scenarioId }).catch(() => null)
