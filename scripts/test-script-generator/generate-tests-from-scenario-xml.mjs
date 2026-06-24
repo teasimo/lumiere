@@ -1604,6 +1604,9 @@ async function expandFragmentsInChildren(children, {
         },
       ]
       for (const group of fragmentGroups) {
+        if (!isIncludedInFragment(group)) {
+          continue
+        }
         const filteredChildren = filterChildrenForFragmentInclusion(group.children || [])
         for (const filteredChild of filteredChildren) {
           fragmentPayloadChildren.push(assignFragmentOriginChain(filteredChild, nextFragmentOriginChain))
