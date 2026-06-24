@@ -26,10 +26,14 @@ export const centralFillStrategies = [
         className.includes('q-field__native')
       )
     },
-    async run({ locator, expectedValue }) {
+    async run({ locator, expectedValue, isAppend }) {
       await locator.click()
-      await locator.press('Control+a')
-      await locator.press('Backspace')
+      if (isAppend) {
+        await locator.press('End')
+      } else {
+        await locator.press('Control+a')
+        await locator.press('Backspace')
+      }
       if (expectedValue) {
         await locator.type(expectedValue, { delay: 40 })
       }
@@ -109,13 +113,20 @@ export const centralFillStrategies = [
       const tagName = String(elementInfo?.tagName || '').toLowerCase()
       return tagName === 'input' || tagName === 'textarea'
     },
-    async run({ page, locator, expectedValue }) {
-      if (!expectedValue) {
+    async run({ page, locator, expectedValue, isAppend }) {
+      if (!expectedValue && !isAppend) {
         return { handled: false }
       }
 
       await locator.click()
-      await locator.fill(expectedValue)
+      if (isAppend) {
+        await locator.press('End')
+        if (expectedValue) {
+          await locator.type(expectedValue, { delay: 40 })
+        }
+      } else {
+        await locator.fill(expectedValue)
+      }
       await page.keyboard.press('Tab')
 
       return { handled: true }
@@ -126,29 +137,36 @@ export const centralFillStrategies = [
     name: 'generic-contenteditable',
     async match({ testId, isSelect, elementInfo }) {
       if (isSelect) return false
-      return elementInfo?.contentEditable === 'true'
+      return elementInfo?.isContentEditable === true
     },
-    async run({ page, locator, expectedValue }) {
-      if (!expectedValue) {
+    async run({ page, locator, expectedValue, isAppend }) {
+      if (!expectedValue && !isAppend) {
         return { handled: false }
       }
 
       await locator.click()
-      await page.keyboard.press('Control+A')
-      await page.keyboard.press('Delete')
+      if (isAppend) {
+        await page.keyboard.press('Control+End').catch(() => {})
+        if (expectedValue) {
+          await locator.type(expectedValue, { delay: 40 })
+        }
+      } else {
+        await page.keyboard.press('Control+A')
+        await page.keyboard.press('Delete')
 
-      // For contenteditable, use insertText to avoid key events
-      await page.evaluate(
-        ({ text }) => {
-          const el = document.activeElement
-          if (el?.contentEditable === 'true') {
-            el.insertText(text)
-            el.dispatchEvent(new Event('input', { bubbles: true }))
-            el.dispatchEvent(new Event('change', { bubbles: true }))
-          }
-        },
-        { text: expectedValue }
-      )
+        // For contenteditable, use insertText to avoid key events
+        await page.evaluate(
+          ({ text }) => {
+            const el = document.activeElement
+            if (el?.contentEditable === 'true') {
+              el.insertText(text)
+              el.dispatchEvent(new Event('input', { bubbles: true }))
+              el.dispatchEvent(new Event('change', { bubbles: true }))
+            }
+          },
+          { text: expectedValue }
+        )
+      }
 
       await page.keyboard.press('Tab')
 

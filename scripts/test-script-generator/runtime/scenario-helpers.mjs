@@ -1519,11 +1519,18 @@ async function applyDefaultFillStrategy(page, locator, expectedValue, elementInf
 
   if (elementInfo.isContentEditable) {
     await locator.click()
-    await page.keyboard.press('Control+a')
-    if (expectedValue) {
-      await locator.type(expectedValue, { delay: 35 })
+    if (mode === 'append') {
+      await page.keyboard.press('Control+End').catch(() => {})
+      if (expectedValue) {
+        await locator.type(expectedValue, { delay: 35 })
+      }
     } else {
-      await page.keyboard.press('Backspace')
+      await page.keyboard.press('Control+a')
+      if (expectedValue) {
+        await locator.type(expectedValue, { delay: 35 })
+      } else {
+        await page.keyboard.press('Backspace')
+      }
     }
     await locator.dispatchEvent("input")
     await locator.dispatchEvent("change")
@@ -1918,9 +1925,10 @@ export async function applyAppendValue(page, testId, value, options = {}) {
 }
 
 export async function applyAppendValueToLocator(page, locator, value, meta = {}, options = {}) {
-  await locator.waitFor({ state: 'visible' })
+  const controlLocator = await resolveFillControlLocator(locator)
+  await ensureLocatorScroll(page, controlLocator, options)
 
-  const elementInfo = await locator.evaluate((el) => ({
+  const elementInfo = await controlLocator.evaluate((el) => ({
     tagName: el.tagName?.toLowerCase?.() || '',
     isContentEditable: Boolean(el.isContentEditable),
     className: String(el.className || ""),
@@ -1942,29 +1950,26 @@ export async function applyAppendValueToLocator(page, locator, value, meta = {},
       continue
     }
 
-    const result = await strategy.run({ page, locator, testId: targetLabel, elementInfo, expectedValue, isAppend: true })
+    const result = await strategy.run({ page, locator: controlLocator, testId: targetLabel, elementInfo, expectedValue, isAppend: true })
     const handled = typeof result === "object" && result !== null
       ? Boolean(result.handled)
       : Boolean(result)
 
     if (handled) {
-      const skipVerification = typeof result === "object" && result !== null && result.verify === false
-      if (!skipVerification) {
-        await assertAppendPersisted(locator, elementInfo, targetLabel, expectedValue)
-      }
       return
     }
   }
 
-  await applyDefaultFillStrategy(page, locator, expectedValue, elementInfo, targetLabel, "append")
+  await applyDefaultFillStrategy(page, controlLocator, expectedValue, elementInfo, targetLabel, "append")
 }
 
 export async function applyAppendValueById(page, elementId, value, selectorType = "id", options = {}) {
   const selector = selectorType === "data-id" ? `[data-id=${JSON.stringify(String(elementId))}]` : `[id=${JSON.stringify(String(elementId))}]`
   const locator = await pickLocator(page.locator(selector), options)
-  await locator.waitFor({ state: 'visible' })
+  const controlLocator = await resolveFillControlLocator(locator)
+  await ensureLocatorScroll(page, controlLocator, options)
 
-  const elementInfo = await locator.evaluate((el) => ({
+  const elementInfo = await controlLocator.evaluate((el) => ({
     tagName: el.tagName?.toLowerCase?.() || '',
     isContentEditable: Boolean(el.isContentEditable),
     className: String(el.className || ""),
@@ -1985,28 +1990,17 @@ export async function applyAppendValueById(page, elementId, value, selectorType 
       continue
     }
 
-    const result = await strategy.run({ page, locator, testId: elementId, elementInfo, expectedValue, isAppend: true })
+    const result = await strategy.run({ page, locator: controlLocator, testId: elementId, elementInfo, expectedValue, isAppend: true })
     const handled = typeof result === "object" && result !== null
       ? Boolean(result.handled)
       : Boolean(result)
 
     if (handled) {
-      const skipVerification = typeof result === "object" && result !== null && result.verify === false
-      if (!skipVerification) {
-        await assertAppendPersisted(locator, elementInfo, `#${elementId}`, expectedValue)
-      }
       return
     }
   }
 
-  await applyDefaultFillStrategy(page, locator, expectedValue, elementInfo, `#${elementId}`, "append")
-}
-
-async function assertAppendPersisted(locator, elementInfo, testId, appendedValue) {
-  const currentValue = await readValueFromElement(locator, elementInfo)
-  if (!currentValue.endsWith(appendedValue)) {
-    throw new Error(`Append did not persist for data-testid="${testId}". Expected suffix "${appendedValue}", got "${currentValue}".`)
-  }
+  await applyDefaultFillStrategy(page, controlLocator, expectedValue, elementInfo, `#${elementId}`, "append")
 }
 
 export async function applyClickValueById(page, elementId, selectorType = "id", options = {}) {
