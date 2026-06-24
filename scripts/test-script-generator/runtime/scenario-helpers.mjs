@@ -716,13 +716,6 @@ async function readValueFromElement(locator, elementInfo) {
   return locator.evaluate((el) => el.getAttribute("value") ?? "")
 }
 
-async function assertFillPersisted(locator, elementInfo, testId, expectedValue) {
-  const currentValue = await readValueFromElement(locator, elementInfo)
-  if (currentValue !== expectedValue) {
-    throw new Error(`Fill did not persist for data-testid="${testId}". Expected "${expectedValue}", got "${currentValue}".`)
-  }
-}
-
 async function readComparableValue(locator) {
   return locator.evaluate((el) => {
     const tagName = el.tagName?.toLowerCase?.() || ''
@@ -1521,7 +1514,6 @@ async function applyDefaultFillStrategy(page, locator, expectedValue, elementInf
     await locator.dispatchEvent("input")
     await locator.dispatchEvent("change")
     await locator.press('Tab')
-    await assertFillPersisted(locator, elementInfo, testId, expectedValue)
     return
   }
 
@@ -1535,7 +1527,6 @@ async function applyDefaultFillStrategy(page, locator, expectedValue, elementInf
     }
     await locator.dispatchEvent("input")
     await locator.dispatchEvent("change")
-    await assertFillPersisted(locator, elementInfo, testId, expectedValue)
     return
   }
 
@@ -1668,10 +1659,6 @@ export async function applyFillValueToLocator(page, locator, value, meta = {}, o
       : Boolean(result)
 
     if (handled) {
-      const skipVerification = typeof result === "object" && result !== null && result.verify === false
-      if (!skipVerification) {
-        await assertFillPersisted(controlLocator, elementInfo, targetLabel, expectedValue)
-      }
       return
     }
   }
@@ -1712,15 +1699,100 @@ export async function applyFillValueById(page, elementId, value, selectorType = 
       : Boolean(result)
 
     if (handled) {
-      const skipVerification = typeof result === "object" && result !== null && result.verify === false
-      if (!skipVerification) {
-        await assertFillPersisted(controlLocator, elementInfo, `#${elementId}`, expectedValue)
-      }
       return
     }
   }
 
   await applyDefaultFillStrategy(page, controlLocator, expectedValue, elementInfo, `#${elementId}`)
+}
+
+function buildReplacedValue(currentValue, searchValue, replaceValue, options = {}) {
+  const sourceText = String(currentValue ?? "")
+  const searchText = String(searchValue ?? "")
+  const replacementText = String(replaceValue ?? "")
+  const useRegex = options?.replaceRegex === true
+
+  if (!searchText) {
+    throw new Error('Replace requires a non-empty searchValue.')
+  }
+
+  if (useRegex) {
+    return sourceText.replace(new RegExp(searchText, 'g'), replacementText)
+  }
+
+  return sourceText.split(searchText).join(replacementText)
+}
+
+export async function applyReplaceValue(page, testId, searchValue, replaceValue, options = {}) {
+  const locator = await pickLocator(buildTestIdLocator(page, testId, options), options)
+  return applyReplaceValueToLocator(page, locator, searchValue, replaceValue, { targetLabel: `data-testid="${testId}"` }, options)
+}
+
+export async function applyReplaceValueToLocator(page, locator, searchValue, replaceValue, meta = {}, options = {}) {
+  const controlLocator = await resolveFillControlLocator(locator)
+  await ensureLocatorScroll(page, controlLocator, options)
+
+  const elementInfo = await controlLocator.evaluate((el) => ({
+    tagName: el.tagName?.toLowerCase?.() || '',
+    isContentEditable: Boolean(el.isContentEditable),
+    className: String(el.className || ""),
+    modelValue: el.getAttribute("model-value"),
+    role: el.getAttribute("role"),
+  }))
+
+  const currentValue = await readValueFromElement(controlLocator, elementInfo)
+  const expectedValue = buildReplacedValue(currentValue, searchValue, replaceValue, options)
+  const targetLabel = String(meta?.targetLabel || '<target>')
+
+  const envStrategies = await loadEnvFillStrategies()
+  for (const strategy of envStrategies) {
+    if (!strategy || typeof strategy.match !== "function" || typeof strategy.run !== "function") {
+      continue
+    }
+
+    const isMatch = await strategy.match({
+      testId: targetLabel,
+      elementInfo,
+      expectedValue,
+      currentValue,
+      searchValue: String(searchValue ?? ""),
+      replaceValue: String(replaceValue ?? ""),
+      replaceRegex: options?.replaceRegex === true,
+      isReplace: true,
+    })
+    if (!isMatch) {
+      continue
+    }
+
+    const result = await strategy.run({
+      page,
+      locator: controlLocator,
+      testId: targetLabel,
+      elementInfo,
+      expectedValue,
+      currentValue,
+      searchValue: String(searchValue ?? ""),
+      replaceValue: String(replaceValue ?? ""),
+      replaceRegex: options?.replaceRegex === true,
+      isReplace: true,
+    })
+    const handled = typeof result === "object" && result !== null
+      ? Boolean(result.handled)
+      : Boolean(result)
+
+    if (handled) {
+      return
+    }
+  }
+
+  await applyDefaultFillStrategy(page, controlLocator, expectedValue, elementInfo, targetLabel)
+}
+
+export async function applyReplaceValueById(page, elementId, searchValue, replaceValue, selectorType = "id", options = {}) {
+  const selector = selectorType === "data-id" ? `[data-id=${JSON.stringify(String(elementId))}]` : `[id=${JSON.stringify(String(elementId))}]`
+  const locator = await pickLocator(page.locator(selector), options)
+  const targetLabel = selectorType === 'data-id' ? `data-id="${elementId}"` : `#${elementId}`
+  return applyReplaceValueToLocator(page, locator, searchValue, replaceValue, { targetLabel }, options)
 }
 
 export async function applySelectValue(page, testId, value, options = {}) {

@@ -191,7 +191,7 @@ function countRenderedFlowSteps(flowEntries) {
         && target[key] != null
       ))
     )
-    if (['click', 'fill', 'append', 'select', 'upload', 'search-and-select'].includes(interactionType) && hasUsableScrollTarget) {
+    if (['click', 'fill', 'append', 'replace', 'select', 'upload', 'search-and-select'].includes(interactionType) && hasUsableScrollTarget) {
       count += 1
     }
 

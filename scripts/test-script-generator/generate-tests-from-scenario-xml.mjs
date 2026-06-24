@@ -110,6 +110,21 @@ function printUsage() {
   ].join('\n'))
 }
 
+function parseBoolLike(value, fallback = false) {
+  if (value == null) {
+    return fallback
+  }
+
+  const normalized = String(value).trim().toLowerCase()
+  if (['true', '1', 'yes', 'ja'].includes(normalized)) {
+    return true
+  }
+  if (['false', '0', 'no', 'nein'].includes(normalized)) {
+    return false
+  }
+  return fallback
+}
+
 function parseArgs(argv) {
   const args = [...argv]
   const options = {
@@ -1141,12 +1156,32 @@ function mapInteractionElementToStep(element, makeStepId) {
 
   if (tag === 'Eingabe') {
     const value = trimmedText || String(attrs.text || '')
+    const rawStyle = String(attrs['eingabe-stil'] || '').trim().toLowerCase()
+    const interactionType = rawStyle === 'anhängen'
+      ? 'append'
+      : rawStyle === 'ersetzen'
+        ? 'replace'
+        : 'fill'
+    const searchValue = String(attrs.suchstring || '')
+    const replaceRegex = parseBoolLike(
+      attrs['ersetzten-regexp'] ?? attrs['ersetzen-regexp'],
+      false,
+    )
+    if (interactionType === 'replace' && !searchValue) {
+      throw new Error('Eingabe with eingabe-stil="ersetzen" requires a non-empty suchstring attribute.')
+    }
     return withResolvedMeta({
-      id: makeStepId(element, 'fill'),
+      id: makeStepId(element, interactionType),
       interaction: {
-        type: 'fill',
+        type: interactionType,
         target: buildTargetFromAttributes(attrs, { includeText: false }),
         value,
+        ...(interactionType === 'replace'
+          ? {
+              searchValue,
+              replaceRegex,
+            }
+          : {}),
       },
     })
   }

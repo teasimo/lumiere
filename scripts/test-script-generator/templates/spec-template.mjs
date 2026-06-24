@@ -858,7 +858,7 @@ function buildTargetAvailabilityLogLines(step, options = {}) {
   const stepRuntimeRef = options.stepRuntimeRef || '__scenarioStep'
   const genericSelector = buildGenericTargetSelector(target)
   const lines = []
-  const supportedInteractionTypes = new Set(['click', 'fill', 'append', 'select', 'upload', 'scroll', 'assert', 'search-and-select'])
+  const supportedInteractionTypes = new Set(['click', 'fill', 'append', 'replace', 'select', 'upload', 'scroll', 'assert', 'search-and-select'])
 
   if (!supportedInteractionTypes.has(interactionType) || !target || typeof target !== 'object' || Object.keys(target).length === 0) {
     return lines
@@ -873,7 +873,7 @@ function buildTargetAvailabilityLogLines(step, options = {}) {
     availabilityOptions.genericSelector = genericSelector
   }
 
-  if (interactionType === 'fill' || interactionType === 'append' || interactionType === 'upload') {
+  if (interactionType === 'fill' || interactionType === 'append' || interactionType === 'replace' || interactionType === 'upload') {
     if (targetNeedsRuntimeLocator(target)) {
       availabilityOptions.textMode = 'label'
       availabilityOptions.preferredControl = 'fill'
@@ -969,7 +969,7 @@ function buildScrollLocatorExpression(target) {
 }
 
 function isInteractionTypeNeedingAutoScroll(interactionType) {
-  return ['click', 'fill', 'append', 'select', 'upload', 'search-and-select'].includes(interactionType)
+  return ['click', 'fill', 'append', 'replace', 'select', 'upload', 'search-and-select'].includes(interactionType)
 }
 
 function injectAutoScrollSteps(flowEntries, options = {}, path = []) {
@@ -1316,6 +1316,36 @@ function buildInteractionLines(step, options = {}) {
       const selectorType = target['data-id'] ? 'data-id' : 'id'
       const value = target['data-id'] || target.id
       lines.push(`await applyAppendValueById(page, ${toLiteral(String(value))}, ${toLiteral(String(interaction.value || ''))}, ${toLiteral(selectorType)}, { targetIndex: ${getTargetIndex(target) ?? 'undefined'} })`)
+    }
+  } else if (interactionType === 'replace') {
+    if (interaction.value == null && target.value != null) {
+      throw new Error(
+        `Step "${step.id}" has misplaced replace value. Put "value" under "interaction", not under "interaction.target".`
+      )
+    }
+    if (interaction.searchValue == null || String(interaction.searchValue).trim() === '') {
+      throw new Error(`Step "${step.id}" has interaction type "replace" but no searchValue.`)
+    }
+    const resolvedReplaceValueExpr = `resolveRuntimeTemplateString(${toLiteral(String(interaction.value || ''))}, runtimeVariables)`
+    const resolvedSearchValueExpr = `resolveRuntimeTemplateString(${toLiteral(String(interaction.searchValue || ''))}, runtimeVariables)`
+    const replaceOptionsExpr = `{ replaceRegex: ${interaction.replaceRegex === true ? 'true' : 'false'}, smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true, targetIndex: ${getTargetIndex(target) ?? 'undefined'} }`
+    if (targetNeedsRuntimeLocator(target)) {
+      lines.push(`const __scenarioReplaceLocator = await resolveTargetLocator(page, ${buildTargetObjectExpression(target, { runtimeVariables: true })}, { textMode: 'label', preferredControl: 'fill' })`)
+      lines.push(`await applyReplaceValueToLocator(page, __scenarioReplaceLocator, ${resolvedSearchValueExpr}, ${resolvedReplaceValueExpr}, { targetLabel: ${toLiteral(buildScrollTargetSummary(target) || '<target>')} }, { replaceRegex: ${interaction.replaceRegex === true ? 'true' : 'false'}, smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true })`)
+    } else if (target.testid) {
+      lines.push(`await applyReplaceValue(page, ${toLiteral(String(target.testid))}, ${resolvedSearchValueExpr}, ${resolvedReplaceValueExpr}, ${replaceOptionsExpr})`)
+    } else if (target.text) {
+      lines.push(`const __scenarioReplaceLabelLocator = ${buildIndexedLocatorExpression(`page.getByLabel(resolveRuntimeTemplateString(${toLiteral(String(target.text))}, runtimeVariables), { exact: true })`, target)}`)
+      lines.push(`await applyReplaceValueToLocator(page, __scenarioReplaceLabelLocator, ${resolvedSearchValueExpr}, ${resolvedReplaceValueExpr}, { targetLabel: ${toLiteral(buildScrollTargetSummary(target) || '<target>')} }, { replaceRegex: ${interaction.replaceRegex === true ? 'true' : 'false'}, smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true })`)
+    } else if (buildGenericTargetSelector(target)) {
+      lines.push(`const __scenarioReplaceGenericLocator = ${buildIndexedLocatorExpression(`page.locator(resolveRuntimeTemplateString(${toLiteral(buildGenericTargetSelector(target))}, runtimeVariables))`, target)}`)
+      lines.push(`await applyReplaceValueToLocator(page, __scenarioReplaceGenericLocator, ${resolvedSearchValueExpr}, ${resolvedReplaceValueExpr}, { targetLabel: ${toLiteral(buildScrollTargetSummary(target) || '<target>')} }, { replaceRegex: ${interaction.replaceRegex === true ? 'true' : 'false'}, smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true })`)
+    } else if (target.id || target['data-id']) {
+      const selectorType = target['data-id'] ? 'data-id' : 'id'
+      const value = target['data-id'] || target.id
+      lines.push(`await applyReplaceValueById(page, ${toLiteral(String(value))}, ${resolvedSearchValueExpr}, ${resolvedReplaceValueExpr}, ${toLiteral(selectorType)}, ${replaceOptionsExpr})`)
+    } else {
+      throw new Error(`Step "${step.id}" has interaction type "replace" but no usable target fields.`)
     }
   } else if (interactionType === 'click') {
     if (!target.testid && !target.id && !target['data-id'] && !target.text && !target.role && !buildGenericTargetSelector(target)) {

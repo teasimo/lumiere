@@ -246,9 +246,21 @@
 
     <xs:complexType name="KomponentInputType" mixed="true">
         <xs:complexContent mixed="true">
-            <xs:extension base="InteractionType"/>
+            <xs:extension base="InteractionType">
+                <xs:attribute name="eingabe-stil" type="EingabeStilType" use="optional" default="setzen"/>
+                <xs:attribute name="suchstring" type="xs:string" use="optional"/>
+                <xs:attribute name="ersetzten-regexp" type="xs:boolean" use="optional" default="false"/>
+            </xs:extension>
         </xs:complexContent>
     </xs:complexType>
+
+    <xs:simpleType name="EingabeStilType">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="setzen"/>
+            <xs:enumeration value="anhängen"/>
+            <xs:enumeration value="ersetzen"/>
+        </xs:restriction>
+    </xs:simpleType>
 
     <xs:complexType name="WartenType">
         <xs:complexContent>
