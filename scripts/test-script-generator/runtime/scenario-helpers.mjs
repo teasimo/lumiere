@@ -244,6 +244,155 @@ export function setRuntimeVariable(runtimeVariables, outputPath, value) {
   cursor[keys[keys.length - 1]] = value
 }
 
+function tryParseJson(value) {
+  if (typeof value !== 'string') {
+    return { ok: true, value }
+  }
+
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return { ok: false, value: trimmed }
+  }
+
+  try {
+    return { ok: true, value: JSON.parse(trimmed) }
+  } catch {
+    return { ok: false, value: trimmed }
+  }
+}
+
+function tokenizeApiParameterPath(path) {
+  const normalized = String(path || '').trim()
+  if (!normalized) {
+    return []
+  }
+
+  const tokens = []
+  const pattern = /([^.[\]]+)|\[(\d+|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')\]/g
+  let match
+
+  while ((match = pattern.exec(normalized)) !== null) {
+    if (match[1] != null) {
+      tokens.push(match[1])
+      continue
+    }
+
+    const bracketValue = String(match[2] || '')
+    if (/^\d+$/.test(bracketValue)) {
+      tokens.push(Number(bracketValue))
+      continue
+    }
+
+    tokens.push(bracketValue.slice(1, -1))
+  }
+
+  return tokens
+}
+
+function readValueFromApiPayload(payload, parameter) {
+  const tokens = tokenizeApiParameterPath(parameter)
+  if (tokens.length === 0) {
+    return payload
+  }
+
+  let current = payload
+  for (const token of tokens) {
+    if (current == null) {
+      throw new Error(`API response path "${parameter}" konnte nicht gelesen werden.`)
+    }
+
+    if (typeof token === 'number') {
+      if (!Array.isArray(current)) {
+        throw new Error(`API response path "${parameter}" erwartet an dieser Stelle ein Array.`)
+      }
+      current = current[token]
+      continue
+    }
+
+    if (typeof current !== 'object' || !Object.prototype.hasOwnProperty.call(current, token)) {
+      throw new Error(`API response path "${parameter}" enthaelt kein Feld "${token}".`)
+    }
+    current = current[token]
+  }
+
+  return current
+}
+
+export async function executeScenarioApiRequest({
+  method,
+  url,
+  payloadTemplate = '',
+  runtimeVariables = {},
+}) {
+  const normalizedMethod = String(method || '').trim().toUpperCase()
+  const normalizedUrl = String(url || '').trim()
+  if (!['GET', 'POST'].includes(normalizedMethod)) {
+    throw new Error(`Unsupported API method: ${method}`)
+  }
+  if (!normalizedUrl) {
+    throw new Error('API request requires a non-empty url.')
+  }
+
+  const resolvedPayloadText = resolveRuntimeTemplateString(String(payloadTemplate ?? ''), runtimeVariables)
+  const parsedPayload = tryParseJson(resolvedPayloadText)
+  const requestInit = {
+    method: normalizedMethod,
+    headers: {},
+  }
+
+  if (resolvedPayloadText.trim()) {
+    if (parsedPayload.ok && typeof parsedPayload.value === 'object') {
+      requestInit.headers['content-type'] = 'application/json'
+      requestInit.body = JSON.stringify(parsedPayload.value)
+    } else {
+      requestInit.body = resolvedPayloadText
+    }
+  }
+
+  const response = await fetch(normalizedUrl, requestInit)
+  const responseText = await response.text()
+  const parsedResponse = tryParseJson(responseText)
+  if (!response.ok) {
+    throw new Error(`API request failed (${response.status} ${response.statusText}) for ${normalizedMethod} ${normalizedUrl}: ${responseText.slice(0, 400)}`)
+  }
+
+  return {
+    method: normalizedMethod,
+    url: normalizedUrl,
+    status: response.status,
+    statusText: response.statusText,
+    headers: Object.fromEntries(response.headers.entries()),
+    bodyText: responseText,
+    body: parsedResponse.ok ? parsedResponse.value : responseText,
+  }
+}
+
+export function readScenarioApiResponseValue(apiResponse, parameter = '', regex = '') {
+  const payload = apiResponse?.body
+  const value = readValueFromApiPayload(payload, parameter)
+  let normalizedValue = value
+  if (normalizedValue != null && typeof normalizedValue === 'object') {
+    normalizedValue = JSON.stringify(normalizedValue)
+  }
+  if (normalizedValue != null && typeof normalizedValue !== 'string') {
+    normalizedValue = String(normalizedValue)
+  }
+
+  const normalizedRegex = String(regex || '').trim()
+  if (!normalizedRegex) {
+    return normalizedValue
+  }
+
+  const match = String(normalizedValue ?? '').match(new RegExp(normalizedRegex))
+  if (!match) {
+    throw new Error(`API response value did not match regex "${normalizedRegex}".`)
+  }
+  if (match[1] != null) {
+    return String(match[1])
+  }
+  return String(match[0] ?? '')
+}
+
 function parseCsvRow(line, delimiter) {
   const values = []
   let current = ''

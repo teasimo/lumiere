@@ -216,6 +216,8 @@ Moegliche Inhalte in `Gruppe`:
 - `Upload`
 - `Anzeige`
 - `Auslesen`
+- `GET`
+- `POST`
 - `Gruppe`
 - `Warten`
 - `Oeffnen`
@@ -484,6 +486,47 @@ Wichtig:
 - `quelle="attribute"` ist im Schema vorhanden, wird im Testscript-Generator aktuell aber nicht unterstuetzt.
 - Fuer `download` ist `in-variable` empfohlen. `variable` wird als Legacy-Fallback akzeptiert.
 
+### `GET` und `POST`
+
+Ruft eine API auf und liest Werte aus der Response in Runtime-Variablen.
+
+Beispiel:
+
+```xml
+<GET url="https://example.internal/api/users/42" payload="{&quot;includeRoles&quot;:true}">
+  <Auslesen parameter="user.name" in-variable="api.userName"/>
+  <Auslesen parameter="roles[0]" in-variable="api.firstRole"/>
+</GET>
+```
+
+```xml
+<POST url="https://example.internal/api/login" payload="{&quot;username&quot;:&quot;{{api.userName}}&quot;,&quot;password&quot;:&quot;secret&quot;}">
+  <Auslesen parameter="token" in-variable="api.token"/>
+</POST>
+```
+
+Beispiel mit Regex auf einem Response-Feld:
+
+```xml
+<GET url="https://mailpit.example/api/v1/message/{{mailpit.latestMessageId}}">
+  <Auslesen
+    parameter="Text"
+    regex="(https://neo-test\\.de/[^\\s&quot;'&lt;&gt;]+)"
+    in-variable="freischaltUrl"/>
+</GET>
+```
+
+Wichtig:
+
+- `url` ist Pflicht.
+- `payload` ist optional und kann Runtime-Variablen wie `{{api.userName}}` enthalten.
+- `payload` wird, falls moeglich, als JSON geparst und als Request-Body gesendet.
+- Innerhalb von `GET`/`POST` ist nur `<Auslesen .../>` vorgesehen.
+- `parameter` liest einen Pfad aus der JSON-Response, z. B. `token`, `user.name` oder `roles[0]`.
+- `regex` ist optional und wird auf den gelesenen Wert angewendet.
+- falls die Regex eine Capture-Group enthaelt, wird Gruppe 1 gespeichert, sonst der gesamte Match.
+- `in-variable` ist empfohlen, `variable` wird auch hier als Legacy-Fallback akzeptiert.
+
 ### `PinBriefMailAuslesen`
 
 Liest aus einer MailHog-Mail den CSV-Anhang `part/2` und schreibt den Wert aus der Spalte `aktivierungscode` in eine Runtime-Variable.
@@ -600,10 +643,21 @@ Ein Fragment ist ein eigenes XML mit Root `SzenarioScript` und `fragment="true"`
 </Fragment>
 ```
 
+Oder Variablen-Mapping aus dem Parent-Kontext:
+
+```xml
+<Fragment name="neo-login">
+  <Auslesen variable="username" in-variable="actor.username"/>
+  <Auslesen variable="password" in-variable="actor.password"/>
+</Fragment>
+```
+
 Regeln:
 
 - `name` ist Pflicht
 - Parameter werden in den Variablenkontext des Fragments gelegt
+- `Auslesen` innerhalb von `Fragment` mapped Parent-Variablen in Fragment-Variablen
+- bei `Auslesen` ist `variable` der Name im Fragment und `in-variable` der Pfad im Parent-Kontext
 - fehlende Pflichtparameter ohne Default fuehren zu einem Fehler
 
 Aktuelle Aufloesung:

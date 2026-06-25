@@ -46,6 +46,8 @@ const INTERACTION_TAGS = new Set([
   'Upload',
   'Anzeige',
   'Auslesen',
+  'GET',
+  'POST',
   'PinBriefMailAuslesen',
   'Warten',
   'Oeffnen',
@@ -59,6 +61,7 @@ const RESOLVED_TITLE_SOURCE_ATTRS = [
   'aria-label',
   'label',
   'url',
+  'payload',
   'suchwert',
   'status',
 ]
@@ -758,18 +761,33 @@ function buildParameterContext(parameterElements, parentContext, dataFunctions) 
   const overrides = {}
 
   for (const parameter of parameterElements || []) {
-    if (parameter.tag !== 'Parameter') {
+    if (parameter.tag === 'Parameter') {
+      const name = String(parameter.attrs?.name || '').trim()
+      if (!name) {
+        continue
+      }
+
+      const rawValue = parameter.attrs?.value != null ? parameter.attrs.value : String(parameter.text || '')
+      const resolvedValue = resolveTemplateString(String(rawValue), parentContext, dataFunctions)
+      setPathValue(overrides, name, resolvedValue)
       continue
     }
 
-    const name = String(parameter.attrs?.name || '').trim()
-    if (!name) {
+    if (parameter.tag === 'Auslesen') {
+      const fragmentVariable = String(parameter.attrs?.variable || parameter.attrs?.parameter || '').trim()
+      const parentVariable = String(parameter.attrs?.['in-variable'] || '').trim()
+      if (!fragmentVariable || !parentVariable) {
+        throw new Error('Fragment > Auslesen requires "variable" (or "parameter") and "in-variable".')
+      }
+
+      const resolvedValue = getPathValue(parentContext, parentVariable)
+      if (resolvedValue === undefined) {
+        throw new Error(`Fragment > Auslesen could not resolve parent variable "${parentVariable}".`)
+      }
+
+      setPathValue(overrides, fragmentVariable, resolvedValue)
       continue
     }
-
-    const rawValue = parameter.attrs?.value != null ? parameter.attrs.value : String(parameter.text || '')
-    const resolvedValue = resolveTemplateString(String(rawValue), parentContext, dataFunctions)
-    setPathValue(overrides, name, resolvedValue)
   }
 
   return overrides
@@ -1246,6 +1264,45 @@ function mapInteractionElementToStep(element, makeStepId) {
     }
 
     throw new Error(`Auslesen quelle="${source}" is currently not supported by the test generator.`)
+  }
+
+  if (tag === 'GET' || tag === 'POST') {
+    const method = tag
+    const url = String(attrs.url || '').trim()
+    const payload = attrs.payload == null ? '' : String(attrs.payload)
+    if (!url) {
+      throw new Error(`${tag} requires a non-empty "url" attribute.`)
+    }
+
+    const reads = []
+    for (const child of element.children || []) {
+      if (child?.tag !== 'Auslesen') {
+        throw new Error(`${tag} only supports nested <Auslesen .../> elements.`)
+      }
+
+      const childAttrs = child.attrs || {}
+      const output = String(childAttrs['in-variable'] || childAttrs.variable || '').trim()
+      if (!output) {
+        throw new Error(`${tag} > Auslesen requires "in-variable" (preferred) or "variable".`)
+      }
+
+      reads.push({
+        parameter: childAttrs.parameter == null ? '' : String(childAttrs.parameter),
+        regex: childAttrs.regex == null ? '' : String(childAttrs.regex),
+        output,
+      })
+    }
+
+    return withResolvedMeta({
+      id: makeStepId(element, method.toLowerCase()),
+      interaction: {
+        type: 'api-request',
+        method,
+        url,
+        payload,
+        reads,
+      },
+    })
   }
 
   if (tag === 'PinBriefMailAuslesen') {

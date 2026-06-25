@@ -1589,6 +1589,39 @@ function buildInteractionLines(step, options = {}) {
     lines.push(`setRuntimeVariable(runtimeVariables, ${toLiteral(output)}, __scenarioActivationCode)`)
     lines.push(`__scenarioStep.info("runtime-variable-set", { output: ${toLiteral(output)}, value: __scenarioActivationCode, source: "mailhog" })`)
     lines.push(`console.log("[scenario-read]", ${toLiteral(output)}, "=", __scenarioActivationCode)`)
+  } else if (interactionType === 'api-request') {
+    const method = String(interaction.method || '').trim().toUpperCase()
+    const url = String(interaction.url || '').trim()
+    const payload = interaction.payload == null ? '' : String(interaction.payload)
+    const reads = Array.isArray(interaction.reads) ? interaction.reads : []
+    if (!method || !['GET', 'POST'].includes(method)) {
+      throw new Error(`Step "${step.id}" with type api-request requires method GET or POST.`)
+    }
+    if (!url) {
+      throw new Error(`Step "${step.id}" with type api-request requires url.`)
+    }
+
+    lines.push(`const __scenarioApiResponse = await executeScenarioApiRequest({`)
+    lines.push(`  method: ${toLiteral(method)},`)
+    lines.push(`  url: resolveRuntimeTemplateString(${toLiteral(url)}, runtimeVariables),`)
+    lines.push(`  payloadTemplate: ${toLiteral(payload)},`)
+    lines.push(`  runtimeVariables,`)
+    lines.push(`})`)
+    lines.push(`__scenarioStep.info("api-request", { method: ${toLiteral(method)}, url: __scenarioApiResponse.url, status: __scenarioApiResponse.status })`)
+
+    for (const [readIndex, read] of reads.entries()) {
+      const output = String(read?.output || '').trim()
+      const parameter = read?.parameter == null ? '' : String(read.parameter)
+      const regex = read?.regex == null ? '' : String(read.regex)
+      if (!output) {
+        throw new Error(`Step "${step.id}" with type api-request contains a read without output.`)
+      }
+      const valueVar = `__scenarioApiValue${readIndex + 1}`
+      lines.push(`const ${valueVar} = readScenarioApiResponseValue(__scenarioApiResponse, ${toLiteral(parameter)}, resolveRuntimeTemplateString(${toLiteral(regex)}, runtimeVariables))`)
+      lines.push(`setRuntimeVariable(runtimeVariables, ${toLiteral(output)}, ${valueVar})`)
+      lines.push(`__scenarioStep.info("runtime-variable-set", { output: ${toLiteral(output)}, value: ${valueVar}, source: "api", parameter: ${toLiteral(parameter)}, regex: ${toLiteral(regex)} })`)
+      lines.push(`console.log("[scenario-read]", ${toLiteral(output)}, "=", ${valueVar})`)
+    }
   } else if (interactionType === 'set-runtime-variable') {
     const output = interaction.output
     if (!output) {
