@@ -3,7 +3,7 @@ import { dirname, isAbsolute, join, resolve } from 'path'
 import { fileURLToPath } from 'url'
 import { centralFillStrategies } from "./central-fill-strategies.mjs"
 import { extractCodeFromPdf } from "./extract-pdf-code.mjs"
-export { createScenarioTimelineRuntime } from "./generated-scenario-runtime.js"
+export { createScenarioExecutionRuntime, createScenarioTimelineRuntime } from "./generated-scenario-runtime.js"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(__dirname, '../..')
@@ -2225,5 +2225,728 @@ async function clickWithOverlayRecovery(page, locator, options = {}) {
       return
     }
     throw error
+  }
+}
+
+function scenarioTargetNeedsRuntimeLocator(target) {
+  return Boolean(target?.role || target?.['selektor-regex'] || target?.label || target?.['aria-label'] || target?.komponententyp)
+}
+
+function scenarioBuildGenericTargetSelector(target = {}) {
+  const reservedKeys = new Set(['testid', 'id', 'data-id', 'text', 'role', 'url', 'state', 'click_child_selector', 'treffer-index', 'selektor-regex', 'label', 'aria-label', 'komponententyp'])
+  const selectorParts = []
+
+  for (const [key, value] of Object.entries(target || {})) {
+    if (reservedKeys.has(key) || value == null) {
+      continue
+    }
+    selectorParts.push(`[${key}=${JSON.stringify(String(value))}]`)
+  }
+
+  return selectorParts.length > 0 ? selectorParts.join('') : null
+}
+
+function scenarioBuildTargetSelectorDescriptions(target = {}) {
+  const regexEnabled = parseTargetRegexFlag(target)
+  const fields = ['testid', 'data-id', 'id', 'role', 'text', 'label', 'aria-label', 'selektor-regex', 'treffer-index', 'komponententyp', 'click_child_selector']
+  const selectors = []
+
+  for (const field of fields) {
+    const value = target[field]
+    if (value == null) {
+      continue
+    }
+
+    const text = String(value).replace(/\s+/g, ' ').trim()
+    if (!text) {
+      continue
+    }
+
+    if (regexEnabled && ['testid', 'data-id', 'text', 'label', 'aria-label'].includes(field)) {
+      selectors.push(`${field}=/${text}/`)
+      continue
+    }
+
+    selectors.push(`${field}=${text}`)
+  }
+
+  const genericSelector = scenarioBuildGenericTargetSelector(target)
+  if (genericSelector) {
+    selectors.push(`selector=${genericSelector}`)
+  }
+
+  return selectors
+}
+
+function scenarioBuildStepDescription(step) {
+  const stepTitle = typeof step?.resolvedTitle === 'string' ? step.resolvedTitle.trim() : ''
+  const interaction = step?.interaction || {}
+  const selectors = scenarioBuildTargetSelectorDescriptions(interaction.target || {})
+  const descriptionParts = []
+
+  if (interaction.type === 'search-and-select' && interaction.resultSelector) {
+    selectors.push(`resultSelector=${String(interaction.resultSelector).trim()}`)
+  }
+  if (interaction.type === 'read-ui-value' && interaction.output) {
+    descriptionParts.push(`read->${String(interaction.output).trim()}`)
+  }
+  if (interaction.type === 'read-pin-brief-mail' && interaction.output) {
+    descriptionParts.push(`mailhog->${String(interaction.output).trim()}`)
+  }
+  if (selectors.length > 0) {
+    descriptionParts.push(`selectors: ${selectors.join(' ; ')}`)
+  }
+
+  if (descriptionParts.length === 0) {
+    return stepTitle
+  }
+
+  return stepTitle
+    ? `${stepTitle} | ${descriptionParts.join(' | ')}`
+    : descriptionParts.join(' | ')
+}
+
+function scenarioBuildStepMeta(step) {
+  const interaction = step?.interaction || {}
+  const selectors = scenarioBuildTargetSelectorDescriptions(interaction.target || {})
+  if (interaction.type === 'search-and-select' && interaction.resultSelector) {
+    selectors.push(`resultSelector=${String(interaction.resultSelector).trim()}`)
+  }
+
+  return {
+    interactionType: interaction.type ? String(interaction.type) : null,
+    selectors,
+  }
+}
+
+function scenarioToConditionList(value, keyName, stepId) {
+  if (value == null) {
+    return []
+  }
+  if (Array.isArray(value)) {
+    return value
+  }
+  if (typeof value === 'object') {
+    return [value]
+  }
+  throw new Error(`Step "${stepId}" has invalid "${keyName}" guard. Use an object or array of objects.`)
+}
+
+function scenarioHasUsableScrollTarget(target) {
+  if (!target || typeof target !== 'object') {
+    return false
+  }
+
+  if (target.testid || target.id || target['data-id'] || target.text || target.role) {
+    return true
+  }
+
+  return scenarioTargetNeedsRuntimeLocator(target) || Boolean(scenarioBuildGenericTargetSelector(target))
+}
+
+function scenarioBuildScrollTargetSummary(target = {}) {
+  const fields = ['testid', 'data-id', 'id', 'role', 'text', 'label', 'aria-label', 'selektor-regex', 'treffer-index', 'komponententyp']
+  const parts = []
+
+  for (const field of fields) {
+    const value = target[field]
+    if (value == null) {
+      continue
+    }
+
+    const text = String(value).replace(/\s+/g, ' ').trim()
+    if (!text) {
+      continue
+    }
+
+    parts.push(`${field}=${text}`)
+  }
+
+  const selector = scenarioBuildGenericTargetSelector(target)
+  if (selector) {
+    parts.push(`selector=${selector}`)
+  }
+
+  return parts.join(' | ')
+}
+
+function scenarioBuildInjectedAutoScrollResolvedTitle(step) {
+  const interaction = step?.interaction || {}
+  const targetSummary = scenarioBuildScrollTargetSummary(interaction.target || {})
+  const sourceTitle = String(step?.resolvedTitle || '').replace(/\s+/g, ' ').trim()
+  const sourceStepId = String(step?.resolvedId || step?.id || '').trim()
+  const parts = ['Scroll']
+
+  if (targetSummary) {
+    parts.push(targetSummary)
+  }
+  if (sourceStepId) {
+    parts.push(`origin=${sourceStepId}`)
+  }
+  if (sourceTitle) {
+    parts.push(`source=${sourceTitle}`)
+  }
+
+  const title = parts.join(' | ')
+  return title.length > 220 ? `${title.slice(0, 217)}...` : title
+}
+
+function scenarioIsInteractionTypeNeedingAutoScroll(interactionType) {
+  return ['click', 'fill', 'append', 'replace', 'select', 'upload', 'search-and-select'].includes(interactionType)
+}
+
+function injectAutoScrollSteps(flowEntries, options = {}, path = []) {
+  const enabled = options.enabled === true
+  const injected = []
+
+  for (let index = 0; index < (flowEntries || []).length; index += 1) {
+    const step = flowEntries[index]
+    const currentPath = [...path, index]
+    const stepId = String(step?.id || `step-${currentPath.join('-')}` || 'step')
+    const interaction = step?.interaction || {}
+    const interactionType = String(interaction.type || '').trim().toLowerCase()
+
+    if (enabled && scenarioIsInteractionTypeNeedingAutoScroll(interactionType) && scenarioHasUsableScrollTarget(interaction.target)) {
+      const onlyIfNotVisible = interactionType === 'select' ? false : true
+      const injectedResolvedId = step?.resolvedId
+        ? `${String(step.resolvedId).trim()}__autoscroll`
+        : `${stepId}__autoscroll`
+      injected.push({
+        id: `${stepId}__autoscroll`,
+        resolvedId: injectedResolvedId,
+        resolvedTitle: scenarioBuildInjectedAutoScrollResolvedTitle(step),
+        if: step?.if,
+        ifnot: step?.ifnot,
+        interaction: {
+          type: 'scroll',
+          target: interaction.target,
+          focus: false,
+          only_if_not_visible: onlyIfNotVisible,
+        },
+      })
+    }
+
+    const nestedFlow = Array.isArray(step?.flow) ? step.flow : null
+    const nestedElseFlow = Array.isArray(step?.elseFlow) ? step.elseFlow : null
+    if (nestedFlow && nestedFlow.length > 0) {
+      const nextStep = {
+        ...step,
+        flow: injectAutoScrollSteps(nestedFlow, options, currentPath),
+      }
+      if (nestedElseFlow && nestedElseFlow.length > 0) {
+        nextStep.elseFlow = injectAutoScrollSteps(nestedElseFlow, options, currentPath)
+      }
+      injected.push(nextStep)
+    } else if (nestedElseFlow && nestedElseFlow.length > 0) {
+      injected.push({
+        ...step,
+        elseFlow: injectAutoScrollSteps(nestedElseFlow, options, currentPath),
+      })
+    } else {
+      injected.push(step)
+    }
+  }
+
+  return injected
+}
+
+async function scenarioLogTargetAvailability(page, step, stepRuntime) {
+  const interaction = step?.interaction || {}
+  const target = interaction.target || {}
+  const interactionType = String(interaction.type || '').trim().toLowerCase()
+  const genericSelector = scenarioBuildGenericTargetSelector(target)
+  const supportedInteractionTypes = new Set(['click', 'fill', 'append', 'replace', 'select', 'upload', 'scroll', 'assert', 'search-and-select'])
+
+  if (!supportedInteractionTypes.has(interactionType) || Object.keys(target || {}).length === 0) {
+    return
+  }
+
+  if (target.url && Object.keys(target).every((key) => key === 'url' || key === 'state')) {
+    return
+  }
+
+  const availabilityOptions = {}
+  if (genericSelector) {
+    availabilityOptions.genericSelector = genericSelector
+  }
+
+  if (interactionType === 'fill' || interactionType === 'append' || interactionType === 'replace' || interactionType === 'upload') {
+    if (scenarioTargetNeedsRuntimeLocator(target)) {
+      availabilityOptions.textMode = 'label'
+      availabilityOptions.preferredControl = 'fill'
+    }
+  } else if (interactionType === 'select') {
+    if (scenarioTargetNeedsRuntimeLocator(target) || target['data-id'] || target.label || target['aria-label']) {
+      availabilityOptions.textMode = 'label'
+      availabilityOptions.preferredControl = 'select'
+    }
+  } else if (interactionType === 'scroll') {
+    if (scenarioTargetNeedsRuntimeLocator(target) && !target.role) {
+      availabilityOptions.textMode = 'label'
+    }
+  }
+
+  const availability = await describeTargetAvailability(page, target, availabilityOptions)
+    .catch((error) => ({
+      count: 0,
+      strategy: 'unresolved',
+      selectors: [],
+      error: String(error && error.message ? error.message : error),
+    }))
+
+  await stepRuntime.log('info', 'target-availability', {
+    interactionType,
+    availableCount: availability.count,
+    selectorStrategy: availability.strategy,
+    selectors: availability.selectors,
+    preferredControl: availability.preferredControl ?? null,
+    textMode: availability.textMode ?? null,
+    targetIndex: availability.targetIndex ?? null,
+    error: availability.error ?? null,
+  })
+}
+
+async function assertExpectedScenarioResults(page, expectedResults = []) {
+  for (const rawResult of expectedResults || []) {
+    const result = rawResult || {}
+    const target = result.target || {}
+    const state = result.state || target.state || {}
+
+    if (target.url) {
+      await page.waitForURL(String(target.url))
+      continue
+    }
+
+    let locator = null
+    if (scenarioTargetNeedsRuntimeLocator(target)) {
+      locator = await resolveTargetLocator(page, target, { textMode: 'text' })
+    } else if (target.testid) {
+      locator = await pickIndexedLocator(buildTestIdLocator(page, target.testid, target), target)
+    } else if (target.text) {
+      locator = target.role
+        ? await pickIndexedLocator(page.getByRole(String(target.role), { name: String(target.text), exact: true }), target)
+        : await pickIndexedLocator(page.getByText(String(target.text), { exact: true }), target)
+    } else if (scenarioBuildGenericTargetSelector(target)) {
+      locator = await pickIndexedLocator(page.locator(scenarioBuildGenericTargetSelector(target)), target)
+    } else if (target.id) {
+      locator = await pickIndexedLocator(page.locator(`[id=${JSON.stringify(String(target.id))}]`), target)
+    } else if (target['data-id']) {
+      locator = await pickIndexedLocator(page.locator(`[data-id=${JSON.stringify(String(target['data-id']))}]`), target)
+    }
+
+    if (!locator) {
+      continue
+    }
+
+    if (state.visible === true) {
+      await locator.waitFor({ state: 'visible' })
+    }
+    if (state.visible === false) {
+      await locator.waitFor({ state: 'hidden' })
+    }
+    if (state['value-present'] === true) {
+      const value = await readComparableValue(locator)
+      if (value == null || value.length === 0) {
+        throw new Error('Expected a non-empty value.')
+      }
+    }
+    if (state['value-present'] === false) {
+      const value = await readComparableValue(locator)
+      if (value != null && value.length > 0) {
+        throw new Error('Expected an empty value.')
+      }
+    }
+  }
+}
+
+export function prepareScenarioFlow(flowEntries, options = {}) {
+  return injectAutoScrollSteps(flowEntries, { enabled: options.autoScroll !== false })
+}
+
+export function createScenarioExecutionState({
+  page,
+  testInfo = null,
+  runtimeVariables = {},
+  smoothScrollEnabled = false,
+  scrollDelayMs = 35,
+} = {}) {
+  const state = {
+    page,
+    testInfo,
+    runtimeVariables,
+    smoothScrollEnabled: Boolean(smoothScrollEnabled),
+    scrollDelayMs: Math.max(0, Number(scrollDelayMs ?? 35) || 35),
+    lastDownload: null,
+    lastPdfResponse: null,
+  }
+
+  if (page?.on) {
+    page.on('download', (download) => {
+      state.lastDownload = download
+    })
+    page.on('response', (response) => {
+      if (String(response.headers()['content-type'] || '').includes('application/pdf')) {
+        state.lastPdfResponse = response
+      }
+    })
+  }
+
+  return state
+}
+
+export function describeScenarioStep(step) {
+  return scenarioBuildStepDescription(step)
+}
+
+export function buildScenarioStepMeta(step) {
+  return scenarioBuildStepMeta(step)
+}
+
+export async function executeScenarioStep(context, step, runtimeOptions = {}) {
+  const page = context?.page
+  const stepRuntime = runtimeOptions?.stepRuntime
+  const interaction = step?.interaction || {}
+  const interactionType = String(interaction.type || '').trim().toLowerCase()
+  const target = interaction.target || {}
+  const runtimeVariables = context?.runtimeVariables || {}
+  const scrollDelayMs = context?.scrollDelayMs ?? 35
+  const smoothScrollEnabled = context?.smoothScrollEnabled === true
+
+  if (!page) {
+    throw new Error('executeScenarioStep requires a Playwright page in context.page.')
+  }
+
+  if (!interactionType) {
+    return { __scenarioStepStatus: 'noop' }
+  }
+
+  if (stepRuntime) {
+    await scenarioLogTargetAvailability(page, step, stepRuntime)
+  }
+
+  if (interactionType === 'open') {
+    if (!target.url) {
+      throw new Error(`Step "${step.id}" has interaction type "open" but no target.url.`)
+    }
+    await page.goto(String(target.url), { waitUntil: 'networkidle' })
+  } else if (interactionType === 'fill') {
+    const resolvedValue = resolveRuntimeTemplateString(String(interaction.value || ''), runtimeVariables)
+    if (scenarioTargetNeedsRuntimeLocator(target)) {
+      const locator = await resolveTargetLocator(page, target, { textMode: 'label', preferredControl: 'fill' })
+      await applyFillValueToLocator(page, locator, resolvedValue, { targetLabel: scenarioBuildScrollTargetSummary(target) || '<target>' }, { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true })
+    } else if (target.testid) {
+      await applyFillValue(page, String(target.testid), resolvedValue, { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true, targetIndex: target['treffer-index'] })
+    } else if (target.text) {
+      await pickIndexedLocator(page.getByLabel(resolveRuntimeTemplateString(String(target.text), runtimeVariables), { exact: true }), target).then((locator) => locator.fill(resolvedValue))
+    } else if (scenarioBuildGenericTargetSelector(target)) {
+      await pickIndexedLocator(page.locator(resolveRuntimeTemplateString(scenarioBuildGenericTargetSelector(target), runtimeVariables)), target).then((locator) => locator.fill(resolvedValue))
+    } else if (target.id || target['data-id']) {
+      await applyFillValueById(page, String(target['data-id'] || target.id), resolvedValue, target['data-id'] ? 'data-id' : 'id', { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true, targetIndex: target['treffer-index'] })
+    } else {
+      throw new Error(`Step "${step.id}" has interaction type "fill" but no supported target.`)
+    }
+  } else if (interactionType === 'append') {
+    const resolvedValue = resolveRuntimeTemplateString(String(interaction.value || ''), runtimeVariables)
+    if (scenarioTargetNeedsRuntimeLocator(target)) {
+      const locator = await resolveTargetLocator(page, target, { textMode: 'label', preferredControl: 'fill' })
+      await applyAppendValueToLocator(page, locator, resolvedValue, { targetLabel: scenarioBuildScrollTargetSummary(target) || '<target>' }, { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true })
+    } else if (target.testid) {
+      await applyAppendValue(page, String(target.testid), resolvedValue, { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true, targetIndex: target['treffer-index'] })
+    } else if (target.id || target['data-id']) {
+      await applyAppendValueById(page, String(target['data-id'] || target.id), resolvedValue, target['data-id'] ? 'data-id' : 'id', { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true, targetIndex: target['treffer-index'] })
+    } else {
+      throw new Error(`Step "${step.id}" has interaction type "append" but no supported target.`)
+    }
+  } else if (interactionType === 'replace') {
+    const resolvedSearch = resolveRuntimeTemplateString(String(interaction.searchValue || ''), runtimeVariables)
+    const resolvedValue = resolveRuntimeTemplateString(String(interaction.value || ''), runtimeVariables)
+    if (scenarioTargetNeedsRuntimeLocator(target)) {
+      const locator = await resolveTargetLocator(page, target, { textMode: 'label', preferredControl: 'fill' })
+      await applyReplaceValueToLocator(page, locator, resolvedSearch, resolvedValue, { targetLabel: scenarioBuildScrollTargetSummary(target) || '<target>' }, { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true })
+    } else if (target.testid) {
+      await applyReplaceValue(page, String(target.testid), resolvedSearch, resolvedValue, { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true, targetIndex: target['treffer-index'] })
+    } else if (target.id || target['data-id']) {
+      await applyReplaceValueById(page, String(target['data-id'] || target.id), resolvedSearch, resolvedValue, target['data-id'] ? 'data-id' : 'id', { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true, targetIndex: target['treffer-index'] })
+    } else {
+      throw new Error(`Step "${step.id}" has interaction type "replace" but no supported target.`)
+    }
+  } else if (interactionType === 'click') {
+    if (scenarioTargetNeedsRuntimeLocator(target)) {
+      const locator = await resolveTargetLocator(page, target, { textMode: 'text' })
+      if (target.click_child_selector) {
+        await locator.locator(String(target.click_child_selector)).first().click()
+      } else {
+        await applyClickValueToLocator(page, locator, { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true }, { targetLabel: scenarioBuildScrollTargetSummary(target) || '<target>' })
+      }
+    } else if (target.text) {
+      const locator = target.role
+        ? await pickIndexedLocator(page.getByRole(String(target.role), { name: String(target.text), exact: true }), target)
+        : await pickIndexedLocator(page.getByText(String(target.text), { exact: true }), target)
+      if (target.click_child_selector) {
+        await locator.locator(String(target.click_child_selector)).first().click()
+      } else {
+        await applyClickValueToLocator(page, locator, { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true }, { targetLabel: scenarioBuildScrollTargetSummary(target) || '<target>' })
+      }
+    } else if (target.testid) {
+      await pickIndexedLocator(page.getByTestId(String(target.testid)), target).then((locator) => locator.click())
+    } else if (scenarioBuildGenericTargetSelector(target)) {
+      await applyClickValueBySelector(page, scenarioBuildGenericTargetSelector(target), { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true, targetIndex: target['treffer-index'] })
+    } else if (target.id || target['data-id']) {
+      await applyClickValueById(page, String(target['data-id'] || target.id), target['data-id'] ? 'data-id' : 'id', { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true, targetIndex: target['treffer-index'] })
+    } else {
+      throw new Error(`Step "${step.id}" has interaction type "click" but no supported target.`)
+    }
+  } else if (interactionType === 'select') {
+    const resolvedValue = resolveRuntimeTemplateString(String(interaction.value || ''), runtimeVariables)
+    if (scenarioTargetNeedsRuntimeLocator(target)) {
+      const locator = await resolveTargetLocator(page, target, { textMode: 'label', preferredControl: 'select' })
+      await applySelectValueToLocator(page, locator, resolvedValue, { targetLabel: scenarioBuildScrollTargetSummary(target) || '<target>' }, { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true })
+    } else if (target.testid) {
+      await applySelectValue(page, String(target.testid), resolvedValue, { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true, targetIndex: target['treffer-index'] })
+    } else if (target.id || target['data-id']) {
+      await applySelectValueById(page, String(target['data-id'] || target.id), resolvedValue, target['data-id'] ? 'data-id' : 'id', { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true, targetIndex: target['treffer-index'] })
+    } else {
+      throw new Error(`Step "${step.id}" has interaction type "select" but no supported target.`)
+    }
+  } else if (interactionType === 'upload') {
+    const resolvedFile = resolveRuntimeTemplateString(String(interaction.value || ''), runtimeVariables)
+    if (scenarioTargetNeedsRuntimeLocator(target)) {
+      const locator = await resolveTargetLocator(page, target, { textMode: 'label' })
+      await applyUploadValueToLocator(page, locator, resolvedFile, { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true })
+    } else if (target.testid) {
+      await applyUploadValue(page, String(target.testid), resolvedFile, { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true, targetIndex: target['treffer-index'] })
+    } else if (scenarioBuildGenericTargetSelector(target)) {
+      await applyUploadValueById(page, scenarioBuildGenericTargetSelector(target), resolvedFile, 'selector', { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true, targetIndex: target['treffer-index'] })
+    } else if (target.id || target['data-id']) {
+      await applyUploadValueById(page, String(target['data-id'] || target.id), resolvedFile, target['data-id'] ? 'data-id' : 'id', { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true, targetIndex: target['treffer-index'] })
+    } else {
+      throw new Error(`Step "${step.id}" has interaction type "upload" but no supported target.`)
+    }
+  } else if (interactionType === 'scroll') {
+    if (!scenarioHasUsableScrollTarget(target)) {
+      throw new Error(`Step "${step.id}" has interaction type "scroll" but no supported target.`)
+    }
+    const locator = scenarioTargetNeedsRuntimeLocator(target)
+      ? await resolveTargetLocator(page, target, { textMode: target.role ? 'text' : 'label' })
+      : target.text
+        ? (target.role ? await pickIndexedLocator(page.getByRole(String(target.role), { name: String(target.text), exact: true }), target) : await pickIndexedLocator(page.getByText(String(target.text), { exact: true }), target))
+        : target.testid
+          ? await pickIndexedLocator(page.getByTestId(String(target.testid)), target)
+          : scenarioBuildGenericTargetSelector(target)
+            ? await pickIndexedLocator(page.locator(scenarioBuildGenericTargetSelector(target)), target)
+            : await pickIndexedLocator(page.locator(target['data-id'] ? `[data-id=${JSON.stringify(String(target['data-id']))}]` : `[id=${JSON.stringify(String(target.id))}]`), target)
+    const scrollResult = await scrollToLocator(page, locator, {
+      stepDelayMs: scrollDelayMs,
+      focus: interaction.focus === true,
+      onlyIfNotVisible: interaction.only_if_not_visible === true,
+    })
+    if (!scrollResult.didScroll) {
+      return { __scenarioStepStatus: 'noop', reason: 'target already visible' }
+    }
+  } else if (interactionType === 'wait') {
+    const durationCandidate = interaction.ms ?? interaction.timeout_ms ?? null
+    if (durationCandidate != null) {
+      const durationMs = Number(durationCandidate)
+      if (!Number.isFinite(durationMs) || durationMs < 0) {
+        throw new Error(`Step "${step.id}" has invalid wait duration.`)
+      }
+      await page.waitForTimeout(Math.floor(durationMs))
+    }
+    if (interaction.until) {
+      await waitForCondition(page, interaction.until, Math.floor(Number(interaction.timeout_ms ?? 5000) || 5000), Math.max(25, Math.floor(Number(interaction.poll_ms ?? 100) || 100)))
+    } else if (interaction.target && interaction.state) {
+      await waitForCondition(page, { target: interaction.target, state: interaction.state }, Math.floor(Number(interaction.timeout_ms ?? 5000) || 5000), Math.max(25, Math.floor(Number(interaction.poll_ms ?? 100) || 100)))
+    } else if (durationCandidate == null) {
+      throw new Error(`Step "${step.id}" has interaction type "wait" but no waiting criteria.`)
+    }
+  } else if (interactionType === 'assert') {
+    if (target.url) {
+      await page.waitForURL(String(interaction.value ?? target.url))
+    } else {
+      const expectedValue = String(interaction.value ?? '')
+      if (scenarioTargetNeedsRuntimeLocator(target)) {
+        const locator = await resolveTargetLocator(page, target, { textMode: 'label' })
+        await assertElementValueByLocator(locator, expectedValue, scenarioBuildScrollTargetSummary(target) || '<target>')
+      } else if (target.testid) {
+        await assertElementValueByTestId(page, String(target.testid), expectedValue, { targetIndex: target['treffer-index'] })
+      } else if (target.id || target['data-id']) {
+        await assertElementValueById(page, String(target['data-id'] || target.id), expectedValue, target['data-id'] ? 'data-id' : 'id', { targetIndex: target['treffer-index'] })
+      } else {
+        throw new Error(`Step "${step.id}" has interaction type "assert" but no supported target.`)
+      }
+    }
+  } else if (interactionType === 'search-and-select') {
+    await searchAndSelect(page, {
+      target: { 'data-id': String(target['data-id']) },
+      value: String(interaction.value),
+      resultSelector: String(interaction.resultSelector),
+      resultIndex: interaction.resultIndex != null ? Number(interaction.resultIndex) : 0,
+      smoothScroll: smoothScrollEnabled,
+      stepDelayMs: scrollDelayMs,
+      skipAutoScroll: true,
+    })
+    if (interaction.assert) {
+      await assertExpectedScenarioResults(page, [interaction.assert])
+    }
+  } else if (interactionType === 'extract-pdf-code') {
+    const regex = resolveRuntimeTemplateString(String(interaction.auslesenRegex || ''), runtimeVariables)
+    const output = String(interaction.output || 'extractedCode')
+    const pdfPath = interaction.pdfPath
+      ? resolveRuntimeTemplateString(String(interaction.pdfPath), runtimeVariables)
+      : context?.testInfo?.outputPath?.(`${String(step.id || 'extract-pdf')}.pdf`)
+    const extractedValue = await extractCodeFromPdf(pdfPath, new RegExp(regex), {
+      download: context?.lastDownload ?? null,
+      response: context?.lastPdfResponse ?? null,
+    })
+    setRuntimeVariable(runtimeVariables, output, extractedValue)
+  } else if (interactionType === 'read-ui-value') {
+    const output = String(interaction.output || '').trim()
+    if (!output) {
+      throw new Error(`Step "${step.id}" with type read-ui-value requires output.`)
+    }
+    if (String(interaction.source || 'text').trim().toLowerCase() === 'url') {
+      setRuntimeVariable(runtimeVariables, output, page.url())
+    } else {
+      const locator = await resolveTargetLocator(page, target, { textMode: 'text' })
+      const source = String(interaction.source || 'text').trim().toLowerCase()
+      const value = await locator.evaluate((element, payload) => {
+        const sourceType = String(payload.source || 'text')
+        const tagName = String(element?.tagName || '').toLowerCase()
+        const inputType = String(element?.getAttribute?.('type') || '').toLowerCase()
+        if (sourceType === 'value') {
+          return String(element?.value ?? element?.getAttribute?.('value') ?? '')
+        }
+        if (sourceType === 'text') {
+          if (tagName === 'input' || tagName === 'textarea' || tagName === 'select' || inputType === 'text') {
+            return String(element?.value ?? element?.getAttribute?.('value') ?? '')
+          }
+          return String(element?.innerText ?? element?.textContent ?? '').trim()
+        }
+        return ''
+      }, { source })
+      setRuntimeVariable(runtimeVariables, output, value)
+    }
+  } else if (interactionType === 'read-pin-brief-mail') {
+    const activationCode = await readActivationCodeFromMailhog({
+      mailhogUrl: resolveRuntimeTemplateString(String(interaction.url || ''), runtimeVariables),
+      vornamen: interaction.vornamen ? resolveRuntimeTemplateString(String(interaction.vornamen), runtimeVariables) : '',
+      familienname: interaction.familienname ? resolveRuntimeTemplateString(String(interaction.familienname), runtimeVariables) : '',
+      zeilenIndex: interaction.zeilenIndex == null ? null : Number(interaction.zeilenIndex),
+    })
+    setRuntimeVariable(runtimeVariables, String(interaction.output || ''), activationCode)
+  } else if (interactionType === 'api-request') {
+    const apiResponse = await executeScenarioApiRequest({
+      method: String(interaction.method || '').trim().toUpperCase(),
+      url: resolveRuntimeTemplateString(String(interaction.url || ''), runtimeVariables),
+      payloadTemplate: String(interaction.payload ?? ''),
+      runtimeVariables,
+    })
+    for (const read of Array.isArray(interaction.reads) ? interaction.reads : []) {
+      const value = readScenarioApiResponseValue(apiResponse, String(read?.parameter ?? ''), resolveRuntimeTemplateString(String(read?.regex ?? ''), runtimeVariables))
+      setRuntimeVariable(runtimeVariables, String(read?.output || ''), value)
+    }
+  } else if (interactionType === 'set-runtime-variable') {
+    setRuntimeVariable(runtimeVariables, String(interaction.output || ''), resolveRuntimeTemplateString(String(interaction.value ?? ''), runtimeVariables))
+  } else {
+    throw new Error(`Unsupported interaction type "${interactionType}" in step "${step.id}".`)
+  }
+
+  if (Array.isArray(step?.expected_results) && step.expected_results.length > 0) {
+    await assertExpectedScenarioResults(page, step.expected_results)
+  }
+
+  return { __scenarioStepStatus: 'executed' }
+}
+
+export async function runPreparedScenarioFlow({
+  steps,
+  executionRuntime,
+  executionState,
+  stepIdentifierLogger = null,
+} = {}) {
+  for (const step of steps || []) {
+    const stepId = typeof step?.resolvedId === 'string' ? step.resolvedId.trim() : String(step?.id || '').trim()
+    const stepDescription = scenarioBuildStepDescription(step)
+    const stepMeta = scenarioBuildStepMeta(step)
+    const conditionalCondition = step?.condition && typeof step.condition === 'object' ? step.condition : null
+    const conditionalThenFlow = Array.isArray(step?.flow) ? step.flow : []
+    const conditionalElseFlow = Array.isArray(step?.elseFlow) ? step.elseFlow : []
+    const isConditionalBranchStep = Boolean(conditionalCondition && (conditionalThenFlow.length > 0 || conditionalElseFlow.length > 0))
+    const ifConditions = scenarioToConditionList(step?.if, 'if', stepId)
+    const ifNotConditions = scenarioToConditionList(step?.ifnot, 'ifnot', stepId)
+
+    await executionRuntime.runStep(stepId, stepDescription, async (stepRuntime) => {
+      if (stepIdentifierLogger?.capture) {
+        await stepIdentifierLogger.capture(stepId, 'before')
+      }
+
+      if (isConditionalBranchStep) {
+        const conditionMet = await shouldRunStepFromGuards(executionState.page, { if: [conditionalCondition], ifnot: [] })
+        if (conditionMet) {
+          if (conditionalThenFlow.length > 0) {
+            await runPreparedScenarioFlow({
+              steps: conditionalThenFlow,
+              executionRuntime,
+              executionState,
+              stepIdentifierLogger,
+            })
+            if (stepIdentifierLogger?.capture) {
+              await stepIdentifierLogger.capture(stepId, 'after')
+            }
+            return { __scenarioStepStatus: 'executed' }
+          }
+          if (stepIdentifierLogger?.capture) {
+            await stepIdentifierLogger.capture(stepId, 'skipped', { reason: 'conditional then-branch empty' })
+          }
+          return { __scenarioStepStatus: 'skipped', reason: 'conditional then-branch empty' }
+        }
+
+        if (conditionalElseFlow.length > 0) {
+          await runPreparedScenarioFlow({
+            steps: conditionalElseFlow,
+            executionRuntime,
+            executionState,
+            stepIdentifierLogger,
+          })
+          if (stepIdentifierLogger?.capture) {
+            await stepIdentifierLogger.capture(stepId, 'after')
+          }
+          return { __scenarioStepStatus: 'executed' }
+        }
+
+        if (stepIdentifierLogger?.capture) {
+          await stepIdentifierLogger.capture(stepId, 'skipped', { reason: 'condition not met and no else branch' })
+        }
+        return { __scenarioStepStatus: 'skipped', reason: 'condition not met and no else branch' }
+      }
+
+      if (ifConditions.length > 0 || ifNotConditions.length > 0) {
+        const shouldRunStep = await shouldRunStepFromGuards(executionState.page, { if: ifConditions, ifnot: ifNotConditions })
+        if (!shouldRunStep) {
+          if (stepIdentifierLogger?.capture) {
+            await stepIdentifierLogger.capture(stepId, 'skipped', { reason: 'if/ifnot guard condition not met' })
+          }
+          return { __scenarioStepStatus: 'skipped', reason: 'if/ifnot guard condition not met' }
+        }
+      }
+
+      const nestedFlow = Array.isArray(step?.flow) ? step.flow : []
+      if (nestedFlow.length > 0 && !step?.interaction) {
+        await runPreparedScenarioFlow({
+          steps: nestedFlow,
+          executionRuntime,
+          executionState,
+          stepIdentifierLogger,
+        })
+      } else {
+        await executeScenarioStep(executionState, step, { stepRuntime })
+      }
+
+      if (stepIdentifierLogger?.capture) {
+        await stepIdentifierLogger.capture(stepId, 'after')
+      }
+
+      return { __scenarioStepStatus: 'executed' }
+    }, stepMeta)
   }
 }

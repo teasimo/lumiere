@@ -2,19 +2,13 @@ import {
   writeFile
 } from 'node:fs/promises'
 
-export function createScenarioTimelineRuntime({
-  test,
-  testInfo,
-  scenarioId,
-  scenarioVersion,
-  scenarioSource,
+export function createScenarioExecutionRuntime({
+  wrapStep = null,
+  onStepComplete = null,
   page,
-  videoModeEnabled = false,
   waitBetweenStepsMs = 0,
   stepTimeoutMs = 30000,
 }) {
-  const timeline = []
-
   function createStepLogEntry(level, message, data = null) {
     return {
       timestamp: new Date().toISOString(),
@@ -23,6 +17,10 @@ export function createScenarioTimelineRuntime({
       data: data == null ? null : data,
     }
   }
+
+  const effectiveWrapStep = typeof wrapStep === 'function'
+    ? wrapStep
+    : async (_stepId, execute) => execute()
 
   return {
     async runStep(stepId, stepDescription, execute, stepMeta = {}) {
@@ -63,7 +61,7 @@ export function createScenarioTimelineRuntime({
       let errorInfo = null
 
       try {
-        executeResult = await test.step(stepId, async () => {
+        executeResult = await effectiveWrapStep(stepId, async () => {
           const effectiveStepTimeoutMs = Math.max(0, Number(stepTimeoutMs) || 0)
           if (effectiveStepTimeoutMs <= 0) {
             return execute(stepRuntime)
@@ -144,11 +142,11 @@ export function createScenarioTimelineRuntime({
       console.log(`[scenario-step] ${stepId} | ${stepDescription} | ${statusText} | ${startedAtIso} -> ${endedAtIso} (${endedAtMs - startedAtMs}ms)`)
 
       const shouldWaitAfterStep = !skipped && !noop
-      if (!thrownError && videoModeEnabled && waitBetweenStepsMs > 0 && shouldWaitAfterStep && page) {
+      if (!thrownError && waitBetweenStepsMs > 0 && shouldWaitAfterStep && page) {
         await page.waitForTimeout(waitBetweenStepsMs)
       }
 
-      timeline.push({
+      const stepReport = {
         stepId,
         stepDescription,
         selectors,
@@ -163,7 +161,11 @@ export function createScenarioTimelineRuntime({
         durationMs: endedAtMs - startedAtMs,
         error: errorInfo,
         log: stepLog,
-      })
+      }
+
+      if (typeof onStepComplete === 'function') {
+        await onStepComplete(stepReport)
+      }
 
       if (thrownError) {
         throw thrownError
@@ -171,6 +173,33 @@ export function createScenarioTimelineRuntime({
 
       return executeResult
     },
+  }
+}
+
+export function createScenarioTimelineRuntime({
+  test,
+  testInfo,
+  scenarioId,
+  scenarioVersion,
+  scenarioSource,
+  page,
+  videoModeEnabled = false,
+  waitBetweenStepsMs = 0,
+  stepTimeoutMs = 30000,
+}) {
+  const timeline = []
+  const runtime = createScenarioExecutionRuntime({
+    wrapStep: (stepId, execute) => test.step(stepId, execute),
+    onStepComplete: async (stepReport) => {
+      timeline.push(stepReport)
+    },
+    page,
+    waitBetweenStepsMs: videoModeEnabled ? waitBetweenStepsMs : 0,
+    stepTimeoutMs,
+  })
+
+  return {
+    runStep: runtime.runStep,
 
     async flush() {
       const timelineReport = {

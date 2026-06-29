@@ -18,6 +18,7 @@
     "check:testscript:force": "node scripts/test-script-generator/run-generated-testfile.mjs --mode check --force",
     "run:testscript": "node scripts/test-script-generator/run-generated-testfile.mjs --mode video",
     "run:testscript:force": "node scripts/test-script-generator/run-generated-testfile.mjs --mode video --force",
+    "run:live-test-worker": "node scripts/test-script-generator/run-live-test-worker.mjs",
     "generate:videoscript": "node scripts/video-script-generator/run-annotated-video.mjs --scenario-tts --profile=all-channels --remotion-plan-only",
     "run:videoscript": "LUMIERE_VIDEO_DEBUG_OVERLAY=0 node scripts/video-script-generator/remotion-render.mjs --scenario-tts --profile=all-channels",
     "run:videoscript:debug": "LUMIERE_VIDEO_DEBUG_OVERLAY=1 node scripts/video-script-generator/remotion-render.mjs --keep-temp-project",

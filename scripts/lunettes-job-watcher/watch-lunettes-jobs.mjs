@@ -6,6 +6,7 @@ import { dirname, extname, join, relative, resolve } from 'path'
 import { spawn } from 'child_process'
 import { Buffer } from 'buffer'
 import { hostname } from 'os'
+import { fileURLToPath } from 'url'
 import { XMLParser } from 'fast-xml-parser'
 import {
   getTestScriptConfig,
@@ -188,6 +189,30 @@ function sleep(ms) {
   return new Promise((resolvePromise) => {
     setTimeout(resolvePromise, ms)
   })
+}
+
+function startManagedLiveTestWorker(context) {
+  if (!context.liveTestWorkerEnabled) {
+    return null
+  }
+
+  const child = spawn('node', context.liveTestWorkerArgs, {
+    cwd: workspaceRoot,
+    detached: process.platform !== 'win32',
+    env: context.liveTestWorkerEnv,
+    stdio: 'inherit',
+    shell: false,
+  })
+
+  child.on('exit', (code, signal) => {
+    console.log(`[watcher] Live-Test-Worker beendet: code=${code ?? 'null'} signal=${signal ?? 'null'}`)
+  })
+  child.on('error', (error) => {
+    console.error(`[watcher] Live-Test-Worker konnte nicht gestartet werden: ${error.message}`)
+  })
+
+  console.log(`[watcher] Live-Test-Worker gestartet: node ${context.liveTestWorkerArgs.join(' ')}`)
+  return child
 }
 
 function splitCompleteLines(text) {
@@ -1352,6 +1377,7 @@ function buildWatcherContext(cliOptions) {
   const testScriptConfig = getTestScriptConfig(central.config)
   const videoScriptConfig = getVideoScriptConfig(central.config)
   const watcherConfig = central.config?.['lunettes-job-watcher'] || {}
+  const liveTestWorkerConfig = central.config?.['live-test-worker'] || {}
 
   let baseUrlSource = ''
   let baseUrl = ''
@@ -1389,6 +1415,28 @@ function buildWatcherContext(cliOptions) {
   const scriptInactivityTimeoutMs = clampNumber(watcherConfig.script_inactivity_timeout_ms, 1000, 86400000, defaultScriptInactivityTimeoutMs)
   const scriptTerminationGracePeriodMs = clampNumber(watcherConfig.script_termination_grace_period_ms, 1000, 86400000, defaultScriptTerminationGracePeriodMs)
   const videoProfile = resolveDefaultVideoProfile(videoScriptConfig, watcherConfig)
+  const liveTestWorkerEnabled = liveTestWorkerConfig?.enabled === true
+  const liveTestWorkerArgs = [
+    'scripts/test-script-generator/run-live-test-worker.mjs',
+  ]
+
+  if (cliOptions.software) {
+    liveTestWorkerArgs.push(`--software=${cliOptions.software}`)
+  } else if (software.length === 1) {
+    liveTestWorkerArgs.push(`--software=${software[0]}`)
+  }
+  if (liveTestWorkerConfig?.worker_name) {
+    liveTestWorkerArgs.push(`--worker-name=${String(liveTestWorkerConfig.worker_name).trim()}`)
+  }
+  if (liveTestWorkerConfig?.worker_session_id) {
+    liveTestWorkerArgs.push(`--session-id=${String(liveTestWorkerConfig.worker_session_id).trim()}`)
+  }
+  if (liveTestWorkerConfig?.poll_interval_ms != null) {
+    liveTestWorkerArgs.push(`--poll-interval-ms=${Number(liveTestWorkerConfig.poll_interval_ms)}`)
+  }
+  if (liveTestWorkerConfig?.heartbeat_interval_ms != null) {
+    liveTestWorkerArgs.push(`--heartbeat-interval-ms=${Number(liveTestWorkerConfig.heartbeat_interval_ms)}`)
+  }
 
   return {
     baseUrl,
@@ -1402,6 +1450,9 @@ function buildWatcherContext(cliOptions) {
     scriptInactivityTimeoutMs,
     scriptTerminationGracePeriodMs,
     videoProfile,
+    liveTestWorkerEnabled,
+    liveTestWorkerArgs,
+    liveTestWorkerEnv: process.env,
   }
 }
 
@@ -1419,8 +1470,13 @@ async function main() {
 
   console.log(`Lunettes Job Watcher aktiv: worker_id=${context.workerId}, types=${context.types.join(',')}, software=${context.software.length > 0 ? context.software.join(',') : 'all'}, lease=${context.leaseSeconds}s`)
   console.log(`[watcher] base_url=${context.baseUrl} (${context.baseUrlSource})`)
+  let liveTestWorkerChild = null
 
   while (true) {
+    if (context.liveTestWorkerEnabled && (!liveTestWorkerChild || liveTestWorkerChild.exitCode != null)) {
+      liveTestWorkerChild = startManagedLiveTestWorker(context)
+    }
+
     let job = null
     try {
       job = await claimNextJob(context)
@@ -1482,7 +1538,9 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error?.message || error)
-  process.exitCode = 1
-})
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(error?.message || error)
+    process.exitCode = 1
+  })
+}

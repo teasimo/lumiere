@@ -63,6 +63,14 @@ const DEFAULTS = {
   'publish-to-confluence': {
     parent_page_id: '',
   },
+  'live-test-worker': {
+    enabled: false,
+    base_url: '',
+    worker_name: 'playwright-live-test-worker',
+    worker_session_id: '',
+    poll_interval_ms: 1000,
+    heartbeat_interval_ms: 30000,
+  },
 }
 
 function isPlainObject(value) {

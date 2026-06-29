@@ -1682,14 +1682,13 @@ export function renderScenarioSpecTemplate({
   parts.push(`    const stepIdentifierLogEnabledByScenario = ${stepIdentifierLogEnabledByScenario ? 'true' : 'false'}`)
   parts.push('    const stepIdentifierLogEnabledByEnv = process.env.SCENARIO_STEP_DOM_LOG === "1" || process.env.SCENARIO_STEP_DOM_LOG === "true"')
   parts.push('    const stepIdentifierLogEnabled = stepIdentifierLogEnabledByScenario || stepIdentifierLogEnabledByEnv')
-  parts.push('    const runtimeVariables = {}')
-  parts.push('    let lastDownload = null')
-  parts.push('    let lastPdfResponse = null')
-  parts.push('    page.on("download", (download) => { lastDownload = download })')
-  parts.push('    page.on("response", (response) => {')
-  parts.push('      if (String(response.headers()["content-type"] || "").includes("application/pdf")) {')
-  parts.push('        lastPdfResponse = response')
-  parts.push('      }')
+  parts.push(`    const preparedFlow = ${JSON.stringify(flow, null, 6)}`)
+  parts.push('    const executionState = createScenarioExecutionState({')
+  parts.push('      page,')
+  parts.push('      testInfo,')
+  parts.push('      runtimeVariables: {},')
+  parts.push('      smoothScrollEnabled,')
+  parts.push('      scrollDelayMs,')
   parts.push('    })')
   parts.push('    const timelineRuntime = createScenarioTimelineRuntime({')
   parts.push('      test,')
@@ -1705,89 +1704,12 @@ export function renderScenarioSpecTemplate({
   parts.push('    const stepIdentifierLogger = createStepDomIdentifierLogger({ page, testInfo, enabled: stepIdentifierLogEnabled })')
   parts.push('')
   parts.push('    try {')
-
-  function emitFlowSteps(steps, indent = '    ') {
-    for (const step of steps) {
-      const stepDidactics = step?.didactics || step?.didactic || {}
-      const purposeText = typeof stepDidactics?.purpose?.text === 'string'
-        ? String(stepDidactics.purpose.text).replace(/\s+/g, ' ').trim()
-        : ''
-      const interaction = step?.interaction || {}
-      const interactionType = String(interaction.type || '').trim().toLowerCase()
-      const stepId = typeof step?.resolvedId === 'string' ? step.resolvedId.trim() : '';
-      const stepTitle = typeof step?.resolvedTitle === 'string' ? step.resolvedTitle.trim() : ''
-      const stepDescription = buildTimelineStepDescription(step)
-      const stepMeta = buildStepMeta(step)
-
-      const conditionalCondition = step?.condition && typeof step.condition === 'object' ? step.condition : null
-      const conditionalThenFlow = Array.isArray(step?.flow) ? step.flow : []
-      const conditionalElseFlow = Array.isArray(step?.elseFlow) ? step.elseFlow : []
-      const isConditionalBranchStep = Boolean(
-        conditionalCondition
-        && (conditionalThenFlow.length > 0 || conditionalElseFlow.length > 0)
-      )
-
-      const ifConditions = toConditionList(step.if, 'if', stepId)
-      const ifNotConditions = toConditionList(step.ifnot, 'ifnot', stepId)
-
-      parts.push(`${indent}await timelineRuntime.runStep(${toLiteral(stepId)}, ${toLiteral(stepDescription)}, async (__scenarioStep) => {`)
-      if (stepId || stepTitle) {
-        parts.push(`${indent}  // ${[stepId, stepTitle].filter(Boolean).join(' | ')}`)
-      }
-      parts.push(`${indent}  // ${stepTitle}`)
-      parts.push(`${indent}  await stepIdentifierLogger.capture(${toLiteral(stepId)}, "before")`)
-
-      if (isConditionalBranchStep) {
-        parts.push(`${indent}  const __scenarioConditionMet = await shouldRunStepFromGuards(page, ${toLiteral({ if: [conditionalCondition], ifnot: [] })})`)
-        parts.push(`${indent}  if (__scenarioConditionMet) {`)
-        if (conditionalThenFlow.length > 0) {
-          emitFlowSteps(conditionalThenFlow, `${indent}    `)
-        } else {
-          parts.push(`${indent}    await stepIdentifierLogger.capture(${toLiteral(stepId)}, "skipped", { reason: "conditional then-branch empty" })`)
-          parts.push(`${indent}    return { __scenarioStepStatus: 'skipped', reason: 'conditional then-branch empty' }`)
-        }
-        parts.push(`${indent}  } else {`)
-        if (conditionalElseFlow.length > 0) {
-          emitFlowSteps(conditionalElseFlow, `${indent}    `)
-        } else {
-          parts.push(`${indent}    await stepIdentifierLogger.capture(${toLiteral(stepId)}, "skipped", { reason: "condition not met and no else branch" })`)
-          parts.push(`${indent}    return { __scenarioStepStatus: 'skipped', reason: 'condition not met and no else branch' }`)
-        }
-        parts.push(`${indent}  }`)
-        parts.push('')
-      } else if (ifConditions.length > 0 || ifNotConditions.length > 0) {
-        parts.push(`${indent}  const shouldRunStep = await shouldRunStepFromGuards(page, ${toLiteral({ if: ifConditions, ifnot: ifNotConditions })})`)
-        parts.push(`${indent}  if (!shouldRunStep) {`)
-        parts.push(`${indent}    await stepIdentifierLogger.capture(${toLiteral(stepId)}, "skipped", { reason: "if/ifnot guard condition not met" })`)
-        parts.push(`${indent}    return { __scenarioStepStatus: 'skipped', reason: 'if/ifnot guard condition not met' }`)
-        parts.push(`${indent}  }`)
-        parts.push('')
-      }
-
-      const nestedFlow = Array.isArray(step.flow) ? step.flow : []
-      if (isConditionalBranchStep) {
-        // Branch flow is emitted above.
-      } else if (nestedFlow.length > 0) {
-        emitFlowSteps(nestedFlow, `${indent}  `)
-      } else {
-        const interactionLines = buildInteractionLines(step, { scrollDelayRef: 'scrollDelayMs', smoothScrollEnabledRef: 'smoothScrollEnabled', stepRuntimeRef: '__scenarioStep' })
-        for (const line of interactionLines) {
-          parts.push(`${indent}  ${line}`)
-        }
-
-        const assertionLines = buildExpectedResultAssertions(step.expected_results)
-        for (const line of assertionLines) {
-          parts.push(`${indent}  ${line}`)
-        }
-      }
-
-      parts.push(`${indent}  await stepIdentifierLogger.capture(${toLiteral(stepId)}, "after")`)
-      parts.push(`${indent}}, ${toLiteral(stepMeta)})`)
-      parts.push('')
-    }
-  }
-
-  emitFlowSteps(flow, '    ')
+  parts.push('      await runPreparedScenarioFlow({')
+  parts.push('        steps: preparedFlow,')
+  parts.push('        executionRuntime: timelineRuntime,')
+  parts.push('        executionState,')
+  parts.push('        stepIdentifierLogger,')
+  parts.push('      })')
 
   parts.push('    } finally {')
   parts.push('      await stepIdentifierLogger.flush()')

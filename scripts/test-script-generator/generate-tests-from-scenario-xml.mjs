@@ -5,6 +5,7 @@ import { promisify } from 'util'
 import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'fs/promises'
 import { basename, dirname, extname, join, relative, resolve } from 'path'
 import { Buffer } from 'buffer'
+import { fileURLToPath } from 'url'
 import { XMLBuilder, XMLParser } from 'fast-xml-parser'
 import { renderScenarioSpecTemplate } from './templates/spec-template.mjs'
 import {
@@ -1787,7 +1788,7 @@ function composeResolvedXmlSource(resolvedRootElement) {
   return `<?xml version="1.0" encoding="UTF-8"?>\n${builder.build(payload)}`
 }
 
-async function scenarioToSpecSource({ scenarioPath, xsdPath, centralConfig, generatedSpecPath, fragmentSource = 'local' }) {
+export async function scenarioToSpecSource({ scenarioPath, xsdPath, centralConfig, generatedSpecPath, fragmentSource = 'local' }) {
   const absoluteScenarioPath = resolve(workspaceRoot, scenarioPath)
   const absoluteXsdPath = resolve(workspaceRoot, xsdPath)
 
@@ -2099,7 +2100,9 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error.message)
-  process.exitCode = 1
-})
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(error.message)
+    process.exitCode = 1
+  })
+}

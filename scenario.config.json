@@ -93,6 +93,14 @@
     "publish-to-confluence": {
       "parent_page_id": ""
     },
+    "live-test-worker": {
+      "enabled": true,      
+      "base_url": "https://exigences-h9c6b9fweraub4eg.swedencentral-01.azurewebsites.net/",
+      "worker_name": "playwright-live-test-worker",
+      "worker_session_id": "",
+      "poll_interval_ms": 1000,
+      "heartbeat_interval_ms": 30000
+    },
     "lunettes-job-watcher": {
       "base_url": "https://exigences-h9c6b9fweraub4eg.swedencentral-01.azurewebsites.net/"
     },
