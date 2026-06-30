@@ -2678,7 +2678,7 @@ export async function executeScenarioStep(context, step, runtimeOptions = {}) {
     if (!target.url) {
       throw new Error(`Step "${step.id}" has interaction type "open" but no target.url.`)
     }
-    await page.goto(String(target.url), { waitUntil: 'networkidle' })
+    await page.goto(resolveRuntimeTemplateString(String(target.url), runtimeVariables), { waitUntil: 'networkidle' })
   } else if (interactionType === 'fill') {
     const resolvedValue = resolveRuntimeTemplateString(String(interaction.value || ''), runtimeVariables)
     if (scenarioTargetNeedsRuntimeLocator(target)) {

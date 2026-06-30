@@ -224,6 +224,52 @@ test('live-step-runner resolves root variables from incoming Variablen block', a
   assert.equal(results[0].url, 'https://example.test/demo')
 })
 
+test('live-step-runner accepts variables-only step and persists variables for later steps', async () => {
+  const page = createFakePage()
+  const results = []
+  const runtimeRoot = await mkdtemp(join(tmpdir(), 'live-test-worker-'))
+  const runner = new LiveTestWorkerRunner({
+    client: {
+      async stepResult(_sessionId, payload) {
+        results.push(payload)
+      },
+    },
+    workerName: 'test-worker',
+    browserFactory: async () => ({
+      async newPage() {
+        return page
+      },
+      async close() {
+        return undefined
+      },
+    }),
+    runtimeRoot,
+    testScriptConfig: {},
+  })
+  runner.sessionId = 'session-variables-only'
+
+  await runner.executeLeasedStep({
+    liveTestId: 15,
+    step: {
+      id: 90,
+      scriptLine: '<Variablen><Variable name="username" default="demo" /></Variablen>',
+    },
+  })
+
+  await runner.executeLeasedStep({
+    liveTestId: 15,
+    step: {
+      id: 91,
+      scriptLine: '<Oeffnen url="https://example.test/{{username}}" />',
+    },
+  })
+
+  assert.equal(results[0].status, 'success')
+  assert.equal(results[0].url, 'about:blank')
+  assert.equal(results[1].status, 'success')
+  assert.equal(results[1].url, 'https://example.test/demo')
+})
+
 test('session stays open after a failed step and can continue', async () => {
   const page = createFakePage()
   const results = []

@@ -224,6 +224,7 @@ export class LiveTestWorkerRunner {
         centralConfig: this.testScriptConfig,
         generatedSpecPath,
         fragmentSource: this.fragmentSource,
+        allowEmptyFlow: true,
       })
       return resolved.resolvedRoot
     })

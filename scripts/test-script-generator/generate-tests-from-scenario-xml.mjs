@@ -1979,7 +1979,14 @@ function composeResolvedXmlSource(resolvedRootElement) {
   return `<?xml version="1.0" encoding="UTF-8"?>\n${builder.build(payload)}`
 }
 
-export async function scenarioToSpecSource({ scenarioPath, xsdPath, centralConfig, generatedSpecPath, fragmentSource = 'local' }) {
+export async function scenarioToSpecSource({
+  scenarioPath,
+  xsdPath,
+  centralConfig,
+  generatedSpecPath,
+  fragmentSource = 'local',
+  allowEmptyFlow = false,
+}) {
   const absoluteScenarioPath = resolve(workspaceRoot, scenarioPath)
   const absoluteXsdPath = resolve(workspaceRoot, xsdPath)
 
@@ -2048,7 +2055,7 @@ export async function scenarioToSpecSource({ scenarioPath, xsdPath, centralConfi
     flow,
   }
 
-  if (!resolvedRoot.flow.length) {
+  if (!allowEmptyFlow && !resolvedRoot.flow.length) {
     throw new Error('Scenario contains no interaction steps after XML reduction.')
   }
 
@@ -2059,11 +2066,13 @@ export async function scenarioToSpecSource({ scenarioPath, xsdPath, centralConfi
     ? `./${getScenarioEnvFillStrategiesFilename(generatedSpecPath)}`
     : null
 
-  const specSource = renderScenarioSpecTemplate({
-    resolvedRoot,
-    scenarioPathRelative: relative(workspaceRoot, absoluteScenarioPath),
-    envFillStrategiesImportPath,
-  })
+  const specSource = (allowEmptyFlow && resolvedRoot.flow.length === 0)
+    ? ''
+    : renderScenarioSpecTemplate({
+        resolvedRoot,
+        scenarioPathRelative: relative(workspaceRoot, absoluteScenarioPath),
+        envFillStrategiesImportPath,
+      })
 
   return {
     specSource,
