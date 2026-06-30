@@ -56,6 +56,11 @@ test('live-test snippets are wrapped into SzenarioScript and Gruppe when needed'
   const wrappedGroup = normalizeScriptLineToScenarioXml('<Gruppe><Oeffnen url="https://example.test" /></Gruppe>')
   assert.match(wrappedGroup, /<SzenarioScript>/)
   assert.equal((wrappedGroup.match(/<Gruppe>/g) || []).length, 1)
+
+  const wrappedVariables = normalizeScriptLineToScenarioXml('<Variablen><Variable name="username" default="demo" /></Variablen><Gruppe><Oeffnen url="https://example.test/{{username}}" /></Gruppe>')
+  assert.match(wrappedVariables, /<SzenarioScript>/)
+  assert.match(wrappedVariables, /<Variablen><Variable name="username" default="demo" \/><\/Variablen>/)
+  assert.equal((wrappedVariables.match(/<Gruppe>/g) || []).length, 1)
 })
 
 test('full-run and live-step-run use the same execution semantics', async () => {
@@ -181,6 +186,42 @@ test('live-step-runner reports html and screenshot on success', async () => {
   assert.equal(results[0].url, 'https://example.test/success')
   assert.match(results[0].html, /example\.test\/success/)
   assert.equal(results[0].screenshot, Buffer.from('png').toString('base64'))
+})
+
+test('live-step-runner resolves root variables from incoming Variablen block', async () => {
+  const page = createFakePage()
+  const results = []
+  const runtimeRoot = await mkdtemp(join(tmpdir(), 'live-test-worker-'))
+  const runner = new LiveTestWorkerRunner({
+    client: {
+      async stepResult(_sessionId, payload) {
+        results.push(payload)
+      },
+    },
+    workerName: 'test-worker',
+    browserFactory: async () => ({
+      async newPage() {
+        return page
+      },
+      async close() {
+        return undefined
+      },
+    }),
+    runtimeRoot,
+    testScriptConfig: {},
+  })
+  runner.sessionId = 'session-variables'
+
+  await runner.executeLeasedStep({
+    liveTestId: 14,
+    step: {
+      id: 89,
+      scriptLine: '<Variablen><Variable name="username" default="demo" /></Variablen><Gruppe><Oeffnen url="https://example.test/{{username}}" /></Gruppe>',
+    },
+  })
+
+  assert.equal(results[0].status, 'success')
+  assert.equal(results[0].url, 'https://example.test/demo')
 })
 
 test('session stays open after a failed step and can continue', async () => {
@@ -590,6 +631,156 @@ test('fragment Auslesen exports final fragment runtime variable back to parent f
       process.env.LUNETTES_API_PASSWORD = previousPassword
     }
   }
+})
+
+test('fragment Auslesen exports variables that only exist as fragment defaults', async () => {
+  const runtimeRoot = await mkdtemp(join(tmpdir(), 'live-test-worker-'))
+  const scenarioPath = join(runtimeRoot, 'fragment-default-export.xml')
+  const xsdPath = join(process.cwd(), 'schemas', 'szenarioscript.xsd')
+  const generatedSpecPath = join(runtimeRoot, 'fragment-default-export.generated.spec.js')
+
+  await writeFile(scenarioPath, [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<SzenarioScript>',
+    '  <Gruppe>',
+    '    <Fragment name="frag-default-export">',
+    '      <Auslesen variable="username" in-variable="parent.username" />',
+    '    </Fragment>',
+    '  </Gruppe>',
+    '</SzenarioScript>',
+    '',
+  ].join('\n'), 'utf8')
+
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (url) => {
+    if (String(url).includes('/api/anfo/szenarien/by-fragment-id?')) {
+      return {
+        ok: true,
+        status: 200,
+        async text() {
+          return JSON.stringify([{
+            id: 101,
+            fragment_id: 'frag-default-export',
+            szenario: '<?xml version="1.0" encoding="UTF-8"?><SzenarioScript id="frag-default-export-root" fragment="true"><Variablen><Variable name="username" default="schule_05320_schulleitung" /></Variablen><Gruppe /></SzenarioScript>',
+          }])
+        },
+      }
+    }
+    if (String(url).includes('/api/anfo/szenario/frag-default-export-root?')) {
+      return {
+        ok: true,
+        status: 200,
+        async text() {
+          return JSON.stringify({
+            szenario: '<?xml version="1.0" encoding="UTF-8"?><SzenarioScript id="frag-default-export-root" fragment="true"><Variablen><Variable name="username" default="schule_05320_schulleitung" /></Variablen><Gruppe /></SzenarioScript>',
+          })
+        },
+      }
+    }
+    throw new Error(`Unexpected URL: ${url}`)
+  }
+
+  const previousUsername = process.env.LUNETTES_API_USERNAME
+  const previousPassword = process.env.LUNETTES_API_PASSWORD
+  process.env.LUNETTES_API_USERNAME = 'user'
+  process.env.LUNETTES_API_PASSWORD = 'pass'
+
+  try {
+    const resolved = await scenarioToSpecSource({
+      scenarioPath,
+      xsdPath,
+      generatedSpecPath,
+      centralConfig: {
+        lunettes_api: {
+          base_url: 'https://example.test',
+        },
+      },
+      fragmentSource: 'lunettes',
+    })
+
+    assert.equal(resolved.resolvedRoot.flow.length, 2)
+    assert.equal(resolved.resolvedRoot.flow[0].interaction.type, 'set-runtime-variable')
+    assert.equal(resolved.resolvedRoot.flow[0].interaction.output, 'username')
+    assert.equal(resolved.resolvedRoot.flow[0].interaction.value, 'schule_05320_schulleitung')
+    assert.equal(resolved.resolvedRoot.flow[1].interaction.type, 'set-runtime-variable')
+    assert.equal(resolved.resolvedRoot.flow[1].interaction.output, 'parent.username')
+    assert.equal(resolved.resolvedRoot.flow[1].interaction.value, '{{username}}')
+
+    const page = createFakePage()
+    const executionState = createScenarioExecutionState({
+      page,
+      testInfo: { outputPath: (filename) => filename },
+      runtimeVariables: {},
+    })
+    const executionRuntime = createScenarioExecutionRuntime({
+      page,
+      waitBetweenStepsMs: 0,
+      stepTimeoutMs: 30000,
+    })
+
+    await runPreparedScenarioFlow({
+      steps: resolved.resolvedRoot.flow,
+      executionRuntime,
+      executionState,
+    })
+
+    assert.equal(resolveRuntimeTemplateString('{{parent.username}}', executionState.runtimeVariables), 'schule_05320_schulleitung')
+  } finally {
+    globalThis.fetch = originalFetch
+    if (previousUsername === undefined) {
+      delete process.env.LUNETTES_API_USERNAME
+    } else {
+      process.env.LUNETTES_API_USERNAME = previousUsername
+    }
+    if (previousPassword === undefined) {
+      delete process.env.LUNETTES_API_PASSWORD
+    } else {
+      process.env.LUNETTES_API_PASSWORD = previousPassword
+    }
+  }
+})
+
+test('runPreparedScenarioFlow logs runtime variable snapshots after each executed step', async () => {
+  const page = createFakePage()
+  const executionState = createScenarioExecutionState({
+    page,
+    testInfo: { outputPath: (filename) => filename },
+    initialRuntimeVariables: {
+      username: 'schule_05320_schulleitung',
+    },
+  })
+  const executionRuntime = createScenarioExecutionRuntime({
+    page,
+    waitBetweenStepsMs: 0,
+    stepTimeoutMs: 30000,
+  })
+
+  const originalConsoleLog = console.log
+  const capturedLogs = []
+  console.log = (...args) => {
+    capturedLogs.push(args.map((entry) => String(entry)).join(' '))
+  }
+
+  try {
+    await runPreparedScenarioFlow({
+      steps: [{
+        id: 'open-step',
+        resolvedId: 'open-step',
+        interaction: {
+          type: 'open',
+          target: {
+            url: 'https://example.test/dashboard',
+          },
+        },
+      }],
+      executionRuntime,
+      executionState,
+    })
+  } finally {
+    console.log = originalConsoleLog
+  }
+
+  assert.match(capturedLogs.find((entry) => entry.includes('[scenario-variables]')) || '', /\[scenario-variables\] open-step \| .*schule_05320_schulleitung/)
 })
 
 test('PdfCodeAuslesen maps to extract-pdf-code interaction with german attributes', async () => {

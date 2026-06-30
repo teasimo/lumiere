@@ -8,6 +8,7 @@ import {
   createScenarioExecutionState,
   prepareScenarioFlow,
   runPreparedScenarioFlow,
+  seedRuntimeVariables,
 } from './scenario-helpers.mjs'
 
 function normalizeBaseUrl(value) {
@@ -47,6 +48,16 @@ export function normalizeScriptLineToScenarioXml(scriptLine) {
   }
 
   if (text.startsWith('<Gruppe')) {
+    return [
+      '<?xml version="1.0" encoding="UTF-8"?>',
+      '<SzenarioScript>',
+      `  ${text}`,
+      '</SzenarioScript>',
+      '',
+    ].join('\n')
+  }
+
+  if (text.startsWith('<Variablen')) {
     return [
       '<?xml version="1.0" encoding="UTF-8"?>',
       '<SzenarioScript>',
@@ -348,6 +359,7 @@ export class LiveTestWorkerRunner {
       const preparedFlow = prepareScenarioFlow(Array.isArray(resolvedRoot?.flow) ? resolvedRoot.flow : [], { autoScroll: true })
       const waitBetweenStepsMs = Math.max(0, Math.floor(Number(resolvedRoot?.video?.wait_between_steps ?? this.testScriptConfig?.video?.wait_between_steps ?? 0) || 0))
       const stepTimeoutMs = Math.max(0, Math.floor(Number(resolvedRoot?.runtime?.step_timeout_ms ?? this.testScriptConfig?.runtime?.step_timeout_ms ?? 30000) || 30000))
+      seedRuntimeVariables(this.executionState?.runtimeVariables, resolvedRoot?.initialRuntimeVariables || {})
       const executionRuntime = createScenarioExecutionRuntime({
         page: this.page,
         waitBetweenStepsMs,

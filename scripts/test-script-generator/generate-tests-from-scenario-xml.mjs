@@ -817,6 +817,21 @@ function buildFragmentExportFlow(element, makeStepId) {
   })).filter((step) => step.interaction.output && step.interaction.value !== '{{}}')
 }
 
+function buildFragmentInitializationFlow(element, makeStepId) {
+  const initializers = Array.isArray(element?.meta?.fragmentRuntimeInitializers)
+    ? element.meta.fragmentRuntimeInitializers
+    : []
+
+  return initializers.map((initializer, index) => ({
+    id: makeStepId(element, `fragment-init-${index + 1}`),
+    interaction: {
+      type: 'set-runtime-variable',
+      output: String(initializer.output || '').trim(),
+      value: String(initializer.value ?? ''),
+    },
+  })).filter((step) => step.interaction.output)
+}
+
 function hasContextParameter(context, parameterName) {
   if (Object.prototype.hasOwnProperty.call(context, parameterName)) {
     return true
@@ -1570,6 +1585,8 @@ function flowFromInteractionTree(children, makeStepId) {
   const flow = []
 
   for (const child of children || []) {
+    flow.push(...buildFragmentInitializationFlow(child, makeStepId))
+
     if (child.tag === 'Gruppe') {
       flow.push(...flowFromInteractionTree(child.children || [], makeStepId))
       flow.push(...buildFragmentExportFlow(child, makeStepId))
@@ -1760,6 +1777,19 @@ async function expandFragmentsInChildren(children, {
         ...fragmentDefaults,
         ...parameterContext,
       }
+      const fragmentRuntimeInitializers = fragmentVariableDefinitions
+        .map((definition) => {
+          const output = String(definition?.name || '').trim()
+          const value = getPathValue(fragmentContext, output)
+          if (!output || value === undefined) {
+            return null
+          }
+          return {
+            output,
+            value: String(value ?? ''),
+          }
+        })
+        .filter(Boolean)
 
       for (const variableDefinition of fragmentVariableDefinitions) {
         if (!variableDefinition.hasDefault && !hasContextParameter(fragmentContext, variableDefinition.name)) {
@@ -1798,6 +1828,27 @@ async function expandFragmentsInChildren(children, {
         fragmentSource,
         centralConfig,
       })
+
+      if (fragmentRuntimeInitializers.length > 0) {
+        if (nestedExpansion.length > 0) {
+          const carrier = nestedExpansion[0]
+          carrier.meta = {
+            ...(carrier.meta || {}),
+            fragmentRuntimeInitializers: fragmentRuntimeInitializers.map((entry) => ({ ...entry })),
+          }
+        } else {
+          nestedExpansion.push({
+            tag: '__FragmentRuntimeCarrier',
+            attrs: {},
+            text: '',
+            children: [],
+            meta: {
+              ...(child.meta || {}),
+              fragmentRuntimeInitializers: fragmentRuntimeInitializers.map((entry) => ({ ...entry })),
+            },
+          })
+        }
+      }
 
       if (fragmentOutputMappings.length > 0) {
         if (nestedExpansion.length > 0) {
@@ -1993,6 +2044,7 @@ export async function scenarioToSpecSource({ scenarioPath, xsdPath, centralConfi
       step_timeout_ms: Number(centralConfig?.runtime?.step_timeout_ms ?? 30000),
     },
     data: resolvedData,
+    initialRuntimeVariables: resolvedVariableDefaults,
     flow,
   }
 

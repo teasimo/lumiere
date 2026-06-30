@@ -244,6 +244,53 @@ export function setRuntimeVariable(runtimeVariables, outputPath, value) {
   cursor[keys[keys.length - 1]] = value
 }
 
+function cloneRuntimeVariableValue(value) {
+  if (Array.isArray(value)) {
+    return value.map((entry) => cloneRuntimeVariableValue(entry))
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [key, cloneRuntimeVariableValue(entry)]),
+    )
+  }
+  return value
+}
+
+export function cloneRuntimeVariables(runtimeVariables) {
+  if (!runtimeVariables || typeof runtimeVariables !== 'object') {
+    return {}
+  }
+
+  return cloneRuntimeVariableValue(runtimeVariables)
+}
+
+export function seedRuntimeVariables(runtimeVariables, initialRuntimeVariables, { overwrite = true } = {}) {
+  if (!runtimeVariables || typeof runtimeVariables !== 'object') {
+    return runtimeVariables
+  }
+  if (!initialRuntimeVariables || typeof initialRuntimeVariables !== 'object') {
+    return runtimeVariables
+  }
+
+  for (const [key, value] of Object.entries(initialRuntimeVariables)) {
+    if (!overwrite && getPathValue(runtimeVariables, key) !== undefined) {
+      continue
+    }
+    setRuntimeVariable(runtimeVariables, key, cloneRuntimeVariableValue(value))
+  }
+
+  return runtimeVariables
+}
+
+function formatRuntimeVariablesSnapshot(runtimeVariables) {
+  const snapshot = cloneRuntimeVariables(runtimeVariables)
+  try {
+    return JSON.stringify(snapshot)
+  } catch {
+    return String(snapshot)
+  }
+}
+
 function tryParseJson(value) {
   if (typeof value !== 'string') {
     return { ok: true, value }
@@ -2567,18 +2614,21 @@ export function createScenarioExecutionState({
   page,
   testInfo = null,
   runtimeVariables = {},
+  initialRuntimeVariables = {},
   smoothScrollEnabled = false,
   scrollDelayMs = 35,
 } = {}) {
   const state = {
     page,
     testInfo,
-    runtimeVariables,
+    runtimeVariables: cloneRuntimeVariables(runtimeVariables),
     smoothScrollEnabled: Boolean(smoothScrollEnabled),
     scrollDelayMs: Math.max(0, Number(scrollDelayMs ?? 35) || 35),
     lastDownload: null,
     lastPdfResponse: null,
   }
+
+  seedRuntimeVariables(state.runtimeVariables, initialRuntimeVariables)
 
   if (page?.on) {
     page.on('download', (download) => {
@@ -2941,6 +2991,10 @@ export async function runPreparedScenarioFlow({
       } else {
         await executeScenarioStep(executionState, step, { stepRuntime })
       }
+
+      const runtimeVariablesSnapshot = cloneRuntimeVariables(executionState?.runtimeVariables || {})
+      stepRuntime?.info?.('runtime-variables', runtimeVariablesSnapshot)
+      console.log(`[scenario-variables] ${stepId} | ${formatRuntimeVariablesSnapshot(runtimeVariablesSnapshot)}`)
 
       if (stepIdentifierLogger?.capture) {
         await stepIdentifierLogger.capture(stepId, 'after')

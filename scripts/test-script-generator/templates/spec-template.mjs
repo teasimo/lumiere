@@ -1686,7 +1686,7 @@ export function renderScenarioSpecTemplate({
   parts.push('    const executionState = createScenarioExecutionState({')
   parts.push('      page,')
   parts.push('      testInfo,')
-  parts.push('      runtimeVariables: {},')
+  parts.push(`      initialRuntimeVariables: ${JSON.stringify(resolvedRoot?.initialRuntimeVariables || {}, null, 6)},`)
   parts.push('      smoothScrollEnabled,')
   parts.push('      scrollDelayMs,')
   parts.push('    })')
