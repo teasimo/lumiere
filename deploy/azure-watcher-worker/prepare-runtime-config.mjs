@@ -73,6 +73,21 @@ function parseCsvEnv(name) {
   return values.length > 0 ? values : null
 }
 
+function parseBooleanEnv(name) {
+  const raw = String(process.env[name] || '').trim().toLowerCase()
+  if (!raw) return null
+
+  if (['1', 'true', 'yes', 'y', 'on'].includes(raw)) {
+    return true
+  }
+
+  if (['0', 'false', 'no', 'n', 'off'].includes(raw)) {
+    return false
+  }
+
+  throw new Error(`Ungueltiger Boolean-Wert fuer ${name}: ${process.env[name]}`)
+}
+
 function parsePatchEnv() {
   const raw = String(process.env.SCENARIO_CONFIG_PATCH_JSON || '').trim()
   if (!raw) {
@@ -98,8 +113,15 @@ function buildEnvPatch() {
   const watcherTestscriptMode = String(process.env.WATCHER_TESTSCRIPT_MODE || '').trim()
   const watcherVideoProfile = String(process.env.WATCHER_VIDEO_PROFILE || '').trim()
 
+  const liveTestWorkerEnabled = parseBooleanEnv('LIVE_TEST_WORKER_ENABLED')
+  const liveTestWorkerName = String(process.env.LIVE_TEST_WORKER_NAME || '').trim()
+  const liveTestWorkerSessionId = String(process.env.LIVE_TEST_WORKER_SESSION_ID || '').trim()
+  const liveTestWorkerPollIntervalMs = parseIntegerEnv('LIVE_TEST_WORKER_POLL_INTERVAL_MS')
+  const liveTestWorkerHeartbeatIntervalMs = parseIntegerEnv('LIVE_TEST_WORKER_HEARTBEAT_INTERVAL_MS')
+
   const patch = {
     'lunettes-job-watcher': {},
+    'live-test-worker': {},
     'test-script': {
       lunettes_api: {},
     },
@@ -144,6 +166,26 @@ function buildEnvPatch() {
 
   if (watcherVideoProfile) {
     patch['lunettes-job-watcher'].video_profile = watcherVideoProfile
+  }
+
+  if (liveTestWorkerEnabled !== null) {
+    patch['live-test-worker'].enabled = liveTestWorkerEnabled
+  }
+
+  if (liveTestWorkerName) {
+    patch['live-test-worker'].worker_name = liveTestWorkerName
+  }
+
+  if (liveTestWorkerSessionId) {
+    patch['live-test-worker'].worker_session_id = liveTestWorkerSessionId
+  }
+
+  if (liveTestWorkerPollIntervalMs !== null) {
+    patch['live-test-worker'].poll_interval_ms = liveTestWorkerPollIntervalMs
+  }
+
+  if (liveTestWorkerHeartbeatIntervalMs !== null) {
+    patch['live-test-worker'].heartbeat_interval_ms = liveTestWorkerHeartbeatIntervalMs
   }
 
   return patch
