@@ -10,7 +10,7 @@ const workspaceRoot = process.cwd()
 function printUsage() {
   console.log([
     'Usage:',
-    '  node scripts/test-script-generator/run-live-test-worker.mjs [--worker-name <name>] [--session-id <id>] [--poll-interval-ms <ms>] [--heartbeat-interval-ms <ms>] [--software <name>]',
+    '  node scripts/test-script-generator/run-live-test-worker.mjs [--worker-name <name>] [--session-id <id>] [--live-test-id <id>] [--poll-interval-ms <ms>] [--heartbeat-interval-ms <ms>] [--software <name>]',
     '',
     'Environment:',
     '  LUNETTES_API_USERNAME',
@@ -23,6 +23,7 @@ function parseArgs(argv) {
   const options = {
     workerName: '',
     sessionId: '',
+    liveTestId: null,
     pollIntervalMs: null,
     heartbeatIntervalMs: null,
     software: null,
@@ -49,6 +50,14 @@ function parseArgs(argv) {
     }
     if (token.startsWith('--session-id=')) {
       options.sessionId = token.slice('--session-id='.length)
+      continue
+    }
+    if (token === '--live-test-id') {
+      options.liveTestId = args.shift() || null
+      continue
+    }
+    if (token.startsWith('--live-test-id=')) {
+      options.liveTestId = token.slice('--live-test-id='.length)
       continue
     }
     if (token === '--poll-interval-ms') {
@@ -108,8 +117,10 @@ async function main() {
     client: new LunettesLiveTestClient({ baseUrl, username, password }),
     workerName,
     workerSessionId: String(options.sessionId || liveTestConfig.worker_session_id || '').trim() || null,
+    liveTestId: String(options.liveTestId ?? liveTestConfig.live_test_id ?? '').trim() || null,
     pollIntervalMs: Number(options.pollIntervalMs ?? liveTestConfig.poll_interval_ms ?? 1000),
     heartbeatIntervalMs: Number(options.heartbeatIntervalMs ?? liveTestConfig.heartbeat_interval_ms ?? 30000),
+    reRegisterAfterIdleMs: Number(liveTestConfig.re_register_after_idle_ms ?? 15000),
     runtimeRoot: resolve(workspaceRoot, 'temp', 'live-test-workers'),
     xsdPath: resolve(workspaceRoot, 'schemas', 'szenarioscript.xsd'),
     testScriptConfig,

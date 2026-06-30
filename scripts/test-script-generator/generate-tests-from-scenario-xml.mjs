@@ -47,6 +47,7 @@ const INTERACTION_TAGS = new Set([
   'Upload',
   'Anzeige',
   'Auslesen',
+  'PdfCodeAuslesen',
   'GET',
   'POST',
   'PinBriefMailAuslesen',
@@ -773,25 +774,47 @@ function buildParameterContext(parameterElements, parentContext, dataFunctions) 
       setPathValue(overrides, name, resolvedValue)
       continue
     }
-
-    if (parameter.tag === 'Auslesen') {
-      const fragmentVariable = String(parameter.attrs?.variable || parameter.attrs?.parameter || '').trim()
-      const parentVariable = String(parameter.attrs?.['in-variable'] || '').trim()
-      if (!fragmentVariable || !parentVariable) {
-        throw new Error('Fragment > Auslesen requires "variable" (or "parameter") and "in-variable".')
-      }
-
-      const resolvedValue = getPathValue(parentContext, parentVariable)
-      if (resolvedValue === undefined) {
-        throw new Error(`Fragment > Auslesen could not resolve parent variable "${parentVariable}".`)
-      }
-
-      setPathValue(overrides, fragmentVariable, resolvedValue)
-      continue
-    }
   }
 
   return overrides
+}
+
+function extractFragmentOutputMappings(parameterElements) {
+  const mappings = []
+
+  for (const parameter of parameterElements || []) {
+    if (parameter.tag !== 'Auslesen') {
+      continue
+    }
+
+    const fragmentVariable = String(parameter.attrs?.variable || parameter.attrs?.parameter || '').trim()
+    const parentVariable = String(parameter.attrs?.['in-variable'] || '').trim()
+    if (!fragmentVariable || !parentVariable) {
+      throw new Error('Fragment > Auslesen requires "variable" (or "parameter") and "in-variable".')
+    }
+
+    mappings.push({
+      fragmentVariable,
+      parentVariable,
+    })
+  }
+
+  return mappings
+}
+
+function buildFragmentExportFlow(element, makeStepId) {
+  const mappings = Array.isArray(element?.meta?.fragmentOutputMappings)
+    ? element.meta.fragmentOutputMappings
+    : []
+
+  return mappings.map((mapping, index) => ({
+    id: makeStepId(element, `fragment-export-${index + 1}`),
+    interaction: {
+      type: 'set-runtime-variable',
+      output: String(mapping.parentVariable || '').trim(),
+      value: `{{${String(mapping.fragmentVariable || '').trim()}}}`,
+    },
+  })).filter((step) => step.interaction.output && step.interaction.value !== '{{}}')
 }
 
 function hasContextParameter(context, parameterName) {
@@ -863,6 +886,65 @@ async function fetchFragmentDocumentFromLunettes(fragmentName, centralConfig) {
   const selected = withScenarioXml[0]
   const scenarioXml = String(selected?.szenario || '').trim()
   const sourceLabel = `lunettes-fragment:${fragmentName}#${selected?.id ?? 'unknown'}`
+  return {
+    document: parseXmlDocumentFromSource(scenarioXml, sourceLabel),
+    sourceLabel,
+  }
+}
+
+function getFragmentFetchOptions(fragmentElement) {
+  const attrs = fragmentElement?.attrs || {}
+  const status = String(attrs.Status ?? attrs.status ?? 'abgestimmt').trim()
+  const version = String(attrs.Version ?? attrs.version ?? '').trim()
+
+  return {
+    ...(status ? { status } : {}),
+    ...(version ? { version } : {}),
+  }
+}
+
+async function fetchScenarioDocumentFromLunettes({ scenarioId, centralConfig, status = '', version = '' }) {
+  const context = getLunettesFragmentApiContext(centralConfig)
+  const query = new URLSearchParams()
+  if (String(status || '').trim()) {
+    query.set('status', String(status).trim())
+  }
+  if (String(version || '').trim()) {
+    query.set('version', String(version).trim())
+  }
+  const endpoint = `${context.baseUrl}/api/anfo/szenario/${encodeURIComponent(String(scenarioId || '').trim())}${query.size > 0 ? `?${query.toString()}` : ''}`
+  const response = await fetch(endpoint, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      Authorization: context.authHeader,
+    },
+  })
+
+  const responseText = await response.text()
+  let payload = null
+  try {
+    payload = responseText ? JSON.parse(responseText) : null
+  } catch {
+    throw new Error(`Lunettes-Szenario-Antwort fuer "${scenarioId}" ist kein gueltiges JSON.`)
+  }
+
+  if (!response.ok) {
+    const details = payload ? ` Response: ${JSON.stringify(payload)}` : ''
+    throw new Error(`Lunettes-Szenario "${scenarioId}" schlug mit HTTP ${response.status} fehl.${details}`)
+  }
+
+  const scenarioXml = String(payload?.szenario || payload?.scenario || payload?.xml || '').trim()
+  if (!scenarioXml) {
+    throw new Error(`Lunettes-Szenario "${scenarioId}" lieferte kein Szenario-XML.`)
+  }
+
+  const sourceLabelSuffix = [
+    String(version || '').trim() ? `version=${String(version).trim()}` : '',
+    String(status || '').trim() ? `status=${String(status).trim()}` : '',
+  ].filter(Boolean).join('&')
+  const sourceLabel = `lunettes-szenario:${scenarioId}${sourceLabelSuffix ? `?${sourceLabelSuffix}` : ''}`
+
   return {
     document: parseXmlDocumentFromSource(scenarioXml, sourceLabel),
     sourceLabel,
@@ -1267,6 +1349,28 @@ function mapInteractionElementToStep(element, makeStepId) {
     throw new Error(`Auslesen quelle="${source}" is currently not supported by the test generator.`)
   }
 
+  if (tag === 'PdfCodeAuslesen') {
+    const regex = String(attrs.regex || '').trim()
+    const output = String(attrs.zielvariable || attrs['in-variable'] || attrs.variable || '').trim()
+    const pdfPath = String(attrs['pdf-pfad'] || attrs.pdfPath || '').trim()
+    if (!regex) {
+      throw new Error('PdfCodeAuslesen requires a non-empty "regex" attribute.')
+    }
+    if (!output) {
+      throw new Error('PdfCodeAuslesen requires a non-empty "zielvariable" attribute.')
+    }
+
+    return withResolvedMeta({
+      id: makeStepId(element, 'pdf-code-auslesen'),
+      interaction: {
+        type: 'extract-pdf-code',
+        auslesenRegex: regex,
+        output,
+        ...(pdfPath ? { pdfPath } : {}),
+      },
+    })
+  }
+
   if (tag === 'GET' || tag === 'POST') {
     const method = tag
     const url = String(attrs.url || '').trim()
@@ -1468,6 +1572,7 @@ function flowFromInteractionTree(children, makeStepId) {
   for (const child of children || []) {
     if (child.tag === 'Gruppe') {
       flow.push(...flowFromInteractionTree(child.children || [], makeStepId))
+      flow.push(...buildFragmentExportFlow(child, makeStepId))
       continue
     }
 
@@ -1486,10 +1591,12 @@ function flowFromInteractionTree(children, makeStepId) {
         })
       }
 
+      flow.push(...buildFragmentExportFlow(child, makeStepId))
       continue
     }
 
     if (!isInteractionElement(child)) {
+      flow.push(...buildFragmentExportFlow(child, makeStepId))
       continue
     }
 
@@ -1497,6 +1604,7 @@ function flowFromInteractionTree(children, makeStepId) {
     if (mappedStep) {
       flow.push(mappedStep)
     }
+    flow.push(...buildFragmentExportFlow(child, makeStepId))
   }
 
   return flow
@@ -1620,9 +1728,19 @@ async function expandFragmentsInChildren(children, {
         throw new Error('Fragment element requires a non-empty name attribute.')
       }
 
+      const fragmentFetchOptions = getFragmentFetchOptions(child)
       const apiFragment = await fetchFragmentDocumentFromLunettes(fragmentName, centralConfig)
-      const fragmentDocument = apiFragment.document
-      const fragmentSourceLabel = apiFragment.sourceLabel
+      const fragmentSourceId = String(apiFragment.document?.root?.attrs?.id || '').trim()
+      const resolvedFragment = fragmentSourceId
+        ? await fetchScenarioDocumentFromLunettes({
+          scenarioId: fragmentSourceId,
+          centralConfig,
+          status: fragmentFetchOptions.status,
+          version: fragmentFetchOptions.version,
+        })
+        : apiFragment
+      const fragmentDocument = resolvedFragment.document
+      const fragmentSourceLabel = resolvedFragment.sourceLabel
 
       if (includeStack.includes(fragmentSourceLabel)) {
         throw new Error(`Circular fragment include detected: ${[...includeStack, fragmentSourceLabel].join(' -> ')}`)
@@ -1635,6 +1753,7 @@ async function expandFragmentsInChildren(children, {
       const fragmentVariableDefinitions = getVariableDefinitions(fragmentDocument.root)
       const fragmentParameters = fragmentVariableDefinitions.map((entry) => entry.name)
       const parameterContext = buildParameterContext(child.children || [], context, dataFunctions)
+      const fragmentOutputMappings = extractFragmentOutputMappings(child.children || [])
       const fragmentDefaults = resolveVariableDefaults(fragmentVariableDefinitions, context, dataFunctions)
       const fragmentContext = {
         ...context,
@@ -1679,6 +1798,27 @@ async function expandFragmentsInChildren(children, {
         fragmentSource,
         centralConfig,
       })
+
+      if (fragmentOutputMappings.length > 0) {
+        if (nestedExpansion.length > 0) {
+          const carrier = nestedExpansion[nestedExpansion.length - 1]
+          carrier.meta = {
+            ...(carrier.meta || {}),
+            fragmentOutputMappings: fragmentOutputMappings.map((entry) => ({ ...entry })),
+          }
+        } else {
+          nestedExpansion.push({
+            tag: '__FragmentOutputCarrier',
+            attrs: {},
+            text: '',
+            children: [],
+            meta: {
+              ...(child.meta || {}),
+              fragmentOutputMappings: fragmentOutputMappings.map((entry) => ({ ...entry })),
+            },
+          })
+        }
+      }
 
       expanded.push(...nestedExpansion)
       continue

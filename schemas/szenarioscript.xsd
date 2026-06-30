@@ -106,6 +106,7 @@
             <xs:element name="Upload" type="KomponentInputType"/>
             <xs:element name="Anzeige" type="InteractionType"/>
             <xs:element name="Auslesen" type="AuslesenType"/>
+            <xs:element name="PdfCodeAuslesen" type="PdfCodeAuslesenType"/>
             <xs:element name="GET" type="ApiRequestType"/>
             <xs:element name="POST" type="ApiRequestType"/>
             <xs:element name="PinBriefMailAuslesen" type="PinBriefMailAuslesenType"/>
@@ -129,6 +130,7 @@
             <xs:element name="Upload" type="KomponentInputType"/>
             <xs:element name="Anzeige" type="InteractionType"/>
             <xs:element name="Auslesen" type="AuslesenType"/>
+            <xs:element name="PdfCodeAuslesen" type="PdfCodeAuslesenType"/>
             <xs:element name="GET" type="ApiRequestType"/>
             <xs:element name="POST" type="ApiRequestType"/>
             <xs:element name="PinBriefMailAuslesen" type="PinBriefMailAuslesenType"/>
@@ -188,6 +190,8 @@
             </xs:choice>
         </xs:sequence>
         <xs:attribute name="name" type="xs:string" use="required"/>
+        <xs:attribute name="Status" type="xs:string" use="optional" default="abgestimmt"/>
+        <xs:attribute name="Version" type="xs:string" use="optional"/>
     </xs:complexType>
 
     <xs:complexType name="ParameterType">
@@ -238,6 +242,13 @@
         <xs:attribute name="zeilen-index" type="xs:nonNegativeInteger" use="optional"/>
         <xs:attribute name="variable" type="xs:string" use="optional"/>
         <xs:attribute name="in-variable" type="xs:string" use="optional"/>
+    </xs:complexType>
+
+    <xs:complexType name="PdfCodeAuslesenType">
+        <xs:attribute name="id" type="xs:ID" use="optional"/>
+        <xs:attribute name="regex" type="xs:string" use="required"/>
+        <xs:attribute name="zielvariable" type="xs:string" use="required"/>
+        <xs:attribute name="pdf-pfad" type="xs:string" use="optional"/>
     </xs:complexType>
 
     <xs:complexType name="ApiRequestType">

@@ -38,10 +38,15 @@ Optional:
       "script_inactivity_timeout_ms": 900000,
       "script_termination_grace_period_ms": 120000,
       "video_profile": "all-channels"
+    },
+    "live-test-worker": {
+      "re_register_after_idle_ms": 15000
     }
   }
 }
 ```
+
+`live-test-worker.re_register_after_idle_ms` sorgt dafuer, dass der Worker ohne feste `worker_session_id` seine Session nach laengerem `wait` ohne `live_test_id` neu registriert. Das bildet den manuellen Neustart nach und hilft, wenn der Server neue Live-Tests nur nach einer frischen Registrierung zuordnet.
 
 ## Verhalten
 

@@ -71,6 +71,7 @@ const RESOLVED_ID_RELEVANT_TAGS = new Set([
   'Auswahl',
   'Upload',
   'Anzeige',
+  'PdfCodeAuslesen',
   'GET',
   'POST',
   'PinBriefMailAuslesen',

@@ -68,8 +68,10 @@ const DEFAULTS = {
     base_url: '',
     worker_name: 'playwright-live-test-worker',
     worker_session_id: '',
+    live_test_id: null,
     poll_interval_ms: 1000,
     heartbeat_interval_ms: 30000,
+    re_register_after_idle_ms: 15000,
   },
 }
 

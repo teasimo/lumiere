@@ -137,6 +137,12 @@ export class LunettesLiveTestClient {
     })
   }
 
+  claimLiveTest(sessionId, liveTestId = null) {
+    return this.request(`/api/live-test-workers/${encodeURIComponent(sessionId)}/claim-live-test`, {
+      body: liveTestId == null ? undefined : { liveTestId },
+    })
+  }
+
   nextStep(sessionId) {
     return this.request(`/api/live-test-workers/${encodeURIComponent(sessionId)}/next-step`)
   }
@@ -163,8 +169,10 @@ export class LiveTestWorkerRunner {
     client,
     workerName,
     workerSessionId = null,
+    liveTestId = null,
     pollIntervalMs = 1000,
     heartbeatIntervalMs = 30000,
+    reRegisterAfterIdleMs = 15000,
     browserFactory = () => chromium.launch({ headless: true }),
     resolveScenarioSteps,
     runtimeRoot = resolve(process.cwd(), 'temp', 'live-test-workers'),
@@ -176,8 +184,10 @@ export class LiveTestWorkerRunner {
     this.client = client
     this.workerName = String(workerName || 'live-test-worker')
     this.workerSessionId = workerSessionId ? String(workerSessionId) : null
+    this.liveTestId = liveTestId == null || String(liveTestId).trim() === '' ? null : String(liveTestId).trim()
     this.pollIntervalMs = Math.max(250, Number(pollIntervalMs) || 1000)
     this.heartbeatIntervalMs = Math.max(1000, Number(heartbeatIntervalMs) || 30000)
+    this.reRegisterAfterIdleMs = Math.max(0, Number(reRegisterAfterIdleMs) || 0)
     this.browserFactory = browserFactory
     this.runtimeRoot = runtimeRoot
     this.xsdPath = xsdPath
@@ -190,6 +200,7 @@ export class LiveTestWorkerRunner {
     this.lastHeartbeatAt = 0
     this.currentArtifactDir = null
     this.executionState = null
+    this.idleWithoutLiveTestSince = 0
     this.resolveScenarioSteps = resolveScenarioSteps || (async (scriptLine, context) => {
       const xmlSource = normalizeScriptLineToScenarioXml(scriptLine)
       const xmlPath = join(context.artifactDir, 'step.xml')
@@ -247,8 +258,51 @@ export class LiveTestWorkerRunner {
     })
     this.sessionId = String(response?.sessionId || '')
     this.lastHeartbeatAt = Date.now()
+    this.idleWithoutLiveTestSince = 0
     console.log(`[live-test-worker] registered session_id=${this.sessionId} status=${String(response?.status || 'unknown')}`)
     return response
+  }
+
+  async claimLiveTest() {
+    if (!this.sessionId) {
+      throw new Error('Cannot claim live test without session_id.')
+    }
+
+    const response = await this.client.claimLiveTest(this.sessionId, this.liveTestId)
+    const claimedLiveTestId = response?.liveTest?.id ?? this.liveTestId ?? null
+    console.log(`[live-test-worker] claimed session_id=${this.sessionId} live_test_id=${String(claimedLiveTestId ?? '') || '-'} mode=${this.liveTestId ? 'explicit' : 'latest-running'}`)
+    return response
+  }
+
+  async maybeReregisterAfterIdleWait(next) {
+    if (this.workerSessionId || this.reRegisterAfterIdleMs <= 0) {
+      return false
+    }
+    if (next?.type !== 'wait' || next?.liveTestId != null) {
+      this.idleWithoutLiveTestSince = 0
+      return false
+    }
+
+    const now = Date.now()
+    if (!this.idleWithoutLiveTestSince) {
+      this.idleWithoutLiveTestSince = now
+      return false
+    }
+    if (now - this.idleWithoutLiveTestSince < this.reRegisterAfterIdleMs) {
+      return false
+    }
+
+    const previousSessionId = this.sessionId
+    this.idleWithoutLiveTestSince = 0
+    console.log(`[live-test-worker] re-register session_id=${previousSessionId} reason=idle_timeout idle_ms=${this.reRegisterAfterIdleMs}`)
+    try {
+      await this.client.release(previousSessionId, 'idle_timeout_reregister')
+    } catch (error) {
+      console.log(`[live-test-worker] release-before-reregister failed session_id=${previousSessionId} message=${String(error?.message || error)}`)
+    }
+    await this.register()
+    await this.claimLiveTest()
+    return true
   }
 
   async maybeHeartbeat() {
@@ -337,12 +391,16 @@ export class LiveTestWorkerRunner {
     if (!this.sessionId) {
       await this.register()
     }
+    await this.claimLiveTest()
 
     while (true) {
       await this.maybeHeartbeat()
       const next = await this.client.nextStep(this.sessionId)
 
       if (next?.type === 'wait') {
+        if (await this.maybeReregisterAfterIdleWait(next)) {
+          continue
+        }
         console.log(`[live-test-worker] wait session_id=${this.sessionId} live_test_id=${String(next?.liveTestId ?? '') || '-'}`)
         await this.sleep(this.pollIntervalMs)
         continue
@@ -356,6 +414,7 @@ export class LiveTestWorkerRunner {
       }
 
       if (next?.type === 'step') {
+        this.idleWithoutLiveTestSince = 0
         console.log(`[live-test-worker] leased live_test_id=${String(next?.liveTestId ?? '')} step_id=${String(next?.step?.id ?? '')} position=${String(next?.step?.position ?? '')}`)
         await this.executeLeasedStep(next)
         continue
