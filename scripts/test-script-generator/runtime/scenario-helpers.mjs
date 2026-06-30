@@ -282,15 +282,6 @@ export function seedRuntimeVariables(runtimeVariables, initialRuntimeVariables, 
   return runtimeVariables
 }
 
-function formatRuntimeVariablesSnapshot(runtimeVariables) {
-  const snapshot = cloneRuntimeVariables(runtimeVariables)
-  try {
-    return JSON.stringify(snapshot)
-  } catch {
-    return String(snapshot)
-  }
-}
-
 function tryParseJson(value) {
   if (typeof value !== 'string') {
     return { ok: true, value }
@@ -2994,7 +2985,6 @@ export async function runPreparedScenarioFlow({
 
       const runtimeVariablesSnapshot = cloneRuntimeVariables(executionState?.runtimeVariables || {})
       stepRuntime?.info?.('runtime-variables', runtimeVariablesSnapshot)
-      console.log(`[scenario-variables] ${stepId} | ${formatRuntimeVariablesSnapshot(runtimeVariablesSnapshot)}`)
 
       if (stepIdentifierLogger?.capture) {
         await stepIdentifierLogger.capture(stepId, 'after')

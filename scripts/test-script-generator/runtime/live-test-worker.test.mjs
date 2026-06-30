@@ -799,34 +799,38 @@ test('runPreparedScenarioFlow logs runtime variable snapshots after each execute
     page,
     waitBetweenStepsMs: 0,
     stepTimeoutMs: 30000,
+    onStepComplete: async (stepReport) => {
+      capturedStepReports.push(stepReport)
+    },
+  })
+  const capturedStepReports = []
+
+  await runPreparedScenarioFlow({
+    steps: [{
+      id: 'open-step',
+      resolvedId: 'open-step',
+      interaction: {
+        type: 'open',
+        target: {
+          url: 'https://example.test/dashboard',
+        },
+      },
+    }],
+    executionRuntime,
+    executionState,
   })
 
-  const originalConsoleLog = console.log
-  const capturedLogs = []
-  console.log = (...args) => {
-    capturedLogs.push(args.map((entry) => String(entry)).join(' '))
-  }
-
-  try {
-    await runPreparedScenarioFlow({
-      steps: [{
-        id: 'open-step',
-        resolvedId: 'open-step',
-        interaction: {
-          type: 'open',
-          target: {
-            url: 'https://example.test/dashboard',
-          },
-        },
-      }],
-      executionRuntime,
-      executionState,
-    })
-  } finally {
-    console.log = originalConsoleLog
-  }
-
-  assert.match(capturedLogs.find((entry) => entry.includes('[scenario-variables]')) || '', /\[scenario-variables\] open-step \| .*schule_05320_schulleitung/)
+  assert.equal(capturedStepReports.length, 1)
+  assert.deepEqual(
+    capturedStepReports[0].log.find((entry) => entry.message === 'runtime-variables')?.data,
+    {
+      username: 'schule_05320_schulleitung',
+    },
+  )
+  assert.equal(
+    capturedStepReports[0].log.some((entry) => String(entry.message || '').includes('[scenario-variables]')),
+    false,
+  )
 })
 
 test('PdfCodeAuslesen maps to extract-pdf-code interaction with german attributes', async () => {
