@@ -10,6 +10,7 @@ Es prueft:
 
 - ob ein erfolgreich gerendertes Remotion-Video fuer dieses Szenario existiert
 - ob die Confluence-Credentials in einer Umgebungsvariable vorhanden sind
+- ob die Zielseite bereits Confluence-Kommentare hat
 
 Wenn alles vorhanden ist, dann:
 
@@ -17,6 +18,8 @@ Wenn alles vorhanden ist, dann:
 - wird auf der Confluence-Seite ein verwalteter Block geschrieben oder aktualisiert
 - oder bei fehlender Page-ID zuerst die in Lunettes hinterlegte `confluence_page_id` fuer die Scenario-ID abgefragt und nur falls dort ebenfalls nichts hinterlegt ist eine neue Unterseite unter der in `scenario.config.json` definierten Parent-Seite angelegt
 - und bei neu angelegter Seite deren `confluence_page_id` an Lunettes zurueckgemeldet
+
+Wenn die Zielseite bereits Kommentare enthaelt, bricht das Script vor dem Upload und vor der Seitenaktualisierung ab. Im Watcher-Betrieb wird diese Fehlermeldung als Job-Fehler an Lunettes weitergereicht.
 
 Der Seiteninhalt hat diesen Aufbau:
 

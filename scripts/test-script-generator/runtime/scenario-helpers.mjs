@@ -6,7 +6,7 @@ import { extractCodeFromPdf } from "./extract-pdf-code.mjs"
 export { createScenarioExecutionRuntime, createScenarioTimelineRuntime } from "./generated-scenario-runtime.js"
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const REPO_ROOT = resolve(__dirname, '../..')
+const REPO_ROOT = resolve(__dirname, '../../..')
 
 let envFillStrategiesImportPath = null
 let fillStrategiesCache
@@ -152,7 +152,9 @@ async function resolveUploadAssetPath(rawPath) {
   const candidatePaths = isAbsolute(requestedPath)
     ? [requestedPath]
     : [
+        resolve(process.cwd(), 'neo', 'assets', requestedPath),
         resolve(REPO_ROOT, 'neo', 'assets', requestedPath),
+        resolve(process.cwd(), requestedPath),
         resolve(REPO_ROOT, requestedPath),
       ]
 

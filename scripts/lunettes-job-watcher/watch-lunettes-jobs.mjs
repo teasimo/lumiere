@@ -1030,24 +1030,15 @@ async function buildJobExecutionPlan(job, context, scenarioInput) {
 
   if (job.type === 'testscript') {
     return {
-      label: 'Testscript ausfuehren und publizieren',
+      label: 'Testscript ausfuehren',
       steps: [
         {
           key: 'testscript',
           label: 'Testscript ausfuehren',
-          continueOnFailure: true,
           ...buildTestscriptCommand({
             scenarioPath: scenarioInput.scenarioPath,
             payload,
             context,
-          }),
-        },
-        {
-          key: 'publish',
-          label: 'Confluence-Publish ausfuehren',
-          ...buildPublishCommand({
-            scenarioPath: scenarioInput.scenarioPath,
-            payload,
           }),
         },
       ],
@@ -1056,7 +1047,7 @@ async function buildJobExecutionPlan(job, context, scenarioInput) {
 
   if (job.type === 'videoscript') {
     return {
-      label: 'Videoscript rendern und publizieren',
+      label: 'Videoscript rendern',
       steps: [
         {
           key: 'videoscript',
@@ -1065,14 +1056,6 @@ async function buildJobExecutionPlan(job, context, scenarioInput) {
             scenarioPath: scenarioInput.scenarioPath,
             payload,
             context,
-          }),
-        },
-        {
-          key: 'publish',
-          label: 'Confluence-Publish ausfuehren',
-          ...buildPublishCommand({
-            scenarioPath: scenarioInput.scenarioPath,
-            payload,
           }),
         },
       ],

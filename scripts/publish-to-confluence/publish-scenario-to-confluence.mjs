@@ -316,6 +316,50 @@ async function fetchPage({ pageApiBaseUrl, authHeader, pageId }) {
   }
 }
 
+function extractCommentCount(payload) {
+  if (Array.isArray(payload)) {
+    return payload.length
+  }
+
+  if (!payload || typeof payload !== 'object') {
+    return 0
+  }
+
+  if (Array.isArray(payload.results)) {
+    return payload.results.length
+  }
+
+  if (Number.isFinite(Number(payload.size))) {
+    return Number(payload.size)
+  }
+
+  if (Array.isArray(payload.comments?.results)) {
+    return payload.comments.results.length
+  }
+
+  if (Number.isFinite(Number(payload.comments?.size))) {
+    return Number(payload.comments.size)
+  }
+
+  return 0
+}
+
+async function assertPageHasNoComments({ attachmentApiBaseUrl, authHeader, pageId }) {
+  const url = `${attachmentApiBaseUrl}/content/${encodeURIComponent(pageId)}/child/comment?limit=1`
+  const payload = await confluenceJsonRequest(url, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      Authorization: authHeader,
+    },
+  }, `Kommentare der Confluence-Seite ${pageId} konnten nicht geladen werden`)
+
+  const commentCount = extractCommentCount(payload)
+  if (commentCount > 0) {
+    throw new Error(`Publish abgebrochen: Confluence-Seite ${pageId} enthaelt bereits Kommentare.`)
+  }
+}
+
 async function createPage({ pageApiBaseUrl, authHeader, title, parentPageId, bodyStorage, spaceId }) {
   const url = `${pageApiBaseUrl}/pages`
   const page = await confluenceJsonRequest(url, {
@@ -720,6 +764,11 @@ async function main() {
 
     const page = await fetchPage({
       pageApiBaseUrl: apiContext.pageApiBaseUrl,
+      authHeader: apiContext.authHeader,
+      pageId,
+    })
+    await assertPageHasNoComments({
+      attachmentApiBaseUrl: apiContext.attachmentApiBaseUrl,
       authHeader: apiContext.authHeader,
       pageId,
     })

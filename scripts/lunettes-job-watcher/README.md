@@ -50,8 +50,8 @@ Optional:
 
 ## Verhalten
 
-- `testscript`: startet zuerst `scripts/test-script-generator/run-generated-testfile.mjs`, uebergibt `payload.szenario_id` als `--scenario-id`, erzwingt mit `--force` eine Neugenerierung, verwendet einen eigenen `--out-dir` pro Szenario unter `temp/lunettes-job-watcher/testfiles/<szenario_id>`, loest Fragmente ausschliesslich ueber die Lunettes-API auf und erzwingt immer `--mode video`; im selben Job folgt danach automatisch `scripts/publish-to-confluence/publish-scenario-to-confluence.mjs`. Falls das Testscript fehlschlaegt, wird der Publish-Schritt trotzdem noch ausgefuehrt; der Gesamtjob endet danach weiterhin mit Status `failed`.
-- `videoscript`: startet zuerst `scripts/video-script-generator/remotion-render.mjs` und uebergibt `payload.szenario_id` als `--scenario-id`; im selben Job folgt danach automatisch `scripts/publish-to-confluence/publish-scenario-to-confluence.mjs`
+- `testscript`: startet `scripts/test-script-generator/run-generated-testfile.mjs`, uebergibt `payload.szenario_id` als `--scenario-id`, erzwingt mit `--force` eine Neugenerierung, verwendet einen eigenen `--out-dir` pro Szenario unter `temp/lunettes-job-watcher/testfiles/<szenario_id>`, loest Fragmente ausschliesslich ueber die Lunettes-API auf und erzwingt immer `--mode video`
+- `videoscript`: startet `scripts/video-script-generator/remotion-render.mjs` und uebergibt `payload.szenario_id` als `--scenario-id`
 - `publish`: startet `scripts/publish-to-confluence/publish-scenario-to-confluence.mjs` und uebergibt `payload.szenario_id` sowie `payload.titel`; `payload.confluence_page_id` ist optional und bei fehlendem Wert wird zuerst die in Lunettes hinterlegte `confluence_page_id` fuer das Szenario abgefragt, erst danach wird die in `scenario.config.json > scenario["publish-to-confluence"].parent_page_id` konfigurierte Parent-Seite fuer eine Neuanlage verwendet
 
 Zusatz:
