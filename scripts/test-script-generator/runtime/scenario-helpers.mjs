@@ -1595,8 +1595,10 @@ export async function scrollToLocator(page, locator, options = {}) {
       while (current) {
         const style = window.getComputedStyle(current)
         const overflowY = style.overflowY || style.overflow || ""
-        const isScrollable = /(auto|scroll|overlay)/.test(overflowY)
-        if (isScrollable && current.scrollHeight > current.clientHeight) {
+        const overflowX = style.overflowX || style.overflow || ""
+        const isScrollableY = /(auto|scroll|overlay)/.test(overflowY) && current.scrollHeight > current.clientHeight
+        const isScrollableX = /(auto|scroll|overlay)/.test(overflowX) && current.scrollWidth > current.clientWidth
+        if (isScrollableY || isScrollableX) {
           return current
         }
         current = current.parentElement
@@ -1606,35 +1608,51 @@ export async function scrollToLocator(page, locator, options = {}) {
 
     const container = getScrollableAncestor(element)
     if (config.onlyIfNotVisible && isInViewport(element)) {
-      return { reachedTarget: true, moved: false }
+      return { reachedTarget: true, moved: false, direction: null }
     }
     // Erlaubte Distanz, sodass nicht mehr gescrollt wird.
     const epsilon = 2
 
     let moved = false
+    let totalDeltaX = 0
+    let totalDeltaY = 0
 
     for (let i = 0; i < config.maxSteps; i += 1) {
       const elementRect = element.getBoundingClientRect()
       const containerRect = container === document.scrollingElement || container === document.documentElement
-        ? { top: 0, height: window.innerHeight }
+        ? { top: 0, left: 0, height: window.innerHeight, width: window.innerWidth }
         : container.getBoundingClientRect()
 
       const elementCenter = elementRect.top + (elementRect.height / 2)
       const viewportCenter = containerRect.top + (containerRect.height / 2)
-      const delta = elementCenter - viewportCenter
+      const elementCenterX = elementRect.left + (elementRect.width / 2)
+      const viewportCenterX = containerRect.left + (containerRect.width / 2)
+      const deltaY = elementCenter - viewportCenter
+      const deltaX = elementCenterX - viewportCenterX
 
-      if (Math.abs(delta) <= epsilon) {
-        return { reachedTarget: true, moved }
+      if (Math.abs(deltaY) <= epsilon && Math.abs(deltaX) <= epsilon) {
+        const direction = Math.abs(totalDeltaY) >= Math.abs(totalDeltaX)
+          ? (totalDeltaY > 0 ? 'runter' : totalDeltaY < 0 ? 'hoch' : null)
+          : (totalDeltaX > 0 ? 'rechts' : totalDeltaX < 0 ? 'links' : null)
+        return { reachedTarget: true, moved, direction }
       }
 
-      const step = Math.sign(delta) * Math.min(Math.abs(delta), config.stepPx)
+      const scrollVertically = Math.abs(deltaY) >= Math.abs(deltaX)
+      const stepY = scrollVertically
+        ? Math.sign(deltaY) * Math.min(Math.abs(deltaY), config.stepPx)
+        : 0
+      const stepX = scrollVertically
+        ? 0
+        : Math.sign(deltaX) * Math.min(Math.abs(deltaX), config.stepPx)
       if (container === document.scrollingElement || container === document.documentElement) {
-        window.scrollBy(0, step)
+        window.scrollBy(stepX, stepY)
       } else {
-        container.scrollBy(0, step)
+        container.scrollBy(stepX, stepY)
       }
-      if (Math.abs(step) > 0) {
+      if (Math.abs(stepX) > 0 || Math.abs(stepY) > 0) {
         moved = true
+        totalDeltaX += stepX
+        totalDeltaY += stepY
       }
 
       if (config.stepDelayMs > 0) {
@@ -1642,7 +1660,10 @@ export async function scrollToLocator(page, locator, options = {}) {
       }
     }
 
-    return { reachedTarget: false, moved }
+    const direction = Math.abs(totalDeltaY) >= Math.abs(totalDeltaX)
+      ? (totalDeltaY > 0 ? 'runter' : totalDeltaY < 0 ? 'hoch' : null)
+      : (totalDeltaX > 0 ? 'rechts' : totalDeltaX < 0 ? 'links' : null)
+    return { reachedTarget: false, moved, direction }
   }, { stepDelayMs, stepPx, maxSteps, onlyIfNotVisible })
 
   if (!scrollResult.reachedTarget) {
@@ -1653,7 +1674,10 @@ export async function scrollToLocator(page, locator, options = {}) {
   if (focus) {
     await locator.focus().catch(() => {})
   }
-  return { didScroll: Boolean(scrollResult.moved || !scrollResult.reachedTarget) }
+  return {
+    didScroll: Boolean(scrollResult.moved || !scrollResult.reachedTarget),
+    direction: scrollResult.direction ?? null,
+  }
 }
 
 export async function isLocatorInViewport(page, locator, options = {}) {
@@ -1826,6 +1850,7 @@ export async function applyFillValue(page, testId, value, options = {}) {
 export async function applyFillValueToLocator(page, locator, value, meta = {}, options = {}) {
   const controlLocator = await resolveFillControlLocator(locator)
   await ensureLocatorScroll(page, controlLocator, options)
+  const fillPoint = buildInteractionPointFromBox(await captureLocatorBox(controlLocator))
 
   const elementInfo = await controlLocator.evaluate((el) => ({
     tagName: el.tagName?.toLowerCase?.() || '',
@@ -1855,51 +1880,24 @@ export async function applyFillValueToLocator(page, locator, value, meta = {}, o
       : Boolean(result)
 
     if (handled) {
-      return
+      return { fillPoint }
     }
   }
 
   await applyDefaultFillStrategy(page, controlLocator, expectedValue, elementInfo, targetLabel)
+  return { fillPoint }
 }
 
 export async function applyFillValueById(page, elementId, value, selectorType = "id", options = {}) {
   const selector = selectorType === "data-id" ? `[data-id=${JSON.stringify(String(elementId))}]` : `[id=${JSON.stringify(String(elementId))}]`
   const locator = await pickLocator(page.locator(selector), options)
-  const controlLocator = await resolveFillControlLocator(locator)
-  await ensureLocatorScroll(page, controlLocator, options)
-
-  const elementInfo = await controlLocator.evaluate((el) => ({
-    tagName: el.tagName?.toLowerCase?.() || '',
-    isContentEditable: Boolean(el.isContentEditable),
-    className: String(el.className || ""),
-    modelValue: el.getAttribute("model-value"),
-    role: el.getAttribute("role"),
-  }))
-
-  const expectedValue = String(value ?? "")
-
-  const envStrategies = await loadEnvFillStrategies()
-  for (const strategy of envStrategies) {
-    if (!strategy || typeof strategy.match !== "function" || typeof strategy.run !== "function") {
-      continue
-    }
-
-    const isMatch = await strategy.match({ testId: elementId, elementInfo, expectedValue })
-    if (!isMatch) {
-      continue
-    }
-
-    const result = await strategy.run({ page, locator: controlLocator, testId: elementId, elementInfo, expectedValue })
-    const handled = typeof result === "object" && result !== null
-      ? Boolean(result.handled)
-      : Boolean(result)
-
-    if (handled) {
-      return
-    }
-  }
-
-  await applyDefaultFillStrategy(page, controlLocator, expectedValue, elementInfo, `#${elementId}`)
+  return applyFillValueToLocator(
+    page,
+    locator,
+    value,
+    { targetLabel: selectorType === 'data-id' ? `data-id="${elementId}"` : `id="#${elementId}"` },
+    options,
+  )
 }
 
 function buildReplacedValue(currentValue, searchValue, replaceValue, options = {}) {
@@ -1927,6 +1925,7 @@ export async function applyReplaceValue(page, testId, searchValue, replaceValue,
 export async function applyReplaceValueToLocator(page, locator, searchValue, replaceValue, meta = {}, options = {}) {
   const controlLocator = await resolveFillControlLocator(locator)
   await ensureLocatorScroll(page, controlLocator, options)
+  const fillPoint = buildInteractionPointFromBox(await captureLocatorBox(controlLocator))
 
   const elementInfo = await controlLocator.evaluate((el) => ({
     tagName: el.tagName?.toLowerCase?.() || '',
@@ -1977,11 +1976,12 @@ export async function applyReplaceValueToLocator(page, locator, searchValue, rep
       : Boolean(result)
 
     if (handled) {
-      return
+      return { fillPoint }
     }
   }
 
   await applyDefaultFillStrategy(page, controlLocator, expectedValue, elementInfo, targetLabel)
+  return { fillPoint }
 }
 
 export async function applyReplaceValueById(page, elementId, searchValue, replaceValue, selectorType = "id", options = {}) {
@@ -2116,6 +2116,7 @@ export async function applyAppendValue(page, testId, value, options = {}) {
 export async function applyAppendValueToLocator(page, locator, value, meta = {}, options = {}) {
   const controlLocator = await resolveFillControlLocator(locator)
   await ensureLocatorScroll(page, controlLocator, options)
+  const fillPoint = buildInteractionPointFromBox(await captureLocatorBox(controlLocator))
 
   const elementInfo = await controlLocator.evaluate((el) => ({
     tagName: el.tagName?.toLowerCase?.() || '',
@@ -2145,51 +2146,24 @@ export async function applyAppendValueToLocator(page, locator, value, meta = {},
       : Boolean(result)
 
     if (handled) {
-      return
+      return { fillPoint }
     }
   }
 
   await applyDefaultFillStrategy(page, controlLocator, expectedValue, elementInfo, targetLabel, "append")
+  return { fillPoint }
 }
 
 export async function applyAppendValueById(page, elementId, value, selectorType = "id", options = {}) {
   const selector = selectorType === "data-id" ? `[data-id=${JSON.stringify(String(elementId))}]` : `[id=${JSON.stringify(String(elementId))}]`
   const locator = await pickLocator(page.locator(selector), options)
-  const controlLocator = await resolveFillControlLocator(locator)
-  await ensureLocatorScroll(page, controlLocator, options)
-
-  const elementInfo = await controlLocator.evaluate((el) => ({
-    tagName: el.tagName?.toLowerCase?.() || '',
-    isContentEditable: Boolean(el.isContentEditable),
-    className: String(el.className || ""),
-    modelValue: el.getAttribute("model-value"),
-    role: el.getAttribute("role"),
-  }))
-
-  const expectedValue = String(value ?? "")
-
-  const envStrategies = await loadEnvFillStrategies()
-  for (const strategy of envStrategies) {
-    if (!strategy || typeof strategy.match !== "function" || typeof strategy.run !== "function") {
-      continue
-    }
-
-    const isMatch = await strategy.match({ testId: elementId, elementInfo, expectedValue, isAppend: true })
-    if (!isMatch) {
-      continue
-    }
-
-    const result = await strategy.run({ page, locator: controlLocator, testId: elementId, elementInfo, expectedValue, isAppend: true })
-    const handled = typeof result === "object" && result !== null
-      ? Boolean(result.handled)
-      : Boolean(result)
-
-    if (handled) {
-      return
-    }
-  }
-
-  await applyDefaultFillStrategy(page, controlLocator, expectedValue, elementInfo, `#${elementId}`, "append")
+  return applyAppendValueToLocator(
+    page,
+    locator,
+    value,
+    { targetLabel: selectorType === 'data-id' ? `data-id="${elementId}"` : `id="#${elementId}"` },
+    options,
+  )
 }
 
 export async function applyClickValueById(page, elementId, selectorType = "id", options = {}) {
@@ -2198,11 +2172,39 @@ export async function applyClickValueById(page, elementId, selectorType = "id", 
   return applyClickValueToLocator(page, locator, options, { targetLabel: selectorType === 'data-id' ? `data-id="${elementId}"` : `id="#${elementId}"` })
 }
 
+async function captureLocatorBox(locator) {
+  const box = await locator.boundingBox().catch(() => null)
+  if (!box) {
+    return null
+  }
+
+  return {
+    x: Number(box.x),
+    y: Number(box.y),
+    width: Number(box.width),
+    height: Number(box.height),
+  }
+}
+
+function buildInteractionPointFromBox(box) {
+  if (!box) {
+    return null
+  }
+
+  return {
+    x: Math.round(Number(box.x) + (Number(box.width) / 2)),
+    y: Math.round(Number(box.y) + (Number(box.height) / 2)),
+  }
+}
+
 export async function applyClickValueToLocator(page, locator, options = {}, meta = {}) {
+  await ensureLocatorScroll(page, locator, options)
+  const clickedElement = await captureLocatorBox(locator)
+  const clickPoint = buildInteractionPointFromBox(clickedElement)
   const elementHandle = await locator.elementHandle({ timeout: 2500 }).catch(() => null)
   if (!elementHandle) {
     await clickWithOverlayRecovery(page, locator, options)
-    return
+    return { clickedElement, clickPoint }
   }
 
   const elementInfo = await elementHandle.evaluate((el) => ({
@@ -2229,11 +2231,12 @@ export async function applyClickValueToLocator(page, locator, options = {}, meta
       : Boolean(result)
 
     if (handled) {
-      return
+      return { clickedElement, clickPoint }
     }
   }
 
   await clickWithOverlayRecovery(page, locator, options)
+  return { clickedElement, clickPoint }
 }
 
 export async function applyClickValueBySelector(page, selector, options = {}) {
@@ -2253,7 +2256,6 @@ async function waitForTransientOverlays(page) {
 }
 
 async function clickWithOverlayRecovery(page, locator, options = {}) {
-  await ensureLocatorScroll(page, locator, options)
   await waitForTransientOverlays(page)
   try {
     await locator.click({ timeout: 2500 })
@@ -2667,6 +2669,21 @@ export async function executeScenarioStep(context, step, runtimeOptions = {}) {
     await scenarioLogTargetAvailability(page, step, stepRuntime)
   }
 
+  const writeClickedElementToStep = (clickResult) => {
+    if (clickResult?.clickedElement) {
+      stepRuntime?.setStepDetail?.('clickedElement', clickResult.clickedElement)
+    }
+    if (clickResult?.clickPoint) {
+      stepRuntime?.setStepDetail?.('clickPoint', clickResult.clickPoint)
+    }
+  }
+
+  const writeFillPointToStep = (fillResult) => {
+    if (fillResult?.fillPoint) {
+      stepRuntime?.setStepDetail?.('fillPoint', fillResult.fillPoint)
+    }
+  }
+
   if (interactionType === 'open') {
     if (!target.url) {
       throw new Error(`Step "${step.id}" has interaction type "open" but no target.url.`)
@@ -2676,15 +2693,21 @@ export async function executeScenarioStep(context, step, runtimeOptions = {}) {
     const resolvedValue = resolveRuntimeTemplateString(String(interaction.value || ''), runtimeVariables)
     if (scenarioTargetNeedsRuntimeLocator(target)) {
       const locator = await resolveTargetLocator(page, target, { textMode: 'label', preferredControl: 'fill' })
-      await applyFillValueToLocator(page, locator, resolvedValue, { targetLabel: scenarioBuildScrollTargetSummary(target) || '<target>' }, { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true })
+      writeFillPointToStep(
+        await applyFillValueToLocator(page, locator, resolvedValue, { targetLabel: scenarioBuildScrollTargetSummary(target) || '<target>' }, { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true }),
+      )
     } else if (target.testid) {
-      await applyFillValue(page, String(target.testid), resolvedValue, { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true, targetIndex: target['treffer-index'] })
+      writeFillPointToStep(
+        await applyFillValue(page, String(target.testid), resolvedValue, { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true, targetIndex: target['treffer-index'] }),
+      )
     } else if (target.text) {
       await pickIndexedLocator(page.getByLabel(resolveRuntimeTemplateString(String(target.text), runtimeVariables), { exact: true }), target).then((locator) => locator.fill(resolvedValue))
     } else if (scenarioBuildGenericTargetSelector(target)) {
       await pickIndexedLocator(page.locator(resolveRuntimeTemplateString(scenarioBuildGenericTargetSelector(target), runtimeVariables)), target).then((locator) => locator.fill(resolvedValue))
     } else if (target.id || target['data-id']) {
-      await applyFillValueById(page, String(target['data-id'] || target.id), resolvedValue, target['data-id'] ? 'data-id' : 'id', { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true, targetIndex: target['treffer-index'] })
+      writeFillPointToStep(
+        await applyFillValueById(page, String(target['data-id'] || target.id), resolvedValue, target['data-id'] ? 'data-id' : 'id', { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true, targetIndex: target['treffer-index'] }),
+      )
     } else {
       throw new Error(`Step "${step.id}" has interaction type "fill" but no supported target.`)
     }
@@ -2692,11 +2715,17 @@ export async function executeScenarioStep(context, step, runtimeOptions = {}) {
     const resolvedValue = resolveRuntimeTemplateString(String(interaction.value || ''), runtimeVariables)
     if (scenarioTargetNeedsRuntimeLocator(target)) {
       const locator = await resolveTargetLocator(page, target, { textMode: 'label', preferredControl: 'fill' })
-      await applyAppendValueToLocator(page, locator, resolvedValue, { targetLabel: scenarioBuildScrollTargetSummary(target) || '<target>' }, { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true })
+      writeFillPointToStep(
+        await applyAppendValueToLocator(page, locator, resolvedValue, { targetLabel: scenarioBuildScrollTargetSummary(target) || '<target>' }, { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true }),
+      )
     } else if (target.testid) {
-      await applyAppendValue(page, String(target.testid), resolvedValue, { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true, targetIndex: target['treffer-index'] })
+      writeFillPointToStep(
+        await applyAppendValue(page, String(target.testid), resolvedValue, { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true, targetIndex: target['treffer-index'] }),
+      )
     } else if (target.id || target['data-id']) {
-      await applyAppendValueById(page, String(target['data-id'] || target.id), resolvedValue, target['data-id'] ? 'data-id' : 'id', { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true, targetIndex: target['treffer-index'] })
+      writeFillPointToStep(
+        await applyAppendValueById(page, String(target['data-id'] || target.id), resolvedValue, target['data-id'] ? 'data-id' : 'id', { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true, targetIndex: target['treffer-index'] }),
+      )
     } else {
       throw new Error(`Step "${step.id}" has interaction type "append" but no supported target.`)
     }
@@ -2705,11 +2734,17 @@ export async function executeScenarioStep(context, step, runtimeOptions = {}) {
     const resolvedValue = resolveRuntimeTemplateString(String(interaction.value || ''), runtimeVariables)
     if (scenarioTargetNeedsRuntimeLocator(target)) {
       const locator = await resolveTargetLocator(page, target, { textMode: 'label', preferredControl: 'fill' })
-      await applyReplaceValueToLocator(page, locator, resolvedSearch, resolvedValue, { targetLabel: scenarioBuildScrollTargetSummary(target) || '<target>' }, { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true })
+      writeFillPointToStep(
+        await applyReplaceValueToLocator(page, locator, resolvedSearch, resolvedValue, { targetLabel: scenarioBuildScrollTargetSummary(target) || '<target>' }, { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true }),
+      )
     } else if (target.testid) {
-      await applyReplaceValue(page, String(target.testid), resolvedSearch, resolvedValue, { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true, targetIndex: target['treffer-index'] })
+      writeFillPointToStep(
+        await applyReplaceValue(page, String(target.testid), resolvedSearch, resolvedValue, { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true, targetIndex: target['treffer-index'] }),
+      )
     } else if (target.id || target['data-id']) {
-      await applyReplaceValueById(page, String(target['data-id'] || target.id), resolvedSearch, resolvedValue, target['data-id'] ? 'data-id' : 'id', { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true, targetIndex: target['treffer-index'] })
+      writeFillPointToStep(
+        await applyReplaceValueById(page, String(target['data-id'] || target.id), resolvedSearch, resolvedValue, target['data-id'] ? 'data-id' : 'id', { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true, targetIndex: target['treffer-index'] }),
+      )
     } else {
       throw new Error(`Step "${step.id}" has interaction type "replace" but no supported target.`)
     }
@@ -2717,25 +2752,50 @@ export async function executeScenarioStep(context, step, runtimeOptions = {}) {
     if (scenarioTargetNeedsRuntimeLocator(target)) {
       const locator = await resolveTargetLocator(page, target, { textMode: 'text' })
       if (target.click_child_selector) {
-        await locator.locator(String(target.click_child_selector)).first().click()
+        writeClickedElementToStep(
+          await applyClickValueToLocator(
+            page,
+            locator.locator(String(target.click_child_selector)).first(),
+            { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true },
+            { targetLabel: `${scenarioBuildScrollTargetSummary(target) || '<target>'} -> ${String(target.click_child_selector)}` },
+          ),
+        )
       } else {
-        await applyClickValueToLocator(page, locator, { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true }, { targetLabel: scenarioBuildScrollTargetSummary(target) || '<target>' })
+        writeClickedElementToStep(
+          await applyClickValueToLocator(page, locator, { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true }, { targetLabel: scenarioBuildScrollTargetSummary(target) || '<target>' }),
+        )
       }
     } else if (target.text) {
       const locator = target.role
         ? await pickIndexedLocator(page.getByRole(String(target.role), { name: String(target.text), exact: true }), target)
         : await pickIndexedLocator(page.getByText(String(target.text), { exact: true }), target)
       if (target.click_child_selector) {
-        await locator.locator(String(target.click_child_selector)).first().click()
+        writeClickedElementToStep(
+          await applyClickValueToLocator(
+            page,
+            locator.locator(String(target.click_child_selector)).first(),
+            { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true },
+            { targetLabel: `${scenarioBuildScrollTargetSummary(target) || '<target>'} -> ${String(target.click_child_selector)}` },
+          ),
+        )
       } else {
-        await applyClickValueToLocator(page, locator, { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true }, { targetLabel: scenarioBuildScrollTargetSummary(target) || '<target>' })
+        writeClickedElementToStep(
+          await applyClickValueToLocator(page, locator, { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true }, { targetLabel: scenarioBuildScrollTargetSummary(target) || '<target>' }),
+        )
       }
     } else if (target.testid) {
-      await pickIndexedLocator(page.getByTestId(String(target.testid)), target).then((locator) => locator.click())
+      const locator = await pickIndexedLocator(page.getByTestId(String(target.testid)), target)
+      writeClickedElementToStep(
+        await applyClickValueToLocator(page, locator, { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true }, { targetLabel: scenarioBuildScrollTargetSummary(target) || '<target>' }),
+      )
     } else if (scenarioBuildGenericTargetSelector(target)) {
-      await applyClickValueBySelector(page, scenarioBuildGenericTargetSelector(target), { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true, targetIndex: target['treffer-index'] })
+      writeClickedElementToStep(
+        await applyClickValueBySelector(page, scenarioBuildGenericTargetSelector(target), { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true, targetIndex: target['treffer-index'] }),
+      )
     } else if (target.id || target['data-id']) {
-      await applyClickValueById(page, String(target['data-id'] || target.id), target['data-id'] ? 'data-id' : 'id', { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true, targetIndex: target['treffer-index'] })
+      writeClickedElementToStep(
+        await applyClickValueById(page, String(target['data-id'] || target.id), target['data-id'] ? 'data-id' : 'id', { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true, targetIndex: target['treffer-index'] }),
+      )
     } else {
       throw new Error(`Step "${step.id}" has interaction type "click" but no supported target.`)
     }
@@ -2783,6 +2843,9 @@ export async function executeScenarioStep(context, step, runtimeOptions = {}) {
       focus: interaction.focus === true,
       onlyIfNotVisible: interaction.only_if_not_visible === true,
     })
+    if (scrollResult.direction) {
+      stepRuntime?.setStepDetail?.('scrollDirection', scrollResult.direction)
+    }
     if (!scrollResult.didScroll) {
       return { __scenarioStepStatus: 'noop', reason: 'target already visible' }
     }

@@ -1,11 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, writeFile } from 'fs/promises'
+import { mkdtemp, readFile, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import {
   createScenarioExecutionRuntime,
   createScenarioExecutionState,
+  createScenarioTimelineRuntime,
   runPreparedScenarioFlow,
   resolveRuntimeTemplateString,
 } from './scenario-helpers.mjs'
@@ -19,6 +20,7 @@ function createFakePage() {
     urlValue: 'about:blank',
     gotoCalls: [],
     waitCalls: [],
+    screenshotCalls: [],
     async goto(url) {
       this.gotoCalls.push(url)
       if (String(url).includes('broken')) {
@@ -35,7 +37,11 @@ function createFakePage() {
     async content() {
       return `<html><body>${this.urlValue}</body></html>`
     },
-    async screenshot() {
+    async screenshot(options = {}) {
+      this.screenshotCalls.push(options)
+      if (options?.path) {
+        await writeFile(options.path, Buffer.from('png'))
+      }
       return Buffer.from('png')
     },
     on(eventName, handler) {
@@ -186,6 +192,90 @@ test('live-step-runner reports html and screenshot on success', async () => {
   assert.equal(results[0].url, 'https://example.test/success')
   assert.match(results[0].html, /example\.test\/success/)
   assert.equal(results[0].screenshot, Buffer.from('png').toString('base64'))
+})
+
+test('timeline runtime writes a screenshot reference per step', async () => {
+  const page = createFakePage()
+  const runtimeRoot = await mkdtemp(join(tmpdir(), 'timeline-runtime-'))
+  const timelineRuntime = createScenarioTimelineRuntime({
+    test: {
+      async step(_title, execute) {
+        return execute()
+      },
+    },
+    testInfo: {
+      outputPath(filename) {
+        return join(runtimeRoot, filename)
+      },
+    },
+    scenarioId: 'demo-scenario',
+    scenarioVersion: '1',
+    scenarioSource: 'demo/source.xml',
+    page,
+    videoModeEnabled: true,
+    waitBetweenStepsMs: 250,
+    stepTimeoutMs: 30000,
+  })
+
+  await timelineRuntime.runStep('open-step', 'Open page', async () => {
+    page.urlValue = 'https://example.test/timeline'
+  })
+  await timelineRuntime.runStep('click-step', 'Click button', async (stepRuntime) => {
+    stepRuntime.setStepDetail('clickedElement', {
+      x: 120,
+      y: 80,
+      width: 240,
+      height: 48,
+    })
+    stepRuntime.setStepDetail('clickPoint', {
+      x: 240,
+      y: 104,
+    })
+  })
+  await timelineRuntime.runStep('fill-step', 'Fill input', async (stepRuntime) => {
+    stepRuntime.setStepDetail('fillPoint', {
+      x: 360,
+      y: 220,
+    })
+  })
+  await timelineRuntime.runStep('scroll-step', 'Scroll to section', async (stepRuntime) => {
+    stepRuntime.setStepDetail('scrollDirection', 'runter')
+  })
+  await timelineRuntime.flush()
+
+  const timeline = JSON.parse(
+    await readFile(join(runtimeRoot, 'scenario-step-timeline.json'), 'utf8'),
+  )
+
+  assert.equal(timeline.steps.length, 4)
+  assert.equal(timeline.steps[0].screenshotPath, 'timeline-screenshots/001-open-step.png')
+  assert.equal(timeline.steps[1].screenshotPath, 'timeline-screenshots/002-click-step.png')
+  assert.equal(timeline.steps[2].screenshotPath, 'timeline-screenshots/003-fill-step.png')
+  assert.equal(timeline.steps[3].screenshotPath, 'timeline-screenshots/004-scroll-step.png')
+  assert.deepEqual(timeline.steps[1].clickedElement, {
+    x: 120,
+    y: 80,
+    width: 240,
+    height: 48,
+  })
+  assert.deepEqual(timeline.steps[1].clickPoint, {
+    x: 240,
+    y: 104,
+  })
+  assert.deepEqual(timeline.steps[2].fillPoint, {
+    x: 360,
+    y: 220,
+  })
+  assert.equal(timeline.steps[3].scrollDirection, 'runter')
+  assert.deepEqual(page.waitCalls, [250, 250, 250, 250])
+  assert.equal(page.screenshotCalls[0].path, join(runtimeRoot, 'timeline-screenshots', '001-open-step.png'))
+  assert.equal(page.screenshotCalls[1].path, join(runtimeRoot, 'timeline-screenshots', '002-click-step.png'))
+  assert.equal(page.screenshotCalls[2].path, join(runtimeRoot, 'timeline-screenshots', '003-fill-step.png'))
+  assert.equal(page.screenshotCalls[3].path, join(runtimeRoot, 'timeline-screenshots', '004-scroll-step.png'))
+  assert.equal(
+    String(await readFile(join(runtimeRoot, timeline.steps[0].screenshotPath))),
+    'png',
+  )
 })
 
 test('live-step-runner resolves root variables from incoming Variablen block', async () => {

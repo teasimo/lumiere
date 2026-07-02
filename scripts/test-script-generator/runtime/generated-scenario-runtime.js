@@ -1,6 +1,40 @@
 import {
-  writeFile
+  mkdir,
+  writeFile,
 } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
+
+function sanitizePathSegment(value) {
+  return String(value || '')
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+async function captureTimelineStepScreenshot({
+  page,
+  testInfo,
+  stepId,
+  stepIndex,
+}) {
+  if (!page || !testInfo || typeof testInfo.outputPath !== 'function') {
+    return null
+  }
+
+  const stepToken = sanitizePathSegment(stepId) || `step-${stepIndex + 1}`
+  const screenshotFilename = `${String(stepIndex + 1).padStart(3, '0')}-${stepToken}.png`
+  const screenshotRelativePath = join('timeline-screenshots', screenshotFilename)
+  const screenshotAbsolutePath = testInfo.outputPath(screenshotRelativePath)
+
+  await mkdir(dirname(screenshotAbsolutePath), { recursive: true })
+  await page.screenshot({
+    path: screenshotAbsolutePath,
+    type: 'png',
+    fullPage: true,
+  })
+
+  return screenshotRelativePath.replace(/\\/g, '/')
+}
 
 export function createScenarioExecutionRuntime({
   wrapStep = null,
@@ -33,6 +67,7 @@ export function createScenarioExecutionRuntime({
       const interactionType = stepMeta?.interactionType == null
         ? null
         : String(stepMeta.interactionType)
+      const stepDetails = {}
       const appendStepLog = (level, message, data = null) => {
         stepLog.push(createStepLogEntry(level, message, data))
       }
@@ -48,6 +83,19 @@ export function createScenarioExecutionRuntime({
         },
         error(message, data = null) {
           appendStepLog('error', message, data)
+        },
+        setStepDetail(key, value) {
+          const normalizedKey = String(key || '').trim()
+          if (!normalizedKey) {
+            return
+          }
+          stepDetails[normalizedKey] = value
+        },
+        mergeStepDetails(values) {
+          if (!values || typeof values !== 'object') {
+            return
+          }
+          Object.assign(stepDetails, values)
         },
       }
 
@@ -161,6 +209,7 @@ export function createScenarioExecutionRuntime({
         durationMs: endedAtMs - startedAtMs,
         error: errorInfo,
         log: stepLog,
+        ...stepDetails,
       }
 
       if (typeof onStepComplete === 'function') {
@@ -188,10 +237,41 @@ export function createScenarioTimelineRuntime({
   stepTimeoutMs = 30000,
 }) {
   const timeline = []
+  let stepIndex = 0
   const runtime = createScenarioExecutionRuntime({
     wrapStep: (stepId, execute) => test.step(stepId, execute),
     onStepComplete: async (stepReport) => {
-      timeline.push(stepReport)
+      let screenshotPath = null
+      try {
+        screenshotPath = await captureTimelineStepScreenshot({
+          page,
+          testInfo,
+          stepId: stepReport?.stepId,
+          stepIndex,
+        })
+      } catch (error) {
+        const screenshotError = {
+          name: String(error?.name || 'Error'),
+          message: String(error?.message || error),
+        }
+        const nextLog = Array.isArray(stepReport?.log) ? [...stepReport.log] : []
+        nextLog.push({
+          timestamp: new Date().toISOString(),
+          level: 'warning',
+          message: 'timeline-screenshot-failed',
+          data: screenshotError,
+        })
+        stepReport = {
+          ...stepReport,
+          log: nextLog,
+        }
+      }
+
+      timeline.push({
+        ...stepReport,
+        screenshotPath,
+      })
+      stepIndex += 1
     },
     page,
     waitBetweenStepsMs: videoModeEnabled ? waitBetweenStepsMs : 0,

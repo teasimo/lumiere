@@ -183,7 +183,7 @@ docker run --rm \
 ## Hinweise
 
 - Das Image basiert auf dem Playwright-Image, damit Browser und Systembibliotheken fuer Testscript-Laeufe vorhanden sind.
-- `ffmpeg` und `unzip` werden zusaetzlich installiert, weil Video- und Trace-Verarbeitung diese Tools benoetigen.
+- `ffmpeg`, `zip` und `unzip` werden zusaetzlich installiert, weil Video-, Trace- und Confluence-Anhangsverarbeitung diese Tools benoetigen.
 - `awscli` ist enthalten und uebernimmt Restore und Sync gegen S3.
 - Der Container ist als einzelner Worker gedacht. Unter Azure Container Apps wird die Revision automatisch an die Worker-ID angehaengt; ausserhalb davon solltest du bei mehreren Workern weiterhin bewusst unterschiedliche `WATCHER_WORKER_ID` setzen.
 - Azure Container Apps mountet S3 nicht nativ als Dateisystem. Deshalb verwendet diese Struktur bewusst ein lokales Runtime-Verzeichnis plus Objekt-Sync.
