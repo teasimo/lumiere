@@ -7,12 +7,12 @@ Der Container:
 - enthaelt das komplette Repo samt Generator-Skripten
 - startet den Watcher als langlebigen Worker-Prozess
 - kann Testscript-, Videoscript- und Publish-Jobs direkt aus Lunettes ziehen
-- spiegelt Laufzeitdaten in einen S3-Bucket
+- synchronisiert generatorrelevante Artefakte versionsspezifisch nach S3
 
 ## Inhalt
 
 - `Dockerfile`: baut das Worker-Image
-- `entrypoint.sh`: bereitet Runtime-Daten, Credentials, S3-Sync und Watcher-Args vor
+- `entrypoint.sh`: bereitet Runtime-Daten, Credentials und Watcher-Args vor
 - `prepare-runtime-config.mjs`: schreibt Env-Overrides in `scenario.config.json`
 - `.env.example`: Beispiel fuer lokale oder Azure-Umgebungsvariablen
 - `containerapp.template.yaml`: Startpunkt fuer Azure Container Apps
@@ -64,7 +64,6 @@ Fuer Google-TTS per Secret-JSON optional:
 - `WORKER_DATA_ROOT`
 - `PERSIST_RUNTIME_DATA`
 - `S3_PREFIX`
-- `S3_SYNC_INTERVAL_SECONDS`
 - `S3_ENDPOINT_URL`
 - `AWS_SESSION_TOKEN`
 - `SCENARIO_CONFIG_JSON`
@@ -129,7 +128,7 @@ Beispiel:
 
 ## Persistente Daten ueber S3
 
-Der Container arbeitet lokal unter `/app/runtime-data` und synchronisiert dieses Verzeichnis gegen S3.
+Der Container arbeitet lokal unter `/app/runtime-data`. Persistenz erfolgt nicht mehr als globaler Verzeichnis-Sync, sondern job- und versionsspezifisch ueber den Watcher.
 
 Der Entry-Point verlinkt:
 
@@ -139,16 +138,41 @@ Der Entry-Point verlinkt:
 
 S3-Verhalten:
 
-- Restore beim Start
-- periodischer `aws s3 sync` waehrend der Laufzeit
-- finaler Sync beim Beenden des Containers
+- Vor jedem Job wird zuerst die Szenario-Version bestimmt.
+- Danach werden nur die potentiell benoetigten Artefakte fuer genau diese `szenario_id` und Version von S3 geholt.
+- Nach dem Job werden nur die Artefakte des betroffenen Generators fuer genau diese Version mit `sync --delete` ersetzt.
+- Artefakte anderer Versionen bleiben unberuehrt.
+
+Generatorspezifisch bedeutet aktuell:
+
+- `testscript`:
+  Restore von Szenario-Cache
+  Flush von Szenario-Cache, `output/<scenario>/runs` und `temp/lunettes-job-watcher/testfiles/<scenario>`
+- `videoscript`:
+  Restore von Szenario-Cache und `output/<scenario>/runs`
+  Flush von Szenario-Cache und `output/<scenario>/videogenerator`
+- `publish`:
+  Restore von Szenario-Cache, `output/<scenario>/runs` und `output/<scenario>/videogenerator`
+  Flush nur des Szenario-Caches
+
+Remote-Struktur:
+
+```text
+s3://<bucket>/<prefix>/scenario-artifacts/<szenario-id>/versions/<version>/<generator>/<artifact-key>/...
+```
+
+Beispiele:
+
+- `.../scenario-artifacts/51/versions/2/testscript/runs/...`
+- `.../scenario-artifacts/51/versions/2/videoscript/videogenerator/...`
+- `.../scenario-artifacts/51/versions/2/shared/scenario-cache/...`
 
 Damit bleiben erhalten:
 
-- generierte Videos
-- Test-Artefakte
-- Watcher-Job-Logs
-- gecachte Szenario-XMLs
+- versionsspezifische Test-Runs
+- versionsspezifische Videogenerator-Ergebnisse
+- versionsspezifische Testfile-Artefakte des Watchers
+- versionsspezifische Szenario-XML-Caches
 
 ## Azure Container Apps
 
@@ -184,6 +208,6 @@ docker run --rm \
 
 - Das Image basiert auf dem Playwright-Image, damit Browser und Systembibliotheken fuer Testscript-Laeufe vorhanden sind.
 - `ffmpeg`, `zip` und `unzip` werden zusaetzlich installiert, weil Video-, Trace- und Confluence-Anhangsverarbeitung diese Tools benoetigen.
-- `awscli` ist enthalten und uebernimmt Restore und Sync gegen S3.
+- `awscli` ist enthalten und uebernimmt den versionsspezifischen Restore und Flush gegen S3.
 - Der Container ist als einzelner Worker gedacht. Unter Azure Container Apps wird die Revision automatisch an die Worker-ID angehaengt; ausserhalb davon solltest du bei mehreren Workern weiterhin bewusst unterschiedliche `WATCHER_WORKER_ID` setzen.
-- Azure Container Apps mountet S3 nicht nativ als Dateisystem. Deshalb verwendet diese Struktur bewusst ein lokales Runtime-Verzeichnis plus Objekt-Sync.
+- Azure Container Apps mountet S3 nicht nativ als Dateisystem. Deshalb verwendet diese Struktur bewusst lokales Runtime-Verzeichnis plus expliziten Artefakt-Sync pro Job.

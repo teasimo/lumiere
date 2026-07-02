@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 
 import { createWriteStream, existsSync } from 'fs'
-import { mkdir, readdir, readFile, stat, writeFile } from 'fs/promises'
+import { mkdir, readdir, readFile, rm, stat, writeFile } from 'fs/promises'
 import { dirname, extname, join, relative, resolve } from 'path'
-import { spawn } from 'child_process'
+import { execFile, spawn } from 'child_process'
 import { Buffer } from 'buffer'
 import { hostname } from 'os'
 import { fileURLToPath } from 'url'
+import { promisify } from 'util'
 import { XMLParser } from 'fast-xml-parser'
 import {
   getTestScriptConfig,
@@ -23,6 +24,7 @@ const workspaceRoot = process.cwd()
 const runtimeRoot = resolve(workspaceRoot, 'temp', 'lunettes-job-watcher')
 const jobsRoot = join(runtimeRoot, 'jobs')
 const scenarioCacheRoot = resolve(workspaceRoot, 'neo', 'interactions', '_lunettes-job-watcher')
+const execFileAsync = promisify(execFile)
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: '@_',
@@ -127,6 +129,10 @@ function normalizeBaseUrl(value) {
   return String(value || '').trim().replace(/\/+$/, '')
 }
 
+function normalizeWorkspaceRelativePath(pathValue) {
+  return String(relative(workspaceRoot, resolve(pathValue))).replace(/\\/g, '/')
+}
+
 function buildBasicAuthHeader(username, password) {
   return `Basic ${Buffer.from(`${username}:${password}`, 'utf8').toString('base64')}`
 }
@@ -183,6 +189,45 @@ function truncateText(value, maxLength = 500) {
     return text
   }
   return `${text.slice(0, Math.max(0, maxLength - 3))}...`
+}
+
+function readS3Config() {
+  const bucket = String(process.env.S3_BUCKET || '').trim()
+  const prefix = String(process.env.S3_PREFIX || 'lumiere-worker').trim().replace(/^\/+|\/+$/g, '')
+  const endpointUrl = String(process.env.S3_ENDPOINT_URL || '').trim()
+
+  return {
+    enabled: Boolean(bucket),
+    bucket,
+    prefix,
+    endpointUrl,
+  }
+}
+
+function buildS3ArtifactVersionToken(value) {
+  return sanitizeFileToken(value, 'unknown')
+}
+
+function buildScenarioArtifactRemotePrefix({ s3Config, szenarioId, scenarioVersion, generatorKey, artifactKey }) {
+  const normalizedScenarioId = sanitizeFileToken(szenarioId, 'scenario')
+  const normalizedVersion = buildS3ArtifactVersionToken(scenarioVersion)
+  const prefixParts = [s3Config.prefix, 'scenario-artifacts', normalizedScenarioId, 'versions', normalizedVersion, generatorKey, artifactKey]
+    .filter(Boolean)
+  return `s3://${s3Config.bucket}/${prefixParts.join('/')}`
+}
+
+function buildAwsCliArgs(s3Config) {
+  const args = []
+  if (s3Config.endpointUrl) {
+    args.push('--endpoint-url', s3Config.endpointUrl)
+  }
+  return args
+}
+
+async function runAwsCli(s3Config, args) {
+  await execFileAsync('aws', [...buildAwsCliArgs(s3Config), ...args], {
+    cwd: workspaceRoot,
+  })
 }
 
 function sleep(ms) {
@@ -279,6 +324,65 @@ async function fetchJson(url, { method = 'GET', authHeader, body = undefined } =
   }
 
   return payload
+}
+
+function extractScenarioVersionFromApiPayload(payload) {
+  if (payload == null || typeof payload !== 'object') {
+    return null
+  }
+
+  const candidates = [
+    payload?.version,
+    payload?.szenario_version,
+    payload?.scenario_version,
+    payload?.data?.version,
+    payload?.data?.szenario_version,
+    payload?.data?.scenario_version,
+  ]
+
+  for (const candidate of candidates) {
+    const value = String(candidate ?? '').trim()
+    if (value) {
+      return value
+    }
+  }
+
+  return null
+}
+
+async function resolveJobScenarioVersion(job, context) {
+  const payload = job?.payload && typeof job.payload === 'object' ? job.payload : {}
+  const payloadXml = typeof payload.szenario === 'string' ? payload.szenario.trim() : ''
+  if (payloadXml) {
+    const fallbackScenarioId = sanitizeFileToken(job?.szenario_id || payload?.szenario_id, 'scenario')
+    return parseScenarioIdentityFromXml(payloadXml, fallbackScenarioId).scenarioVersion
+  }
+
+  const directVersion = String(
+    payload?.version
+      ?? payload?.szenario_version
+      ?? payload?.scenario_version
+      ?? '',
+  ).trim()
+  if (directVersion) {
+    return directVersion
+  }
+
+  const lunettesScenarioId = String(job?.szenario_id || payload?.szenario_id || '').trim()
+  if (!lunettesScenarioId) {
+    return 'unknown'
+  }
+
+  try {
+    const payloadFromApi = await fetchJson(
+      `${context.baseUrl}/api/anfo/szenario/${encodeURIComponent(lunettesScenarioId)}`,
+      { authHeader: context.authHeader },
+    )
+    return extractScenarioVersionFromApiPayload(payloadFromApi) || 'unknown'
+  } catch (error) {
+    console.warn(`[watcher] Szenario-Version fuer ${lunettesScenarioId} konnte nicht aus Lunettes geladen werden: ${error.message}`)
+    return 'unknown'
+  }
 }
 
 async function postJobEvent(context, jobId, {
@@ -492,6 +596,149 @@ async function resolveScenarioInput(job) {
     scenarioPath: cachedPath,
     scenarioMeta: parseScenarioIdentityFromXml(xmlRaw, sanitizeFileToken(job?.szenario_id, 'scenario')),
     source: 'cache',
+  }
+}
+
+function buildScenarioArtifactPlan(job, scenarioInput, scenarioVersion) {
+  const payload = job?.payload && typeof job.payload === 'object' ? job.payload : {}
+  const scenarioId = sanitizeFileToken(payload?.szenario_id, scenarioInput?.scenarioMeta?.scenarioId || 'scenario')
+  const lunettesScenarioId = String(job?.szenario_id || payload?.szenario_id || scenarioId).trim() || scenarioId
+  const folderName = buildScenarioOutputFolderName({ scenarioId, fallbackName: 'scenario' })
+  const scenarioOutputRoot = resolve(workspaceRoot, 'output', folderName)
+  const scenarioCacheDir = resolveScenarioCacheDir(lunettesScenarioId)
+  const testfilesDir = join(runtimeRoot, 'testfiles', scenarioId)
+
+  const scenarioCacheArtifact = {
+    artifactKey: 'scenario-cache',
+    localPath: scenarioCacheDir,
+  }
+  const testscriptRunsArtifact = {
+    artifactKey: 'runs',
+    localPath: join(scenarioOutputRoot, 'runs'),
+  }
+  const testscriptFilesArtifact = {
+    artifactKey: 'testfiles',
+    localPath: testfilesDir,
+  }
+  const videoscriptArtifact = {
+    artifactKey: 'videogenerator',
+    localPath: join(scenarioOutputRoot, 'videogenerator'),
+  }
+
+  if (job.type === 'testscript') {
+    return {
+      scenarioId,
+      lunettesScenarioId,
+      scenarioVersion,
+      restore: [scenarioCacheArtifact],
+      flush: [scenarioCacheArtifact, testscriptRunsArtifact, testscriptFilesArtifact],
+    }
+  }
+
+  if (job.type === 'videoscript') {
+    return {
+      scenarioId,
+      lunettesScenarioId,
+      scenarioVersion,
+      restore: [scenarioCacheArtifact, testscriptRunsArtifact],
+      flush: [scenarioCacheArtifact, videoscriptArtifact],
+    }
+  }
+
+  if (job.type === 'publish') {
+    return {
+      scenarioId,
+      lunettesScenarioId,
+      scenarioVersion,
+      restore: [scenarioCacheArtifact, testscriptRunsArtifact, videoscriptArtifact],
+      flush: [scenarioCacheArtifact],
+    }
+  }
+
+  return {
+    scenarioId,
+    lunettesScenarioId,
+    scenarioVersion,
+    restore: [scenarioCacheArtifact],
+    flush: [scenarioCacheArtifact],
+  }
+}
+
+async function clearLocalArtifactPath(pathValue) {
+  await rm(pathValue, { recursive: true, force: true })
+}
+
+async function restoreScenarioArtifactsFromS3(context, plan) {
+  if (!context.s3ArtifactsEnabled) {
+    return
+  }
+
+  for (const artifact of plan.restore) {
+    await clearLocalArtifactPath(artifact.localPath)
+    await ensureDir(artifact.localPath)
+    const remotePrefix = buildScenarioArtifactRemotePrefix({
+      s3Config: context.s3Config,
+      szenarioId: plan.lunettesScenarioId,
+      scenarioVersion: plan.scenarioVersion,
+      generatorKey: artifact.artifactKey === 'scenario-cache' ? 'shared' : artifact.artifactKey === 'videogenerator' ? 'videoscript' : 'testscript',
+      artifactKey: artifact.artifactKey,
+    })
+    console.log(`[watcher] Restore ${artifact.artifactKey}: ${remotePrefix} -> ${normalizeWorkspaceRelativePath(artifact.localPath)}`)
+    await runAwsCli(context.s3Config, [
+      's3',
+      'sync',
+      remotePrefix,
+      artifact.localPath,
+      '--only-show-errors',
+    ]).catch((error) => {
+      const message = String(error?.stderr || error?.message || error).trim()
+      console.warn(`[watcher] Restore ${artifact.artifactKey} fehlgeschlagen oder leer: ${message}`)
+    })
+  }
+}
+
+async function flushScenarioArtifactsToS3(context, plan) {
+  if (!context.s3ArtifactsEnabled) {
+    return
+  }
+
+  for (const artifact of plan.flush) {
+    const generatorKey = artifact.artifactKey === 'scenario-cache'
+      ? 'shared'
+      : artifact.artifactKey === 'videogenerator'
+        ? 'videoscript'
+        : 'testscript'
+    const remotePrefix = buildScenarioArtifactRemotePrefix({
+      s3Config: context.s3Config,
+      szenarioId: plan.lunettesScenarioId,
+      scenarioVersion: plan.scenarioVersion,
+      generatorKey,
+      artifactKey: artifact.artifactKey,
+    })
+
+    console.log(`[watcher] Flush ${artifact.artifactKey}: ${normalizeWorkspaceRelativePath(artifact.localPath)} -> ${remotePrefix}`)
+    if (!existsSync(artifact.localPath)) {
+      await runAwsCli(context.s3Config, [
+        's3',
+        'rm',
+        remotePrefix,
+        '--recursive',
+        '--only-show-errors',
+      ]).catch((error) => {
+        const message = String(error?.stderr || error?.message || error).trim()
+        console.warn(`[watcher] Remote-Loeschung fuer ${artifact.artifactKey} fehlgeschlagen: ${message}`)
+      })
+      continue
+    }
+
+    await runAwsCli(context.s3Config, [
+      's3',
+      'sync',
+      artifact.localPath,
+      remotePrefix,
+      '--delete',
+      '--only-show-errors',
+    ])
   }
 }
 
@@ -1198,7 +1445,11 @@ async function processJob(job, context) {
   const jobDir = join(jobsRoot, String(job.id))
   await ensureDir(jobDir)
   const logPath = join(jobDir, 'job.log')
+  const scenarioVersion = await resolveJobScenarioVersion(job, context)
+  const restorePlan = buildScenarioArtifactPlan(job, null, scenarioVersion)
+  await restoreScenarioArtifactsFromS3(context, restorePlan)
   const scenarioInput = await resolveScenarioInput(job)
+  const artifactPlan = buildScenarioArtifactPlan(job, scenarioInput, scenarioInput.scenarioMeta?.scenarioVersion || scenarioVersion)
   const scenarioPathRelative = relative(workspaceRoot, scenarioInput.scenarioPath)
   const plan = await buildJobExecutionPlan(job, context, scenarioInput)
 
@@ -1230,103 +1481,122 @@ async function processJob(job, context) {
   let totalDurationMs = 0
   let deferredFailure = null
 
-  for (let index = 0; index < plan.steps.length; index += 1) {
-    const step = plan.steps[index]
-    try {
-      await postJobEvent(context, job.id, {
-        eventType: 'progress',
-        status: 'running',
-        message: `${step.label} gestartet (${index + 1}/${plan.steps.length}).`,
-        data: {
-          step_key: step.key,
-          step_label: step.label,
-          step_index: index + 1,
-          step_count: plan.steps.length,
-          command: [step.command, ...step.args].join(' '),
-        },
-      })
-    } catch (error) {
-      if (isJobCanceledConflict(error)) {
-        throw new JobCanceledError('Job wurde vor dem Script-Start serverseitig abgebrochen.')
-      }
-      throw error
-    }
-
-    const commandResult = await runCommandWithLogAndEvents({
-      command: step.command,
-      args: step.args,
-      env: step.env,
-      logPath,
-      context,
-      jobId: job.id,
-    })
-
-    if (commandResult.remoteCanceled) {
-      throw new JobCanceledError('Job wurde waehrend der Skriptausfuehrung serverseitig abgebrochen.')
-    }
-
-    totalDurationMs += commandResult.durationMs
-    stepResults.push({
-      key: step.key,
-      label: step.label,
-      continueOnFailure: step.continueOnFailure === true,
-      durationMs: commandResult.durationMs,
-      exitCode: commandResult.exitCode,
-      outputTail: commandResult.outputTail,
-      timedOut: commandResult.timedOut,
-    })
-
-    if (commandResult.exitCode !== 0) {
-      const errorMessage = commandResult.timedOut
-        ? truncateText(
-          commandResult.outputTail || `Keine Konsolenausgabe fuer mehr als ${Math.floor(context.scriptInactivityTimeoutMs / 1000)} Sekunden.`,
-          1500,
-        )
-        : truncateText(
-          commandResult.outputTail || `${step.label} fehlgeschlagen (Exit-Code ${commandResult.exitCode}).`,
-          1500,
-        )
-
-      if (step.continueOnFailure === true) {
-        deferredFailure = {
-          stepKey: step.key,
-          stepLabel: step.label,
-          errorMessage,
-        }
+  try {
+    for (let index = 0; index < plan.steps.length; index += 1) {
+      const step = plan.steps[index]
+      try {
         await postJobEvent(context, job.id, {
           eventType: 'progress',
           status: 'running',
-          message: `${step.label} fehlgeschlagen, Folge-Schritte laufen trotzdem weiter.`,
+          message: `${step.label} gestartet (${index + 1}/${plan.steps.length}).`,
           data: {
             step_key: step.key,
             step_label: step.label,
             step_index: index + 1,
             step_count: plan.steps.length,
-            exit_code: commandResult.exitCode,
+            command: [step.command, ...step.args].join(' '),
           },
-          errorMessage,
         })
-        continue
+      } catch (error) {
+        if (isJobCanceledConflict(error)) {
+          throw new JobCanceledError('Job wurde vor dem Script-Start serverseitig abgebrochen.')
+        }
+        throw error
       }
 
-      if (commandResult.timedOut) {
+      const commandResult = await runCommandWithLogAndEvents({
+        command: step.command,
+        args: step.args,
+        env: step.env,
+        logPath,
+        context,
+        jobId: job.id,
+      })
+
+      if (commandResult.remoteCanceled) {
+        throw new JobCanceledError('Job wurde waehrend der Skriptausfuehrung serverseitig abgebrochen.')
+      }
+
+      totalDurationMs += commandResult.durationMs
+      stepResults.push({
+        key: step.key,
+        label: step.label,
+        continueOnFailure: step.continueOnFailure === true,
+        durationMs: commandResult.durationMs,
+        exitCode: commandResult.exitCode,
+        outputTail: commandResult.outputTail,
+        timedOut: commandResult.timedOut,
+      })
+
+      if (commandResult.exitCode !== 0) {
+        const errorMessage = commandResult.timedOut
+          ? truncateText(
+            commandResult.outputTail || `Keine Konsolenausgabe fuer mehr als ${Math.floor(context.scriptInactivityTimeoutMs / 1000)} Sekunden.`,
+            1500,
+          )
+          : truncateText(
+            commandResult.outputTail || `${step.label} fehlgeschlagen (Exit-Code ${commandResult.exitCode}).`,
+            1500,
+          )
+
+        if (step.continueOnFailure === true) {
+          deferredFailure = {
+            stepKey: step.key,
+            stepLabel: step.label,
+            errorMessage,
+          }
+          await postJobEvent(context, job.id, {
+            eventType: 'progress',
+            status: 'running',
+            message: `${step.label} fehlgeschlagen, Folge-Schritte laufen trotzdem weiter.`,
+            data: {
+              step_key: step.key,
+              step_label: step.label,
+              step_index: index + 1,
+              step_count: plan.steps.length,
+              exit_code: commandResult.exitCode,
+            },
+            errorMessage,
+          })
+          continue
+        }
+
+        if (commandResult.timedOut) {
+          throw new Error(errorMessage)
+        }
         throw new Error(errorMessage)
       }
-      throw new Error(errorMessage)
     }
-  }
 
-  const executionSummary = buildExecutionSummary(stepResults, job?.payload)
-  const result = await buildJobResult(job, scenarioInput, logPath, executionSummary)
-  result.duration_ms = totalDurationMs
+    const executionSummary = buildExecutionSummary(stepResults, job?.payload)
+    await flushScenarioArtifactsToS3(context, artifactPlan)
+    const result = await buildJobResult(job, scenarioInput, logPath, executionSummary)
+    result.duration_ms = totalDurationMs
 
-  if (deferredFailure) {
+    if (deferredFailure) {
+      try {
+        await completeJob(context, job.id, {
+          status: 'failed',
+          message: `${deferredFailure.stepLabel} fehlgeschlagen; nachgelagerte Schritte wurden trotzdem ausgefuehrt.`,
+          result,
+          errorMessage: deferredFailure.errorMessage,
+        })
+      } catch (error) {
+        if (isJobCanceledConflict(error)) {
+          throw new JobCanceledError('Job wurde nach Skriptausfuehrung serverseitig abgebrochen.')
+        }
+        throw error
+      }
+
+      console.log(`[job ${job.id}] abgeschlossen mit Fehler in Schritt ${deferredFailure.stepKey}`)
+      return
+    }
+
     try {
       await completeJob(context, job.id, {
-        status: 'failed',
-        message: `${deferredFailure.stepLabel} fehlgeschlagen; nachgelagerte Schritte wurden trotzdem ausgefuehrt.`,
+        status: 'succeeded',
+        message: `${plan.label} abgeschlossen.`,
         result,
-        errorMessage: deferredFailure.errorMessage,
       })
     } catch (error) {
       if (isJobCanceledConflict(error)) {
@@ -1335,24 +1605,13 @@ async function processJob(job, context) {
       throw error
     }
 
-    console.log(`[job ${job.id}] abgeschlossen mit Fehler in Schritt ${deferredFailure.stepKey}`)
-    return
-  }
-
-  try {
-    await completeJob(context, job.id, {
-      status: 'succeeded',
-      message: `${plan.label} abgeschlossen.`,
-      result,
-    })
+    console.log(`[job ${job.id}] abgeschlossen`)
   } catch (error) {
-    if (isJobCanceledConflict(error)) {
-      throw new JobCanceledError('Job wurde nach Skriptausfuehrung serverseitig abgebrochen.')
-    }
+    await flushScenarioArtifactsToS3(context, artifactPlan).catch((flushError) => {
+      console.error(`[job ${job.id}] Artefakte konnten nach Fehler nicht nach S3 geschrieben werden: ${flushError.message}`)
+    })
     throw error
   }
-
-  console.log(`[job ${job.id}] abgeschlossen`)
 }
 
 function buildWatcherContext(cliOptions) {
@@ -1399,6 +1658,7 @@ function buildWatcherContext(cliOptions) {
   const scriptTerminationGracePeriodMs = clampNumber(watcherConfig.script_termination_grace_period_ms, 1000, 86400000, defaultScriptTerminationGracePeriodMs)
   const videoProfile = resolveDefaultVideoProfile(videoScriptConfig, watcherConfig)
   const liveTestWorkerEnabled = liveTestWorkerConfig?.enabled === true
+  const s3Config = readS3Config()
   const liveTestWorkerArgs = [
     'scripts/test-script-generator/run-live-test-worker.mjs',
   ]
@@ -1433,6 +1693,8 @@ function buildWatcherContext(cliOptions) {
     scriptInactivityTimeoutMs,
     scriptTerminationGracePeriodMs,
     videoProfile,
+    s3Config,
+    s3ArtifactsEnabled: s3Config.enabled,
     liveTestWorkerEnabled,
     liveTestWorkerArgs,
     liveTestWorkerEnv: process.env,

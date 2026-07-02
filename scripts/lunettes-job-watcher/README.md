@@ -1,6 +1,6 @@
 # Lunettes Job Watcher
 
-Der Watcher claimt Render-Jobs aus Lunettes, speichert empfangene Szenario-XMLs lokal und startet pro Job-Typ das passende lokale Script.
+Der Watcher claimt Render-Jobs aus Lunettes, speichert empfangene Szenario-XMLs lokal und startet pro Job-Typ das passende lokale Script. Wenn `S3_BUCKET` gesetzt ist, verwaltet er generatorrelevante Artefakte zusaetzlich versionsspezifisch auf S3.
 
 ## Start
 
@@ -71,6 +71,40 @@ Beispiel fuer einen Publish-Payload:
 ```
 
 Empfangene XMLs werden unter `neo/interactions/_lunettes-job-watcher/szenario-<szenario_id>/` abgelegt. Die gemeinsame Quelle fuer alle Jobs derselben Lunettes-`szenario_id` ist immer `source.xml`; genau dieser Pfad wird an Testscript- und Videoscript-Laeufe uebergeben. Dadurch koennen dieselben Test-Artefakte spaeter wiedergefunden und weiterverwendet werden. Fuer die Fragment-Aufloesung wird ausschliesslich die Lunettes-API verwendet; app-lokale Fragmentbibliotheken werden nicht mehr genutzt. Pro Job werden Logs unter `temp/lunettes-job-watcher/jobs/<job-id>/job.log` geschrieben.
+
+## Versionsspezifische S3-Artefakte
+
+Wenn `S3_BUCKET` gesetzt ist, verwendet der Watcher zusaetzlich dieses Remote-Schema:
+
+```text
+s3://<bucket>/<prefix>/scenario-artifacts/<szenario-id>/versions/<version>/<generator>/<artifact-key>/...
+```
+
+Dabei gilt:
+
+- `<szenario-id>` ist die Lunettes-`szenario_id`
+- `<version>` ist die ermittelte Szenario-Version
+- `<generator>` ist aktuell `shared`, `testscript` oder `videoscript`
+- `<artifact-key>` ist z. B. `scenario-cache`, `runs`, `testfiles` oder `videogenerator`
+
+Restore/Flush pro Job-Typ:
+
+- `testscript`:
+  Restore `shared/scenario-cache`
+  Flush `shared/scenario-cache`, `testscript/runs`, `testscript/testfiles`
+- `videoscript`:
+  Restore `shared/scenario-cache`, `testscript/runs`
+  Flush `shared/scenario-cache`, `videoscript/videogenerator`
+- `publish`:
+  Restore `shared/scenario-cache`, `testscript/runs`, `videoscript/videogenerator`
+  Flush `shared/scenario-cache`
+
+Verhalten:
+
+- Vor jedem Job wird zuerst die Szenario-Version bestimmt.
+- Danach werden nur die potentiell benoetigten Artefakte fuer genau diese `szenario_id` und Version von S3 geholt.
+- Nach dem Job werden nur die Artefakte des betroffenen Generators fuer genau diese Version mit `sync --delete` ersetzt.
+- Artefakte anderer Versionen bleiben unberuehrt.
 
 Die stdout/stderr-Ausgaben der gestarteten Skripte werden zusaetzlich als gebuendelte `progress`-Events an die Render-Job-API gesendet: spaetestens nach 5 Zeilen oder nach 60 Sekunden, auch wenn bis dahin weniger Zeilen angefallen sind.
 
