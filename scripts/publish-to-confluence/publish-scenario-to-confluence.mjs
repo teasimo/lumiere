@@ -885,6 +885,25 @@ function walkScenarioNodes(nodes, state, timelineContext) {
       continue
     }
 
+    if (tag === 'VideoStart') {
+      state.inVideoRange = true
+      continue
+    }
+
+    if (tag === 'VideoStop') {
+      state.inVideoRange = false
+      continue
+    }
+
+    if (CONTAINER_TAGS.has(tag)) {
+      walkScenarioNodes(getNodeChildren(node), state, timelineContext)
+      continue
+    }
+
+    if (!state.inVideoRange) {
+      continue
+    }
+
     if (tag === 'Kapitel') {
       const title = readTextNode(getNodeChildren(node)) || `Kapitel ${state.chapterCounter + 1}`
       const chapterItem = { type: 'chapter', title, items: [] }
@@ -929,11 +948,6 @@ function walkScenarioNodes(nodes, state, timelineContext) {
       continue
     }
 
-    if (CONTAINER_TAGS.has(tag)) {
-      walkScenarioNodes(getNodeChildren(node), state, timelineContext)
-      continue
-    }
-
     if (isTimelineInteractionTag(tag)) {
       const targetStep = ensureSyntheticStep(state, 'Schritt')
       const { resolvedStepId, timelineEntry } = resolveTimelineEntryForNode(node, timelineContext)
@@ -951,6 +965,7 @@ function buildDocumentationFromScenario({ resolvedRootNode, timelineContext }) {
     chapterCounter: 0,
     stepCounter: 0,
     syntheticStepCounter: 0,
+    inVideoRange: false,
   }
 
   walkScenarioNodes(getNodeChildren(resolvedRootNode), state, timelineContext)
