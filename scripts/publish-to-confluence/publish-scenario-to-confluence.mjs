@@ -9,14 +9,13 @@ import { Buffer } from 'buffer'
 import { promisify } from 'util'
 import { XMLParser } from 'fast-xml-parser'
 import { buildScenarioOutputFolderName } from '../shared/scenario-output.mjs'
-import { getTestScriptConfig, loadCentralConfig } from '../shared/central-config.mjs'
-import { scenarioToSpecSource } from '../test-script-generator/generate-tests-from-scenario-xml.mjs'
+import { loadCentralConfig } from '../shared/central-config.mjs'
+import { parseScenarioXml } from '../shared/parse-scenario-xml.mjs'
 
 const execFileAsync = promisify(execFile)
 const CREDENTIALS_ENV_NAME = 'CONFLUENCE_PUBLISHHELPER_CREDENTIALS'
 const MANAGED_BLOCK_START = '<!-- lumiere-publishhelper:start -->'
 const MANAGED_BLOCK_END = '<!-- lumiere-publishhelper:end -->'
-const DEFAULT_XSD_PATH = resolve(process.cwd(), 'schemas', 'szenarioscript.xsd')
 const TIMELINE_INTERACTION_TAGS = new Set([
   'Click',
   'Eingabe',
@@ -69,41 +68,6 @@ function escapeXml(value) {
 
 function toCdataSafe(value) {
   return String(value || '').replaceAll(']]>', ']]]]><![CDATA[>')
-}
-
-function readTextNode(children = []) {
-  return children
-    .map((entry) => {
-      if (entry && typeof entry === 'object' && typeof entry['#text'] === 'string') {
-        return entry['#text']
-      }
-      return ''
-    })
-    .join('')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-function getNodeTag(node) {
-  if (!node || typeof node !== 'object') {
-    return null
-  }
-  return Object.keys(node).find((key) => key !== ':@') || null
-}
-
-function getNodeChildren(node) {
-  const tag = getNodeTag(node)
-  if (!tag) {
-    return []
-  }
-  return Array.isArray(node[tag]) ? node[tag] : []
-}
-
-function getNodeAttrs(node) {
-  if (!node || typeof node !== 'object') {
-    return {}
-  }
-  return node[':@'] && typeof node[':@'] === 'object' ? node[':@'] : {}
 }
 
 function parseScenarioMetaFromRawXml(xmlRaw) {
@@ -729,41 +693,6 @@ async function findLatestTimelineRun({ scenarioId, scenarioSourceRelative }) {
   return candidates[0]
 }
 
-async function resolveScenarioStructure({ scenarioAbsolutePath, software }) {
-  const central = loadCentralConfig(process.cwd(), { software })
-  const testScriptConfig = getTestScriptConfig(central?.config || {})
-  const resolved = await scenarioToSpecSource({
-    scenarioPath: scenarioAbsolutePath,
-    xsdPath: DEFAULT_XSD_PATH,
-    centralConfig: testScriptConfig,
-    generatedSpecPath: resolve('/tmp', 'publish-to-confluence.generated.spec.js'),
-    fragmentSource: 'lunettes',
-    allowEmptyFlow: true,
-  })
-
-  const parser = new XMLParser({
-    preserveOrder: true,
-    ignoreAttributes: false,
-    attributeNamePrefix: '@_',
-    parseTagValue: false,
-    trimValues: false,
-  })
-
-  const parsed = parser.parse(resolved.resolvedXmlSource)
-  const rootNode = Array.isArray(parsed)
-    ? parsed.find((entry) => getNodeTag(entry) === 'SzenarioScript')
-    : null
-
-  if (!rootNode) {
-    throw new Error('Resolved SzenarioScript konnte nicht gelesen werden.')
-  }
-
-  return {
-    resolvedRoot: rootNode,
-    resolvedXmlSource: resolved.resolvedXmlSource,
-  }
-}
-
 function filterTimelineSteps(timeline) {
   const steps = Array.isArray(timeline?.steps) ? timeline.steps : []
   return steps.filter((entry) => {
@@ -778,21 +707,50 @@ function filterTimelineSteps(timeline) {
   })
 }
 
-function buildTimelineStepLookup(timelineEntries) {
-  const byStepId = new Map()
+function parseResolvedStepOrigin(stepId) {
+  const normalizedStepId = String(stepId || '').trim()
+  if (!normalizedStepId) {
+    return null
+  }
+
+  const rootLineMatch = normalizedStepId.match(/-Zeile-(\d+)/)
+  if (!rootLineMatch) {
+    return null
+  }
+
+  const rootLine = Number(rootLineMatch[1])
+  if (!Number.isFinite(rootLine) || rootLine <= 0) {
+    return null
+  }
+
+  return {
+    rootLine,
+    isFragmentExpansion: /-Zeile-\d+-\[/.test(normalizedStepId),
+  }
+}
+
+function buildTimelineOriginLookup(timelineEntries) {
+  const directByRootLine = new Map()
+  const fragmentByRootLine = new Map()
 
   for (const entry of Array.isArray(timelineEntries) ? timelineEntries : []) {
     const stepId = String(entry?.stepId || '').trim()
-    if (!stepId) {
+    const origin = parseResolvedStepOrigin(stepId)
+    if (!origin) {
       continue
     }
 
-    if (!byStepId.has(stepId)) {
-      byStepId.set(stepId, entry)
+    const targetMap = origin.isFragmentExpansion ? fragmentByRootLine : directByRootLine
+    if (!targetMap.has(origin.rootLine)) {
+      targetMap.set(origin.rootLine, [])
     }
+    targetMap.get(origin.rootLine).push(entry)
   }
 
-  return byStepId
+  return {
+    directByRootLine,
+    fragmentByRootLine,
+  }
 }
 
 function createDocumentationTree() {
@@ -863,24 +821,38 @@ function isTimelineInteractionTag(tag) {
   return TIMELINE_INTERACTION_TAGS.has(tag)
 }
 
-function resolveTimelineEntryForNode(node, timelineContext) {
-  const resolvedStepId = String(getNodeAttrs(node)?.['@_resolved-id'] || '').trim()
-  if (!resolvedStepId) {
-    return {
-      resolvedStepId: null,
-      timelineEntry: null,
-    }
-  }
-
-  return {
-    resolvedStepId,
-    timelineEntry: timelineContext.timelineEntriesByStepId.get(resolvedStepId) || null,
+function appendTimelineEntriesToState(entries, state, timelineContext) {
+  const targetStep = ensureSyntheticStep(state, 'Schritt')
+  for (const timelineEntry of Array.isArray(entries) ? entries : []) {
+    targetStep.items.push(createTimelineReference(timelineEntry?.stepId || null, timelineEntry, timelineContext))
   }
 }
 
-function walkScenarioNodes(nodes, state, timelineContext) {
+function getRawNodeTag(node) {
+  return String(node?._tag || '').trim() || null
+}
+
+function getRawNodeChildren(node) {
+  return Array.isArray(node?._children) ? node._children : []
+}
+
+function getRawNodeAttrs(node) {
+  return node?._attrs && typeof node._attrs === 'object' ? node._attrs : {}
+}
+
+function getRawNodeText(node) {
+  return String(node?._text || '').replace(/\s+/g, ' ').trim()
+}
+
+function getRawNodeLine(node) {
+  const rawValue = node?.['_row-index']
+  const line = Number(String(rawValue || '').split('.')[0])
+  return Number.isFinite(line) && line > 0 ? Math.floor(line) : null
+}
+
+function walkRawScenarioNodes(nodes, state, timelineContext) {
   for (const node of Array.isArray(nodes) ? nodes : []) {
-    const tag = getNodeTag(node)
+    const tag = getRawNodeTag(node)
     if (!tag) {
       continue
     }
@@ -896,7 +868,7 @@ function walkScenarioNodes(nodes, state, timelineContext) {
     }
 
     if (CONTAINER_TAGS.has(tag)) {
-      walkScenarioNodes(getNodeChildren(node), state, timelineContext)
+      walkRawScenarioNodes(getRawNodeChildren(node), state, timelineContext)
       continue
     }
 
@@ -905,7 +877,7 @@ function walkScenarioNodes(nodes, state, timelineContext) {
     }
 
     if (tag === 'Kapitel') {
-      const title = readTextNode(getNodeChildren(node)) || `Kapitel ${state.chapterCounter + 1}`
+      const title = getRawNodeText(node) || `Kapitel ${state.chapterCounter + 1}`
       const chapterItem = { type: 'chapter', title, items: [] }
       state.root.items.push(chapterItem)
       state.currentChapter = chapterItem
@@ -915,7 +887,7 @@ function walkScenarioNodes(nodes, state, timelineContext) {
     }
 
     if (tag === 'Schritt') {
-      const title = readTextNode(getNodeChildren(node)) || `Schritt ${state.stepCounter + 1}`
+      const title = getRawNodeText(node) || `Schritt ${state.stepCounter + 1}`
       const stepItem = { type: 'step', title, items: [] }
       if (state.currentChapter) {
         state.currentChapter.items.push(stepItem)
@@ -930,14 +902,14 @@ function walkScenarioNodes(nodes, state, timelineContext) {
     if (tag === 'Info') {
       pushContentItem(state, {
         type: 'info',
-        text: readTextNode(getNodeChildren(node)),
-        infoType: String(getNodeAttrs(node)?.['@_typ'] || 'Info').trim() || 'Info',
+        text: getRawNodeText(node),
+        infoType: String(getRawNodeAttrs(node)?.typ || 'Info').trim() || 'Info',
       })
       continue
     }
 
     if (tag === 'Folie') {
-      const text = readTextNode(getNodeChildren(node))
+      const text = getRawNodeText(node)
       if (text) {
         pushContentItem(state, {
           type: 'info',
@@ -948,16 +920,28 @@ function walkScenarioNodes(nodes, state, timelineContext) {
       continue
     }
 
-    if (isTimelineInteractionTag(tag)) {
-      const targetStep = ensureSyntheticStep(state, 'Schritt')
-      const { resolvedStepId, timelineEntry } = resolveTimelineEntryForNode(node, timelineContext)
-      targetStep.items.push(createTimelineReference(resolvedStepId, timelineEntry, timelineContext))
+    const sourceLine = getRawNodeLine(node)
+    if (tag === 'Fragment' && sourceLine != null) {
+      appendTimelineEntriesToState(
+        timelineContext.timelineEntriesByOrigin.fragmentByRootLine.get(sourceLine) || [],
+        state,
+        timelineContext,
+      )
+      continue
+    }
+
+    if (isTimelineInteractionTag(tag) && sourceLine != null) {
+      appendTimelineEntriesToState(
+        timelineContext.timelineEntriesByOrigin.directByRootLine.get(sourceLine) || [],
+        state,
+        timelineContext,
+      )
       continue
     }
   }
 }
 
-function buildDocumentationFromScenario({ resolvedRootNode, timelineContext }) {
+function buildDocumentationFromScenario({ sourceRootNode, timelineContext }) {
   const state = {
     root: createDocumentationTree(),
     currentChapter: null,
@@ -968,7 +952,7 @@ function buildDocumentationFromScenario({ resolvedRootNode, timelineContext }) {
     inVideoRange: false,
   }
 
-  walkScenarioNodes(getNodeChildren(resolvedRootNode), state, timelineContext)
+  walkRawScenarioNodes(getRawNodeChildren(sourceRootNode), state, timelineContext)
   return state.root
 }
 
@@ -1217,19 +1201,19 @@ async function main() {
       timelinePath: latestTimelineRun.timelinePath,
       scenarioId,
     })
-    const resolvedStructure = await resolveScenarioStructure({
-      scenarioAbsolutePath,
-      software,
-    })
     const filteredTimelineEntries = filterTimelineSteps(latestTimelineRun.timeline)
-    const timelineEntriesByStepId = buildTimelineStepLookup(filteredTimelineEntries)
+    const parsedSourceScenario = parseScenarioXml(scenarioAbsolutePath)
+    if (!parsedSourceScenario.valid || !parsedSourceScenario.tree || String(parsedSourceScenario.tree?._tag || '') !== 'SzenarioScript') {
+      throw new Error(`Ausgangsszenario konnte nicht geparst werden: ${parsedSourceScenario.errors || 'Wurzelknoten <SzenarioScript> fehlt.'}`)
+    }
+
     const timelineContext = {
-      timelineEntriesByStepId,
       timelinePath: latestTimelineRun.timelinePath,
       screenshotAttachmentNames: screenshotPlan.screenshotAttachmentNames,
+      timelineEntriesByOrigin: buildTimelineOriginLookup(filteredTimelineEntries),
     }
     const documentationTree = buildDocumentationFromScenario({
-      resolvedRootNode: resolvedStructure.resolvedRoot,
+      sourceRootNode: parsedSourceScenario.tree,
       timelineContext,
     })
 
