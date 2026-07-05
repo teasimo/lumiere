@@ -769,6 +769,131 @@ test('fragment Auslesen exports final fragment runtime variable back to parent f
   }
 })
 
+test('scenarioToSpecSource maps Upload temp=true to inline upload interaction', async () => {
+  const runtimeRoot = await mkdtemp(join(tmpdir(), 'live-test-worker-'))
+  const scenarioPath = join(runtimeRoot, 'upload-temp.xml')
+  const xsdPath = join(process.cwd(), 'schemas', 'szenarioscript.xsd')
+  const generatedSpecPath = join(runtimeRoot, 'upload-temp.generated.spec.js')
+
+  await writeFile(scenarioPath, [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<SzenarioScript>',
+    '  <Gruppe>',
+    '    <Upload data-id="demo/upload" temp="true" dateiname="beispiel-{{kunde.id}}.csv">nummer;name',
+    '{{kunde.id}};{{kunde.name}}</Upload>',
+    '  </Gruppe>',
+    '</SzenarioScript>',
+    '',
+  ].join('\n'), 'utf8')
+
+  const resolved = await scenarioToSpecSource({
+    scenarioPath,
+    xsdPath,
+    generatedSpecPath,
+  })
+
+  assert.equal(resolved.resolvedRoot.flow.length, 1)
+  assert.equal(resolved.resolvedRoot.flow[0].interaction.type, 'upload')
+  assert.equal(resolved.resolvedRoot.flow[0].interaction.temp, true)
+  assert.equal(resolved.resolvedRoot.flow[0].interaction.filename, 'beispiel-{{kunde.id}}.csv')
+  assert.equal(resolved.resolvedRoot.flow[0].interaction.value, 'nummer;name\n{{kunde.id}};{{kunde.name}}')
+})
+
+test('scenarioToSpecSource maps class attribute as regex-capable component selector', async () => {
+  const runtimeRoot = await mkdtemp(join(tmpdir(), 'live-test-worker-'))
+  const scenarioPath = join(runtimeRoot, 'class-selector.xml')
+  const xsdPath = join(process.cwd(), 'schemas', 'szenarioscript.xsd')
+  const generatedSpecPath = join(runtimeRoot, 'class-selector.generated.spec.js')
+
+  await writeFile(scenarioPath, [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<SzenarioScript>',
+    '  <Gruppe>',
+    '    <Click class="upload-zone.*active" selektor-regex="true" />',
+    '  </Gruppe>',
+    '</SzenarioScript>',
+    '',
+  ].join('\n'), 'utf8')
+
+  const resolved = await scenarioToSpecSource({
+    scenarioPath,
+    xsdPath,
+    generatedSpecPath,
+  })
+
+  assert.equal(resolved.resolvedRoot.flow.length, 1)
+  assert.equal(resolved.resolvedRoot.flow[0].interaction.type, 'click')
+  assert.equal(resolved.resolvedRoot.flow[0].interaction.target.class, 'upload-zone.*active')
+  assert.equal(resolved.resolvedRoot.flow[0].interaction.target['selektor-regex'], true)
+  assert.match(resolved.specSource, /resolveTargetLocator/)
+  assert.match(resolved.specSource, /upload-zone\.\*active/)
+})
+
+test('inline Upload temp=true resolves runtime variables and uploads file payload', async () => {
+  let uploadedPayload = null
+  const fileLocator = {
+    async waitFor() {},
+    async evaluate() {
+      return true
+    },
+    async setInputFiles(payload) {
+      uploadedPayload = payload
+    },
+    first() {
+      return this
+    },
+    locator() {
+      return this
+    },
+    async scrollIntoViewIfNeeded() {},
+  }
+
+  const page = {
+    locator() {
+      return fileLocator
+    },
+  }
+
+  const executionState = createScenarioExecutionState({
+    page,
+    testInfo: { outputPath: (filename) => filename },
+    runtimeVariables: {
+      kunde: {
+        id: '4711',
+        name: 'Muster GmbH',
+      },
+    },
+  })
+  const executionRuntime = createScenarioExecutionRuntime({
+    page,
+    waitBetweenStepsMs: 0,
+    stepTimeoutMs: 30000,
+  })
+
+  await runPreparedScenarioFlow({
+    steps: [{
+      id: 'upload-inline',
+      interaction: {
+        type: 'upload',
+        target: {
+          'data-id': 'demo/upload',
+        },
+        temp: true,
+        filename: 'beispiel-{{kunde.id}}.csv',
+        value: 'nummer;name\n{{kunde.id}};{{kunde.name}}',
+      },
+    }],
+    executionRuntime,
+    executionState,
+  })
+
+  assert.deepEqual(uploadedPayload, {
+    name: 'beispiel-4711.csv',
+    mimeType: 'application/octet-stream',
+    buffer: Buffer.from('nummer;name\n4711;Muster GmbH', 'utf8'),
+  })
+})
+
 test('fragment Auslesen exports variables that only exist as fragment defaults', async () => {
   const runtimeRoot = await mkdtemp(join(tmpdir(), 'live-test-worker-'))
   const scenarioPath = join(runtimeRoot, 'fragment-default-export.xml')

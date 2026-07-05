@@ -103,7 +103,7 @@
             <xs:element name="Click" type="ClickType"/>
             <xs:element name="Eingabe" type="KomponentInputType"/>
             <xs:element name="Auswahl" type="KomponentInputType"/>
-            <xs:element name="Upload" type="KomponentInputType"/>
+            <xs:element name="Upload" type="UploadType"/>
             <xs:element name="Anzeige" type="InteractionType"/>
             <xs:element name="Auslesen" type="AuslesenType"/>
             <xs:element name="PdfCodeAuslesen" type="PdfCodeAuslesenType"/>
@@ -127,7 +127,7 @@
             <xs:element name="Click" type="ClickType"/>
             <xs:element name="Eingabe" type="KomponentInputType"/>
             <xs:element name="Auswahl" type="KomponentInputType"/>
-            <xs:element name="Upload" type="KomponentInputType"/>
+            <xs:element name="Upload" type="UploadType"/>
             <xs:element name="Anzeige" type="InteractionType"/>
             <xs:element name="Auslesen" type="AuslesenType"/>
             <xs:element name="PdfCodeAuslesen" type="PdfCodeAuslesenType"/>
@@ -215,6 +215,7 @@
         <xs:attribute name="role" type="xs:string" use="optional"/>
         <xs:attribute name="label" type="xs:string" use="optional"/>
         <xs:attribute name="aria-label" type="xs:string" use="optional"/>
+        <xs:attribute name="class" type="xs:string" use="optional"/>
         <!-- NEO verwendet data-id -->
         <xs:attribute name="data-id" type="xs:string" use="optional"/>
         <!-- Lunttes verwendet data-testid -->
@@ -290,6 +291,15 @@
                 <xs:attribute name="eingabe-stil" type="EingabeStilType" use="optional" default="setzen"/>
                 <xs:attribute name="suchstring" type="xs:string" use="optional"/>
                 <xs:attribute name="ersetzten-regexp" type="xs:boolean" use="optional" default="false"/>
+            </xs:extension>
+        </xs:complexContent>
+    </xs:complexType>
+
+    <xs:complexType name="UploadType" mixed="true">
+        <xs:complexContent mixed="true">
+            <xs:extension base="InteractionType">
+                <xs:attribute name="temp" type="xs:boolean" use="optional" default="false"/>
+                <xs:attribute name="dateiname" type="xs:string" use="optional"/>
             </xs:extension>
         </xs:complexContent>
     </xs:complexType>

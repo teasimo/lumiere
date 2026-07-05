@@ -1026,6 +1026,10 @@ function buildTargetFromAttributes(attrs, { includeText = true, includeUrl = fal
     target['aria-label'] = attrs['aria-label']
   }
 
+  if (attrs.class) {
+    target.class = attrs.class
+  }
+
   if (attrs.komponententyp) {
     target.komponententyp = attrs.komponententyp
   }
@@ -1315,13 +1319,27 @@ function mapInteractionElementToStep(element, makeStepId) {
   }
 
   if (tag === 'Upload') {
-    const value = trimmedText || String(attrs.text || '')
+    const isTempUpload = parseBoolLike(attrs.temp, false)
+    const value = isTempUpload ? String(element.text || '') : (trimmedText || String(attrs.text || ''))
+    const filename = String(attrs.dateiname || '').trim()
+    if (isTempUpload && !filename) {
+      throw new Error('Upload with temp="true" requires a non-empty "dateiname" attribute.')
+    }
+    if (!isTempUpload && filename) {
+      throw new Error('Upload attribute "dateiname" is only supported together with temp="true".')
+    }
     return withResolvedMeta({
       id: makeStepId(element, 'upload'),
       interaction: {
         type: 'upload',
         target: buildTargetFromAttributes(attrs, { includeText: false }),
         value,
+        ...(isTempUpload
+          ? {
+              temp: true,
+              filename,
+            }
+          : {}),
       },
     })
   }

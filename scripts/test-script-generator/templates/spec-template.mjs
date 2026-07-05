@@ -737,7 +737,7 @@ function hasUsableScrollTarget(target) {
     return false
   }
 
-  if (target.testid || target.id || target['data-id'] || target.text || target.role) {
+  if (target.testid || target.id || target['data-id'] || target.text || target.role || target.class) {
     return true
   }
 
@@ -749,7 +749,7 @@ function buildScrollTargetSummary(target) {
     return ''
   }
 
-  const fields = ['testid', 'data-id', 'id', 'role', 'text', 'label', 'aria-label', 'selektor-regex', 'treffer-index', 'komponententyp']
+  const fields = ['testid', 'data-id', 'id', 'role', 'text', 'label', 'aria-label', 'class', 'selektor-regex', 'treffer-index', 'komponententyp']
   const parts = []
 
   for (const field of fields) {
@@ -781,7 +781,7 @@ function buildTargetSelectorDescriptions(target) {
 
   const rawRegexFlag = target['selektor-regex']
   const regexEnabled = rawRegexFlag === true || ['true', '1', 'yes'].includes(String(rawRegexFlag || '').trim().toLowerCase())
-  const fields = ['testid', 'data-id', 'id', 'role', 'text', 'label', 'aria-label', 'selektor-regex', 'treffer-index', 'komponententyp', 'click_child_selector']
+  const fields = ['testid', 'data-id', 'id', 'role', 'text', 'label', 'aria-label', 'class', 'selektor-regex', 'treffer-index', 'komponententyp', 'click_child_selector']
   const selectors = []
 
   for (const field of fields) {
@@ -795,7 +795,7 @@ function buildTargetSelectorDescriptions(target) {
       continue
     }
 
-    if (regexEnabled && ['testid', 'data-id', 'text', 'label', 'aria-label'].includes(field)) {
+    if (regexEnabled && ['testid', 'data-id', 'text', 'label', 'aria-label', 'class'].includes(field)) {
       selectors.push(`${field}=/${text}/`)
       continue
     }
@@ -1044,7 +1044,7 @@ function toConditionList(value, keyName, stepId) {
 }
 
 function buildGenericTargetSelector(target) {
-  const reservedKeys = new Set(['testid', 'id', 'data-id', 'text', 'role', 'url', 'state', 'click_child_selector', 'treffer-index', 'selektor-regex', 'label', 'aria-label', 'komponententyp'])
+  const reservedKeys = new Set(['testid', 'id', 'data-id', 'text', 'role', 'url', 'state', 'click_child_selector', 'treffer-index', 'selektor-regex', 'label', 'aria-label', 'class', 'komponententyp'])
   const entries = Object.entries(target || {}).filter(([, value]) => value != null)
   const selectorParts = []
 
@@ -1060,7 +1060,7 @@ function buildGenericTargetSelector(target) {
 }
 
 function targetNeedsRuntimeLocator(target) {
-  return Boolean(target?.role || target?.['selektor-regex'] || target?.label || target?.['aria-label'] || target?.komponententyp)
+  return Boolean(target?.role || target?.['selektor-regex'] || target?.label || target?.['aria-label'] || target?.class || target?.komponententyp)
 }
 
 function buildTargetObjectExpression(target, { runtimeVariables = false } = {}) {
@@ -1411,7 +1411,9 @@ function buildInteractionLines(step, options = {}) {
     if (interaction.value == null || String(interaction.value).trim() === '') {
       throw new Error(`Step "${step.id}" has interaction type "upload" but no file value. Use the XML text content to name the file in neo/assets.`)
     }
-    const resolvedFileExpr = `resolveRuntimeTemplateString(${toLiteral(String(interaction.value || ''))}, runtimeVariables)`
+    const resolvedFileExpr = interaction.temp === true
+      ? `({ temp: true, filename: resolveRuntimeTemplateString(${toLiteral(String(interaction.filename || ''))}, runtimeVariables), content: resolveRuntimeTemplateString(${toLiteral(String(interaction.value || ''))}, runtimeVariables) })`
+      : `resolveRuntimeTemplateString(${toLiteral(String(interaction.value || ''))}, runtimeVariables)`
     if (targetNeedsRuntimeLocator(target)) {
       lines.push(`const __scenarioUploadLocator = await resolveTargetLocator(page, ${buildTargetObjectExpression(target, { runtimeVariables: true })}, { textMode: 'label' })`)
       lines.push(`await applyUploadValueToLocator(page, __scenarioUploadLocator, ${resolvedFileExpr}, { smoothScroll: ${smoothScrollEnabledRef}, stepDelayMs: ${scrollDelayRef}, skipAutoScroll: true })`)

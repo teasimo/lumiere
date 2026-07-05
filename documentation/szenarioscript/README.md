@@ -392,6 +392,13 @@ Lädt eine Datei in ein Upload-Control.
 
 Der Textinhalt ist der Dateipfad bzw. Dateiname.
 
+Mit `temp="true"` wird stattdessen der Inhalt zwischen Start- und End-Tag als temporaere Upload-Datei verwendet. `dateiname` ist dann Pflicht. Variablen im Inhalt werden zur Laufzeit aufgeloest.
+
+```xml
+<Upload data-id="g_scp_zvb/$data0/file_zielvereinbarung" temp="true" dateiname="beispiel.csv">kundennummer;name
+{{kunde.id}};{{kunde.name}}</Upload>
+```
+
 ### `Warten`
 
 Wartet auf einen Zustand oder einfach fuer eine Zeitspanne.

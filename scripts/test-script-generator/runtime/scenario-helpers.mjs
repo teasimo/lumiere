@@ -1,4 +1,5 @@
 import { access, writeFile } from 'fs/promises'
+import { Buffer } from 'buffer'
 import { dirname, isAbsolute, join, resolve } from 'path'
 import { fileURLToPath } from 'url'
 import { centralFillStrategies } from "./central-fill-strategies.mjs"
@@ -168,6 +169,23 @@ async function resolveUploadAssetPath(rawPath) {
   }
 
   throw new Error(`Upload-Datei nicht gefunden: ${requestedPath}. Erwartet unter neo/assets oder als absoluter/relativer Pfad.`)
+}
+
+async function resolveUploadInput(upload) {
+  if (upload && typeof upload === 'object' && upload.temp === true) {
+    const filename = String(upload.filename ?? '').trim()
+    if (!filename) {
+      throw new Error('Temporärer Upload requires a non-empty filename.')
+    }
+
+    return {
+      name: filename,
+      mimeType: 'application/octet-stream',
+      buffer: Buffer.from(String(upload.content ?? ''), 'utf8'),
+    }
+  }
+
+  return resolveUploadAssetPath(upload)
 }
 
 async function resolveUploadLocator(page, locator) {
@@ -998,6 +1016,9 @@ function buildConditionCandidateSelector(target = {}) {
   if (target['aria-label']) {
     return '[aria-label]'
   }
+  if (target.class) {
+    return '[class]'
+  }
   if (target.label) {
     return '[label], [aria-label], input, textarea, select, [role="textbox"]'
   }
@@ -1019,6 +1040,7 @@ async function evaluateTargetVisibilityState(page, target = {}, options = {}) {
       dataId: target['data-id'] == null ? null : String(target['data-id']),
       label: target.label == null ? null : String(target.label),
       ariaLabel: target['aria-label'] == null ? null : String(target['aria-label']),
+      className: target.class == null ? null : String(target.class),
       role: target.role == null ? null : String(target.role),
       text: target.text == null ? null : String(target.text),
       komponententyp: target.komponententyp == null ? null : String(target.komponententyp),
@@ -1063,6 +1085,9 @@ async function evaluateTargetVisibilityState(page, target = {}, options = {}) {
         return
       }
       if (!matchesText(element.getAttribute('aria-label'), config.target.ariaLabel, config.useRegex)) {
+        return
+      }
+      if (!matchesText(element.getAttribute('class'), config.target.className, config.useRegex)) {
         return
       }
       if (config.target.role != null && String(element.getAttribute('role') || '') !== config.target.role) {
@@ -1308,6 +1333,9 @@ export async function resolveTargetLocator(page, target = {}, options = {}) {
   }
   if (target['aria-label']) {
     return pickAttributeLocator(page, 'aria-label', target['aria-label'], target, { preferredControl })
+  }
+  if (target.class) {
+    return pickAttributeLocator(page, 'class', target.class, target, { preferredControl })
   }
   if (target.role) {
     const roleName = String(target.role)
@@ -2091,8 +2119,8 @@ export async function applyUploadValue(page, testId, value, options = {}) {
 export async function applyUploadValueToLocator(page, rootLocator, value, options = {}) {
   await ensureLocatorScroll(page, rootLocator, options)
   const fileLocator = await resolveUploadLocator(page, rootLocator)
-  const uploadPath = await resolveUploadAssetPath(value)
-  await fileLocator.setInputFiles(uploadPath)
+  const uploadInput = await resolveUploadInput(value)
+  await fileLocator.setInputFiles(uploadInput)
 }
 
 export async function applyUploadValueById(page, elementId, value, selectorType = "id", options = {}) {
@@ -2104,8 +2132,8 @@ export async function applyUploadValueById(page, elementId, value, selectorType 
   const rootLocator = await pickLocator(page.locator(selector), options)
   await ensureLocatorScroll(page, rootLocator, options)
   const fileLocator = await resolveUploadLocator(page, rootLocator)
-  const uploadPath = await resolveUploadAssetPath(value)
-  await fileLocator.setInputFiles(uploadPath)
+  const uploadInput = await resolveUploadInput(value)
+  await fileLocator.setInputFiles(uploadInput)
 }
 
 export async function applyAppendValue(page, testId, value, options = {}) {
@@ -2271,11 +2299,11 @@ async function clickWithOverlayRecovery(page, locator, options = {}) {
 }
 
 function scenarioTargetNeedsRuntimeLocator(target) {
-  return Boolean(target?.role || target?.['selektor-regex'] || target?.label || target?.['aria-label'] || target?.komponententyp)
+  return Boolean(target?.role || target?.['selektor-regex'] || target?.label || target?.['aria-label'] || target?.class || target?.komponententyp)
 }
 
 function scenarioBuildGenericTargetSelector(target = {}) {
-  const reservedKeys = new Set(['testid', 'id', 'data-id', 'text', 'role', 'url', 'state', 'click_child_selector', 'treffer-index', 'selektor-regex', 'label', 'aria-label', 'komponententyp'])
+  const reservedKeys = new Set(['testid', 'id', 'data-id', 'text', 'role', 'url', 'state', 'click_child_selector', 'treffer-index', 'selektor-regex', 'label', 'aria-label', 'class', 'komponententyp'])
   const selectorParts = []
 
   for (const [key, value] of Object.entries(target || {})) {
@@ -2290,7 +2318,7 @@ function scenarioBuildGenericTargetSelector(target = {}) {
 
 function scenarioBuildTargetSelectorDescriptions(target = {}) {
   const regexEnabled = parseTargetRegexFlag(target)
-  const fields = ['testid', 'data-id', 'id', 'role', 'text', 'label', 'aria-label', 'selektor-regex', 'treffer-index', 'komponententyp', 'click_child_selector']
+  const fields = ['testid', 'data-id', 'id', 'role', 'text', 'label', 'aria-label', 'class', 'selektor-regex', 'treffer-index', 'komponententyp', 'click_child_selector']
   const selectors = []
 
   for (const field of fields) {
@@ -2304,7 +2332,7 @@ function scenarioBuildTargetSelectorDescriptions(target = {}) {
       continue
     }
 
-    if (regexEnabled && ['testid', 'data-id', 'text', 'label', 'aria-label'].includes(field)) {
+    if (regexEnabled && ['testid', 'data-id', 'text', 'label', 'aria-label', 'class'].includes(field)) {
       selectors.push(`${field}=/${text}/`)
       continue
     }
@@ -2379,7 +2407,7 @@ function scenarioHasUsableScrollTarget(target) {
     return false
   }
 
-  if (target.testid || target.id || target['data-id'] || target.text || target.role) {
+  if (target.testid || target.id || target['data-id'] || target.text || target.role || target.class) {
     return true
   }
 
@@ -2387,7 +2415,7 @@ function scenarioHasUsableScrollTarget(target) {
 }
 
 function scenarioBuildScrollTargetSummary(target = {}) {
-  const fields = ['testid', 'data-id', 'id', 'role', 'text', 'label', 'aria-label', 'selektor-regex', 'treffer-index', 'komponententyp']
+  const fields = ['testid', 'data-id', 'id', 'role', 'text', 'label', 'aria-label', 'class', 'selektor-regex', 'treffer-index', 'komponententyp']
   const parts = []
 
   for (const field of fields) {
@@ -2812,7 +2840,13 @@ export async function executeScenarioStep(context, step, runtimeOptions = {}) {
       throw new Error(`Step "${step.id}" has interaction type "select" but no supported target.`)
     }
   } else if (interactionType === 'upload') {
-    const resolvedFile = resolveRuntimeTemplateString(String(interaction.value || ''), runtimeVariables)
+    const resolvedFile = interaction.temp === true
+      ? {
+          temp: true,
+          filename: resolveRuntimeTemplateString(String(interaction.filename || ''), runtimeVariables),
+          content: resolveRuntimeTemplateString(String(interaction.value || ''), runtimeVariables),
+        }
+      : resolveRuntimeTemplateString(String(interaction.value || ''), runtimeVariables)
     if (scenarioTargetNeedsRuntimeLocator(target)) {
       const locator = await resolveTargetLocator(page, target, { textMode: 'label' })
       await applyUploadValueToLocator(page, locator, resolvedFile, { smoothScroll: smoothScrollEnabled, stepDelayMs: scrollDelayMs, skipAutoScroll: true })
