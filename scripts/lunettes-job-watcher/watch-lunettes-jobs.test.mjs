@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFile, rm } from 'fs/promises'
 
 import {
   assertManagedLiveTestWorkerHealthy,
@@ -7,6 +8,7 @@ import {
   createManagedLiveTestWorkerState,
   getEffectiveJobPayload,
   noteManagedLiveTestWorkerExit,
+  resolveScenarioInput,
   shouldStartManagedLiveTestWorker,
 } from './watch-lunettes-jobs.mjs'
 
@@ -136,6 +138,48 @@ test('publish artifact plan uses only persistent artifacts', () => {
     ['testscript', 'videoscript'],
   )
   assert.deepEqual(plan.flush, [])
+})
+
+test('publish scenario input falls back to Lunettes API when payload and cache are empty', async () => {
+  const originalFetch = globalThis.fetch
+  const scenarioId = 'watcher-api-fallback'
+  const xml = '<?xml version="1.0" encoding="UTF-8"?><SzenarioScript id="api-source" titel="API Source"><Gruppe /></SzenarioScript>'
+  const requestedUrls = []
+
+  globalThis.fetch = async (url) => {
+    requestedUrls.push(String(url))
+    return {
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      async text() {
+        return JSON.stringify({ szenario: xml })
+      },
+    }
+  }
+
+  try {
+    const resolved = await resolveScenarioInput({
+      id: 'test-api-fallback',
+      type: 'publish',
+      szenario_id: scenarioId,
+      payload: {
+        szenario_id: scenarioId,
+      },
+    }, '7', {
+      baseUrl: 'https://lunettes.example.test',
+      authHeader: 'Basic test',
+    })
+
+    assert.equal(resolved.source, 'lunettes-api')
+    assert.match(requestedUrls[0], /\/api\/anfo\/szenario\/watcher-api-fallback\?version=7$/)
+    assert.equal(await readFile(resolved.scenarioPath, 'utf8'), xml)
+    assert.equal(resolved.scenarioMeta.scenarioId, 'api-source')
+    assert.equal(resolved.scenarioMeta.scenarioVersion, '7')
+  } finally {
+    globalThis.fetch = originalFetch
+    await rm(`neo/interactions/_lunettes-job-watcher/szenario-${scenarioId}`, { recursive: true, force: true })
+  }
 })
 
 test('effective job payload keeps flat scenario version fields for generator jobs', () => {

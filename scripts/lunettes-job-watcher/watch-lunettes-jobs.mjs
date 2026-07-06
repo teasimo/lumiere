@@ -493,6 +493,30 @@ function extractScenarioVersionFromApiPayload(payload) {
   return null
 }
 
+function extractScenarioXmlFromApiPayload(payload) {
+  if (payload == null || typeof payload !== 'object') {
+    return ''
+  }
+
+  const candidates = [
+    payload?.szenario,
+    payload?.scenario,
+    payload?.xml,
+    payload?.data?.szenario,
+    payload?.data?.scenario,
+    payload?.data?.xml,
+  ]
+
+  for (const candidate of candidates) {
+    const value = String(candidate ?? '').trim()
+    if (value) {
+      return value
+    }
+  }
+
+  return ''
+}
+
 export function getEffectiveJobPayload(job) {
   const nestedPayload = job?.payload && typeof job.payload === 'object' ? job.payload : {}
 
@@ -729,7 +753,30 @@ async function resolveLatestScenarioXmlFromCache(szenarioId) {
   return canonicalPath
 }
 
-async function resolveScenarioInput(job, scenarioVersion = 'unknown') {
+async function fetchScenarioXmlFromLunettes(job, context, scenarioVersion = 'unknown') {
+  const payload = getEffectiveJobPayload(job)
+  const lunettesScenarioId = String(job?.szenario_id || payload?.szenario_id || '').trim()
+  if (!lunettesScenarioId || !context?.baseUrl || !context?.authHeader) {
+    return null
+  }
+
+  const query = new URLSearchParams()
+  const normalizedVersion = String(scenarioVersion || '').trim()
+  if (normalizedVersion && normalizedVersion !== 'unknown') {
+    query.set('version', normalizedVersion)
+  }
+
+  const endpoint = `${context.baseUrl}/api/anfo/szenario/${encodeURIComponent(lunettesScenarioId)}${query.size > 0 ? `?${query.toString()}` : ''}`
+  const apiPayload = await fetchJson(endpoint, { authHeader: context.authHeader })
+  const xmlRaw = extractScenarioXmlFromApiPayload(apiPayload)
+  if (!xmlRaw) {
+    throw new Error(`Lunettes-Szenario ${lunettesScenarioId} lieferte kein Szenario-XML.`)
+  }
+
+  return persistScenarioXml({ job, xmlRaw, scenarioVersion })
+}
+
+export async function resolveScenarioInput(job, scenarioVersion = 'unknown', context = null) {
   const payload = getEffectiveJobPayload(job)
   const payloadXml = typeof payload.szenario === 'string' ? payload.szenario.trim() : ''
   if (payloadXml) {
@@ -743,7 +790,15 @@ async function resolveScenarioInput(job, scenarioVersion = 'unknown') {
 
   const cachedPath = await resolveLatestScenarioXmlFromCache(job?.szenario_id)
   if (!cachedPath) {
-    throw new Error(`Kein Szenario-XML fuer szenario_id=${job?.szenario_id} im Payload oder Cache gefunden.`)
+    const fetched = await fetchScenarioXmlFromLunettes(job, context, scenarioVersion)
+    if (!fetched) {
+      throw new Error(`Kein Szenario-XML fuer szenario_id=${job?.szenario_id} im Payload, Cache oder Lunettes gefunden.`)
+    }
+    return {
+      scenarioPath: fetched.canonicalPath,
+      scenarioMeta: fetched,
+      source: 'lunettes-api',
+    }
   }
 
   const xmlRaw = await readFile(cachedPath, 'utf8')
@@ -1648,7 +1703,7 @@ async function processJob(job, context) {
   const scenarioVersion = await resolveJobScenarioVersion(job, context)
   const restorePlan = buildScenarioArtifactPlan(job, null, scenarioVersion)
   await restoreScenarioArtifactsFromS3(context, restorePlan)
-  const scenarioInput = await resolveScenarioInput(job, scenarioVersion)
+  const scenarioInput = await resolveScenarioInput(job, scenarioVersion, context)
   const effectiveScenarioVersion = scenarioVersion
   const artifactPlan = buildScenarioArtifactPlan(job, scenarioInput, effectiveScenarioVersion)
   const scenarioPathRelative = relative(workspaceRoot, scenarioInput.scenarioPath)
