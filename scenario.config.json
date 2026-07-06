@@ -10,7 +10,7 @@
         "step_timeout_ms": 80000
       },
       "lunettes_api": {
-        "base_url": "http://localhost:5173/"
+        "base_url": "https://exigences-h9c6b9fweraub4eg.swedencentral-01.azurewebsites.net/"
       },
       "video": {
         "wait_between_steps": 2000,
@@ -18,8 +18,8 @@
         "scroll_step_px": 20,
         "autoscroll_smooth": false,
         "resolution": {
-          "width": 1280,
-          "height": 720
+          "width": 1920,
+          "height": 1080
         }
       }
     },
@@ -95,25 +95,25 @@
     },
     "live-test-worker": {
       "enabled": true,      
-      "base_url": "http://localhost:5173/",
+      "base_url": "https://exigences-h9c6b9fweraub4eg.swedencentral-01.azurewebsites.net/",
       "worker_name": "playwright-live-test-worker",
       "worker_session_id": "",
       "poll_interval_ms": 1000,
       "heartbeat_interval_ms": 30000
     },
     "lunettes-job-watcher": {
-      "base_url": "http://localhost:5173/"
+      "base_url": "https://exigences-h9c6b9fweraub4eg.swedencentral-01.azurewebsites.net/"
     },
     "software": {
       "NEO Niedersachsen": {
         "test-script": {
           "lunettes_api": {
-            "base_url": "http://localhost:5173/"
+            "base_url": "https://exigences-h9c6b9fweraub4eg.swedencentral-01.azurewebsites.net/"
           },
           "video": {
             "resolution": {
-              "width": 1880,
-              "height": 2000
+              "width": 1920,
+              "height": 1080
             }
           }
         },
@@ -130,7 +130,7 @@
       "Lunettes": {
         "test-script": {
           "lunettes_api": {
-            "base_url": "http://localhost:5173/"
+            "base_url": "https://exigences-h9c6b9fweraub4eg.swedencentral-01.azurewebsites.net/"
           }
         },
         "publish-to-confluence": {

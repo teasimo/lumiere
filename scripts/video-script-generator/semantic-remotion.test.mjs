@@ -95,3 +95,45 @@ test('buildRemotionRenderPlan duration follows semantic step durations instead o
   assert.equal(renderPlan.outputDurationSec, 1)
   assert.equal(renderPlan.durationInFrames, 30)
 })
+
+test('buildSemanticVideoPlan inserts scroll segments between included steps', () => {
+  const plan = buildSemanticVideoPlan({
+    scenarioRoot: {
+      id: 'scenario-scroll',
+      title: 'Scenario Scroll',
+      flow: [
+        { id: 'step-1', title: 'Step 1', interaction: { type: 'fill' } },
+        { id: 'step-2', title: 'Step 2', interaction: { type: 'click' } },
+      ],
+    },
+    timelineReport: {
+      steps: [
+        { stepId: 'step-1', startedAtMs: 1000, endedAtMs: 1500 },
+        { stepId: 'step-2__autoscroll', interactionType: 'scroll', startedAtMs: 2000, endedAtMs: 2200 },
+        { stepId: 'step-2', startedAtMs: 2500, endedAtMs: 3000 },
+      ],
+    },
+    stepSegments: [
+      { stepId: 'step-1', interactionType: 'fill', start: 0, end: 0.5 },
+      { stepId: 'step-2__autoscroll', interactionType: 'scroll', start: 1, end: 1.2 },
+      { stepId: 'step-2', interactionType: 'click', start: 1.5, end: 2 },
+    ],
+    adjustedAudioFiles: [],
+    inputVideo: '/tmp/input.mp4',
+    outputVideo: '/tmp/output.mp4',
+    width: 1280,
+    height: 720,
+    fps: 30,
+  })
+
+  const steps = plan.chapters.flatMap((chapter) => chapter.steps)
+  assert.deepEqual(steps.map((step) => step.id), [
+    'step-1',
+    'step-2__autoscroll',
+    'step-2',
+  ])
+  assert.deepEqual(steps[1].clip, {
+    sourceStartMs: 1000,
+    sourceEndMs: 1200,
+  })
+})

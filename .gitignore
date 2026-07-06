@@ -3,3 +3,4 @@ node_modules/
 npm-debug.log*
 output
 neo/interactions/_lunettes-job-watcher
+szenario

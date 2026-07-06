@@ -398,6 +398,68 @@ function buildStepTagMap(stepWindowById, stepSegments) {
   return tagMap
 }
 
+function normalizeScrollOriginStepId(value) {
+  return String(value || '').trim().replace(/__autoscroll$/i, '')
+}
+
+function buildScrollSegmentMap({ stepSegments, stepWindowById }) {
+  const scrollSegmentsByTargetStepId = new Map()
+  const windows = [...stepWindowById.entries()].map(([stepId, window]) => ({
+    stepId,
+    sourceStartMs: Math.max(0, Number(window?.sourceStartMs || 0)),
+    sourceEndMs: Math.max(0, Number(window?.sourceEndMs || 0)),
+  }))
+
+  for (const segment of Array.isArray(stepSegments) ? stepSegments : []) {
+    const interactionType = String(segment?.interactionType || '').trim().toLowerCase()
+    if (interactionType !== 'scroll') {
+      continue
+    }
+
+    const rawStepId = String(segment?.stepId || '').trim()
+    const targetStepId = normalizeScrollOriginStepId(rawStepId)
+    const targetWindow = targetStepId ? stepWindowById.get(targetStepId) : null
+    if (!targetStepId || !targetWindow) {
+      continue
+    }
+
+    const segmentStartMs = Math.max(0, Math.round(Number(segment?.start || 0) * 1000))
+    const segmentEndMs = Math.max(segmentStartMs + 1, Math.round(Number(segment?.end || 0) * 1000))
+    const targetStartMs = Math.max(0, Number(targetWindow?.sourceStartMs || 0))
+
+    const previousWindow = windows
+      .filter((window) => window.stepId !== targetStepId && window.sourceEndMs <= targetStartMs)
+      .sort((left, right) => right.sourceEndMs - left.sourceEndMs)[0] || null
+
+    if (!previousWindow) {
+      continue
+    }
+
+    const clippedStartMs = Math.max(segmentStartMs, previousWindow.sourceEndMs)
+    const clippedEndMs = Math.min(segmentEndMs, targetStartMs)
+    if (clippedEndMs <= clippedStartMs) {
+      continue
+    }
+
+    if (!scrollSegmentsByTargetStepId.has(targetStepId)) {
+      scrollSegmentsByTargetStepId.set(targetStepId, [])
+    }
+    scrollSegmentsByTargetStepId.get(targetStepId).push({
+      id: rawStepId || `${targetStepId}__autoscroll`,
+      targetStepId,
+      label: String(segment?.label || 'Scroll').trim() || 'Scroll',
+      sourceStartMs: clippedStartMs,
+      sourceEndMs: clippedEndMs,
+    })
+  }
+
+  for (const entries of scrollSegmentsByTargetStepId.values()) {
+    entries.sort((left, right) => left.sourceStartMs - right.sourceStartMs)
+  }
+
+  return scrollSegmentsByTargetStepId
+}
+
 function toChapterCardCallout(chapterCard, slideDefaults = null) {
   if (!chapterCard || typeof chapterCard !== 'object') {
     return []
@@ -644,6 +706,7 @@ export function buildSemanticVideoPlan({
   const { narrationsByStepId, pausesByStepId } = buildNarrationGroups(adjustedAudioFiles)
   const clickMarkersByStepId = groupClickMarkersByStep(stepWindowById, clickMarkers)
   const tagMap = buildStepTagMap(stepWindowById, stepSegments)
+  const scrollSegmentsByTargetStepId = buildScrollSegmentMap({ stepSegments, stepWindowById })
   const chapterCardById = new Map((Array.isArray(chapterCards) ? chapterCards : []).map((entry) => [String(entry?.sourceScenarioStepId || '').trim(), entry]))
   const clickPresentation = {
     freezeBeforeMs: Math.max(0, Math.floor(Number(clickIndicator?.beforeMs || 800))),
@@ -765,6 +828,25 @@ export function buildSemanticVideoPlan({
     }
     const basePauses = normalizePausesForClip(pausesByStepId.get(stepId) || [], stepClip)
     const baseMarkers = [...(clickMarkersByStepId.get(stepId) || [])]
+    const scrollSegmentsBeforeStep = scrollSegmentsByTargetStepId.get(stepId) || []
+    for (const scrollSegment of scrollSegmentsBeforeStep) {
+      const scrollClip = {
+        sourceStartMs: scrollSegment.sourceStartMs,
+        sourceEndMs: scrollSegment.sourceEndMs,
+      }
+      currentChapter.steps.push({
+        id: scrollSegment.id,
+        title: scrollSegment.label,
+        'row-index': flowEntry?.step?.['row-index'] ?? null,
+        tags: ['Scroll'],
+        clip: scrollClip,
+        freezes: [],
+        pauses: [],
+        narrations: [],
+        callouts: [],
+        clickMarkers: [],
+      })
+    }
 
     const holdDurationMs = clickPresentation.freezeBeforeMs + clickPresentation.highlightDurationMs + clickPresentation.afterMs
     if (holdDurationMs > 0 && CLICKMARKER_FREEZE && baseMarkers.length > 0) {

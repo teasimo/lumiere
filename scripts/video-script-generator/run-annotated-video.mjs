@@ -2274,6 +2274,24 @@ function resolveTimelineOriginMs(timelineReport) {
   return 0
 }
 
+function scaleTimelinePointToVideo({ x, y, viewport, videoDimensions }) {
+  const rawX = Math.max(0, Number(x || 0))
+  const rawY = Math.max(0, Number(y || 0))
+  const viewportWidth = Math.max(0, Number(viewport?.width || 0))
+  const viewportHeight = Math.max(0, Number(viewport?.height || 0))
+  const videoWidth = Math.max(0, Number(videoDimensions?.width || 0))
+  const videoHeight = Math.max(0, Number(videoDimensions?.height || 0))
+
+  if (viewportWidth <= 0 || viewportHeight <= 0 || videoWidth <= 0 || videoHeight <= 0) {
+    return { x: rawX, y: rawY }
+  }
+
+  return {
+    x: Math.max(0, Math.min(videoWidth, rawX * (videoWidth / viewportWidth))),
+    y: Math.max(0, Math.min(videoHeight, rawY * (videoHeight / viewportHeight))),
+  }
+}
+
 export function buildVisualTimelineFromScenarioTimeline({ timelineReport, clickIndicatorConfig = null }) {
   const stepSegments = normalizeTimelineVideoSegments(timelineReport)
   const clickMarkers = clickIndicatorConfig?.enabled === true
@@ -4058,6 +4076,7 @@ async function runScenarioTtsMode({ scenarioPath, scenarioId, scenarioVersion: s
     timelineReport: artifacts.timeline,
     clickIndicatorConfig,
   })
+  const sourceVideoDimensions = getVideoDimensions(sourceVideoForTts)
 
   if (presentationRange && !remotionPlanOnly) {
     const presentationMetaPath = join(ttsOutputDir, `scenario-presentation-range-${profileToken}-${runId}.json`)
@@ -4244,33 +4263,55 @@ async function runScenarioTtsMode({ scenarioPath, scenarioId, scenarioVersion: s
     audioFiles = applyNarrationTimingToAudioFiles(synthesized.audioFiles, effectiveNarrations)
   }
 
+  const timelineOriginMs = resolveTimelineOriginMs(artifacts.timeline)
+  const clipStartMs = presentationRange
+    ? Math.max(0, Number(presentationRange.startMs) || 0)
+    : 0
+  const clipEndMs = presentationRange?.endMs == null
+    ? null
+    : Math.max(clipStartMs, Number(presentationRange.endMs) || clipStartMs)
+
   const visualOverlays = {
     stepSegments: Array.isArray(visualTimeline.stepSegments)
-      ? visualTimeline.stepSegments.map((segment) => ({
-          label: String(segment?.label || ''),
-          start: Math.max(0, Number(segment?.startMs || 0)) / 1000,
-          end: Math.max(0, Number(segment?.endMs || 0)) / 1000,
-        }))
+      ? visualTimeline.stepSegments.map((segment) => {
+          const absoluteStartMs = Math.max(0, Number(segment?.startMs || 0))
+          const absoluteEndMs = Math.max(absoluteStartMs + 1, Number(segment?.endMs || (absoluteStartMs + 1)))
+          const sourceRelativeStartMs = Math.max(0, absoluteStartMs - timelineOriginMs)
+          const sourceRelativeEndMs = Math.max(sourceRelativeStartMs + 1, absoluteEndMs - timelineOriginMs)
+          const clippedStartMs = Math.max(sourceRelativeStartMs, clipStartMs)
+          const clippedEndMs = clipEndMs == null
+            ? sourceRelativeEndMs
+            : Math.min(sourceRelativeEndMs, clipEndMs)
+          if (clippedEndMs <= clippedStartMs) {
+            return null
+          }
+          return {
+            stepId: String(segment?.stepId || '').trim() || undefined,
+            label: String(segment?.label || ''),
+            interactionType: segment?.interactionType == null ? undefined : String(segment.interactionType),
+            start: clippedStartMs / 1000,
+            end: clippedEndMs / 1000,
+          }
+        }).filter(Boolean)
       : [],
     clickMarkers: Array.isArray(visualTimeline.clickMarkers)
       ? (() => {
-          const timelineOriginMs = resolveTimelineOriginMs(artifacts.timeline)
-          const clipStartMs = presentationRange
-            ? Math.max(0, Number(presentationRange.startMs) || 0)
-            : 0
-          const clipEndMs = presentationRange?.endMs == null
-            ? null
-            : Math.max(clipStartMs, Number(presentationRange.endMs) || clipStartMs)
           return visualTimeline.clickMarkers.map((marker) => {
             const absoluteAtMs = Math.max(0, Number(marker?.atMs || 0))
             const sourceRelativeAtMs = Math.max(0, absoluteAtMs - timelineOriginMs)
             if (sourceRelativeAtMs < clipStartMs || (clipEndMs != null && sourceRelativeAtMs > clipEndMs)) {
               return null
             }
+            const scaledPoint = scaleTimelinePointToVideo({
+              x: marker?.x,
+              y: marker?.y,
+              viewport: visualTimeline.viewport,
+              videoDimensions: sourceVideoDimensions,
+            })
             return {
               stepId: String(marker?.stepId || '').trim() || undefined,
-              x: Math.max(0, Number(marker?.x || 0)),
-              y: Math.max(0, Number(marker?.y || 0)),
+              x: scaledPoint.x,
+              y: scaledPoint.y,
               at: sourceRelativeAtMs / 1000,
               durationMs: Math.max(1, Math.floor((Number(clickIndicatorConfig?.beforeMs || 0) + Number(clickIndicatorConfig?.afterMs || 0)) || 900)),
             }
