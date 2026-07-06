@@ -5,6 +5,7 @@ import {
   assertManagedLiveTestWorkerHealthy,
   buildScenarioArtifactPlan,
   createManagedLiveTestWorkerState,
+  getEffectiveJobPayload,
   noteManagedLiveTestWorkerExit,
   shouldStartManagedLiveTestWorker,
 } from './watch-lunettes-jobs.mjs'
@@ -59,7 +60,7 @@ test('managed live-test worker becomes fatal after repeated crashes inside crash
   })
 
   assert.match(state.fatalError?.message || '', /Live-Test-Worker abgestuerzt/)
-  assert.throws(() => assertManagedLiveTestWorkerHealthy(context, state), /Live-Test-Worker abgestuerzt/)
+  assert.doesNotThrow(() => assertManagedLiveTestWorkerHealthy(context, state))
   assert.equal(shouldStartManagedLiveTestWorker(context, state, 50000), false)
 })
 
@@ -76,6 +77,22 @@ test('managed live-test worker becomes fatal on immediate startup crash', () => 
   })
 
   assert.match(state.fatalError?.message || '', /min_uptime_ms=10000/)
+})
+
+test('managed live-test worker can still fail the watcher when explicitly configured', () => {
+  const context = createContext({
+    liveTestWorkerFatalAffectsWatcher: true,
+    liveTestWorkerMinUptimeMs: 10000,
+  })
+  const state = createManagedLiveTestWorkerState()
+
+  noteManagedLiveTestWorkerExit(context, state, {
+    code: 1,
+    startedAtMs: 1000,
+    exitedAtMs: 1500,
+  })
+
+  assert.throws(() => assertManagedLiveTestWorkerHealthy(context, state), /Live-Test-Worker abgestuerzt/)
 })
 
 test('videoscript artifact plan restores persistent testscript artifacts without legacy runs', () => {
@@ -119,4 +136,22 @@ test('publish artifact plan uses only persistent artifacts', () => {
     ['testscript', 'videoscript'],
   )
   assert.deepEqual(plan.flush, [])
+})
+
+test('effective job payload keeps flat scenario version fields for generator jobs', () => {
+  const payload = getEffectiveJobPayload({
+    szenario_id: 52,
+    szenario_version: 7,
+    titel: 'Bewerbungsverfahren anlegen',
+    software: 'NEO Niedersachsen',
+    payload: {
+      trigger: 'manual',
+    },
+  })
+
+  assert.equal(payload.szenario_id, 52)
+  assert.equal(payload.szenario_version, 7)
+  assert.equal(payload.trigger, 'manual')
+  assert.equal(payload.titel, 'Bewerbungsverfahren anlegen')
+  assert.equal(payload.software, 'NEO Niedersachsen')
 })

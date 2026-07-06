@@ -272,8 +272,7 @@ function buildNarrationGroups(adjustedAudioFiles) {
   }
 }
 
-function groupClickMarkersByStep(stepWindowById, clickMarkers, markerSourceOffsetMs = 0) {
-  const sourceOffsetMs = Math.max(0, Math.floor(Number(markerSourceOffsetMs) || 0))
+function groupClickMarkersByStep(stepWindowById, clickMarkers) {
   const clickMarkersByStepId = new Map(
     [...stepWindowById.keys()].map((stepId) => [stepId, []]),
   )
@@ -282,12 +281,13 @@ function groupClickMarkersByStep(stepWindowById, clickMarkers, markerSourceOffse
     order: index,
     sourceStartMs: Math.max(0, Number(window?.sourceStartMs || 0)),
     sourceEndMs: Math.max(0, Number(window?.sourceEndMs || 0)),
-    originalStartMs: Math.max(0, Number(window?.originalStartMs ?? window?.sourceStartMs ?? 0)),
-    originalEndMs: Math.max(0, Number(window?.originalEndMs ?? window?.sourceEndMs ?? 0)),
   }))
+  const windowByStepId = new Map(windows.map((window) => [window.stepId, window]))
 
   for (const marker of Array.isArray(clickMarkers) ? clickMarkers : []) {
-    const markerAtMs = Math.max(0, Math.round(Number(marker?.at || 0) * 1000) + sourceOffsetMs)
+    const markerAtMs = Math.max(0, Math.round(Number(marker?.at || 0) * 1000))
+    const markerStepId = String(marker?.stepId || '').trim()
+    const directWindow = markerStepId ? windowByStepId.get(markerStepId) : null
     const normalizedMarker = {
       atSourceMs: markerAtMs,
       x: Math.max(0, Number(marker?.x || 0)),
@@ -295,20 +295,24 @@ function groupClickMarkersByStep(stepWindowById, clickMarkers, markerSourceOffse
       durationMs: Math.max(1, Math.floor(Number(marker?.durationMs || 900))),
     }
 
-    const originalMatches = windows.filter((window) => (
-      markerAtMs >= window.originalStartMs && markerAtMs <= window.originalEndMs
-    ))
-    const sourceMatches = windows.filter((window) => (
+    if (directWindow) {
+      clickMarkersByStepId.get(directWindow.stepId).push({
+        ...normalizedMarker,
+        atSourceMs: Math.max(directWindow.sourceStartMs, Math.min(markerAtMs, directWindow.sourceEndMs)),
+      })
+      continue
+    }
+
+    const candidates = windows.filter((window) => (
       markerAtMs >= window.sourceStartMs && markerAtMs <= window.sourceEndMs
     ))
-    const candidates = originalMatches.length > 0 ? originalMatches : sourceMatches
     if (candidates.length === 0) {
       continue
     }
 
     candidates.sort((left, right) => {
-      const leftCenterDistance = Math.abs(markerAtMs - ((left.originalStartMs + left.originalEndMs) / 2))
-      const rightCenterDistance = Math.abs(markerAtMs - ((right.originalStartMs + right.originalEndMs) / 2))
+      const leftCenterDistance = Math.abs(markerAtMs - ((left.sourceStartMs + left.sourceEndMs) / 2))
+      const rightCenterDistance = Math.abs(markerAtMs - ((right.sourceStartMs + right.sourceEndMs) / 2))
       if (leftCenterDistance !== rightCenterDistance) {
         return leftCenterDistance - rightCenterDistance
       }
@@ -638,10 +642,7 @@ export function buildSemanticVideoPlan({
     stepTiming,
   })
   const { narrationsByStepId, pausesByStepId } = buildNarrationGroups(adjustedAudioFiles)
-  const clickMarkerSourceOffsetMs = presentationRange
-    ? Math.max(0, Number(presentationRange.startMs) || 0)
-    : 0
-  const clickMarkersByStepId = groupClickMarkersByStep(stepWindowById, clickMarkers, clickMarkerSourceOffsetMs)
+  const clickMarkersByStepId = groupClickMarkersByStep(stepWindowById, clickMarkers)
   const tagMap = buildStepTagMap(stepWindowById, stepSegments)
   const chapterCardById = new Map((Array.isArray(chapterCards) ? chapterCards : []).map((entry) => [String(entry?.sourceScenarioStepId || '').trim(), entry]))
   const clickPresentation = {
@@ -969,11 +970,8 @@ export function buildRemotionRenderPlan({ semanticPlan, outputVideo, adjustedAud
   }
 
   const allNarrations = Array.isArray(adjustedAudioFiles) ? adjustedAudioFiles : []
-  const narrationEndMs = allNarrations.reduce((maxValue, entry) => {
-    return Math.max(maxValue, Math.max(0, Number(entry?.finalOutputEndMs || entry?.startMs || 0)))
-  }, 0)
   const introDurationMs = Math.max(0, Math.floor(Number(semanticPlan?.source?.introDurationMs || 0)))
-  const outputDurationMs = Math.max(maxEndMs + introDurationMs, narrationEndMs + introDurationMs, 1)
+  const outputDurationMs = Math.max(maxEndMs + introDurationMs, 1)
   const fps = Math.max(1, Number(semanticPlan?.source?.fps || 30))
 
   return {

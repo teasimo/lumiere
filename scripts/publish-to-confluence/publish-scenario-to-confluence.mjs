@@ -87,15 +87,7 @@ function parseScenarioMetaFromRawXml(xmlRaw) {
   }
 
   const title = String(root['@_titel'] || '').trim()
-  const version = String(
-    root['@_szenario-version']
-      || root['@_videoscript-version']
-      || root['@_testscript-version']
-      || root['@_neo-version-min']
-      || 'unknown',
-  ).trim() || 'unknown'
-
-  return { title, version }
+  return { title }
 }
 
 function parseCredentialsFromEnv() {
@@ -1104,11 +1096,11 @@ async function main() {
     const nextTitle = buildConfluencePageTitle({
       scenarioId,
       scenarioTitle: scenarioTitleOverride || lunettesScenario.title || scenarioMeta.title || scenarioId,
-      scenarioVersion: lunettesScenario.version || scenarioMeta.version,
+      scenarioVersion: lunettesScenario.version || 'unknown',
     })
     const scenarioSourceRelative = normalizeWorkspaceRelativePath(relative(process.cwd(), scenarioAbsolutePath))
 
-    const effectiveScenarioVersion = lunettesScenario.version || scenarioMeta.version
+    const effectiveScenarioVersion = lunettesScenario.version || 'unknown'
     const latestRender = await findLatestSuccessfulRender({
       scenarioId,
       scenarioVersion: effectiveScenarioVersion,

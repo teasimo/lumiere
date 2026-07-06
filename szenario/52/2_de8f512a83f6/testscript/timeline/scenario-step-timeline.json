@@ -1,0 +1,4357 @@
+{
+  "scenarioId": "source",
+  "scenarioVersion": "unknown",
+  "scenarioSource": "neo/interactions/_lunettes-job-watcher/szenario-52/source.xml",
+  "generatedAtIso": "2026-07-06T07:01:40.727Z",
+  "steps": [
+    {
+      "stepId": "fragment-init-1-oeffnen",
+      "stepDescription": "",
+      "selectors": [],
+      "interactionType": "set-runtime-variable",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321110975,
+      "endedAtMs": 1783321110979,
+      "startedAtIso": "2026-07-06T06:58:30.975Z",
+      "endedAtIso": "2026-07-06T06:58:30.979Z",
+      "durationMs": 4,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:58:30.979Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/001-fragment-init-1-oeffnen.png"
+    },
+    {
+      "stepId": "fragment-init-2-oeffnen",
+      "stepDescription": "",
+      "selectors": [],
+      "interactionType": "set-runtime-variable",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321113109,
+      "endedAtMs": 1783321113110,
+      "startedAtIso": "2026-07-06T06:58:33.109Z",
+      "endedAtIso": "2026-07-06T06:58:33.110Z",
+      "durationMs": 1,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:58:33.110Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/002-fragment-init-2-oeffnen.png"
+    },
+    {
+      "stepId": "fragment-init-3-oeffnen",
+      "stepDescription": "",
+      "selectors": [],
+      "interactionType": "set-runtime-variable",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321115196,
+      "endedAtMs": 1783321115197,
+      "startedAtIso": "2026-07-06T06:58:35.196Z",
+      "endedAtIso": "2026-07-06T06:58:35.197Z",
+      "durationMs": 1,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:58:35.196Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/003-fragment-init-3-oeffnen.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-6-[neo-login]-Zeile-9",
+      "stepDescription": "Oeffnen | url=https://neo-integration.de",
+      "selectors": [],
+      "interactionType": "open",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321117252,
+      "endedAtMs": 1783321120455,
+      "startedAtIso": "2026-07-06T06:58:37.252Z",
+      "endedAtIso": "2026-07-06T06:58:40.455Z",
+      "durationMs": 3203,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:58:40.455Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/004-Szenario-52--Zeile-6--neo-login--Zeile-9.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-6-[neo-login]-Zeile-11__autoscroll",
+      "stepDescription": "Scroll | data-id=login/input/user | origin=[Szenario-52]-Zeile-6-[neo-login]-Zeile-11 | source=Eingabe | data-id=login/input/user | value=pb_abs_lep_verfahrenssteuerung | selectors: data-id=login/input/user",
+      "selectors": [
+        "data-id=login/input/user"
+      ],
+      "interactionType": "scroll",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321122686,
+      "endedAtMs": 1783321122751,
+      "startedAtIso": "2026-07-06T06:58:42.686Z",
+      "endedAtIso": "2026-07-06T06:58:42.751Z",
+      "durationMs": 65,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:58:42.723Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "scroll",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=login/input/user"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T06:58:42.751Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/005-Szenario-52--Zeile-6--neo-login--Zeile-11__autoscroll.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-6-[neo-login]-Zeile-11",
+      "stepDescription": "Eingabe | data-id=login/input/user | value=pb_abs_lep_verfahrenssteuerung | selectors: data-id=login/input/user",
+      "selectors": [
+        "data-id=login/input/user"
+      ],
+      "interactionType": "fill",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321124902,
+      "endedAtMs": 1783321125007,
+      "startedAtIso": "2026-07-06T06:58:44.902Z",
+      "endedAtIso": "2026-07-06T06:58:45.007Z",
+      "durationMs": 105,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:58:44.909Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "fill",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=login/input/user"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T06:58:45.007Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "fillPoint": {
+        "x": 616,
+        "y": 485
+      },
+      "screenshotPath": "timeline-screenshots/006-Szenario-52--Zeile-6--neo-login--Zeile-11.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-6-[neo-login]-Zeile-12__autoscroll",
+      "stepDescription": "Scroll | data-id=login/input/pass | origin=[Szenario-52]-Zeile-6-[neo-login]-Zeile-12 | source=Eingabe | data-id=login/input/pass | value=!Neo-2405Neo! | selectors: data-id=login/input/pass",
+      "selectors": [
+        "data-id=login/input/pass"
+      ],
+      "interactionType": "scroll",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321127152,
+      "endedAtMs": 1783321127217,
+      "startedAtIso": "2026-07-06T06:58:47.152Z",
+      "endedAtIso": "2026-07-06T06:58:47.217Z",
+      "durationMs": 65,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:58:47.165Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "scroll",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=login/input/pass"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T06:58:47.217Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/007-Szenario-52--Zeile-6--neo-login--Zeile-12__autoscroll.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-6-[neo-login]-Zeile-12",
+      "stepDescription": "Eingabe | data-id=login/input/pass | value=!Neo-2405Neo! | selectors: data-id=login/input/pass",
+      "selectors": [
+        "data-id=login/input/pass"
+      ],
+      "interactionType": "fill",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321129393,
+      "endedAtMs": 1783321129487,
+      "startedAtIso": "2026-07-06T06:58:49.393Z",
+      "endedAtIso": "2026-07-06T06:58:49.487Z",
+      "durationMs": 94,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:58:49.399Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "fill",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=login/input/pass"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T06:58:49.487Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "fillPoint": {
+        "x": 616,
+        "y": 568
+      },
+      "screenshotPath": "timeline-screenshots/008-Szenario-52--Zeile-6--neo-login--Zeile-12.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-6-[neo-login]-Zeile-13__autoscroll",
+      "stepDescription": "Scroll | data-id=login/button/submit | origin=[Szenario-52]-Zeile-6-[neo-login]-Zeile-13 | source=Click | data-id=login/button/submit | selectors: data-id=login/button/submit",
+      "selectors": [
+        "data-id=login/button/submit"
+      ],
+      "interactionType": "scroll",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321131677,
+      "endedAtMs": 1783321131715,
+      "startedAtIso": "2026-07-06T06:58:51.677Z",
+      "endedAtIso": "2026-07-06T06:58:51.715Z",
+      "durationMs": 38,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:58:51.683Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "scroll",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=login/button/submit"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T06:58:51.714Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/009-Szenario-52--Zeile-6--neo-login--Zeile-13__autoscroll.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-6-[neo-login]-Zeile-13",
+      "stepDescription": "Click | data-id=login/button/submit | selectors: data-id=login/button/submit",
+      "selectors": [
+        "data-id=login/button/submit"
+      ],
+      "interactionType": "click",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321133913,
+      "endedAtMs": 1783321134136,
+      "startedAtIso": "2026-07-06T06:58:53.913Z",
+      "endedAtIso": "2026-07-06T06:58:54.136Z",
+      "durationMs": 223,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:58:53.920Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "click",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=login/button/submit"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T06:58:54.136Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "clickedElement": {
+        "x": 867.40625,
+        "y": 622.75,
+        "width": 88.59375,
+        "height": 30
+      },
+      "clickPoint": {
+        "x": 912,
+        "y": 638
+      },
+      "clickedAtMs": 1783321134135,
+      "screenshotPath": "timeline-screenshots/010-Szenario-52--Zeile-6--neo-login--Zeile-13.png"
+    },
+    {
+      "stepId": "login-confirm-organization-dialog",
+      "stepDescription": "",
+      "selectors": [],
+      "interactionType": null,
+      "status": "skipped",
+      "skipped": true,
+      "skipReason": "condition not met and no else branch",
+      "startedAtMs": 1783321139639,
+      "endedAtMs": 1783321139652,
+      "startedAtIso": "2026-07-06T06:58:59.639Z",
+      "endedAtIso": "2026-07-06T06:58:59.652Z",
+      "durationMs": 13,
+      "error": null,
+      "log": [],
+      "screenshotPath": "timeline-screenshots/011-login-confirm-organization-dialog.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-16-[hautpmenü-bewerbungsverfahren-öffnen]-Zeile-3__autoscroll",
+      "stepDescription": "Scroll | data-id=button/menu-toggle | origin=[Szenario-52]-Zeile-16-[hautpmenü-bewerbungsverfahren-öffnen]-Zeile-3 | source=Click | data-id=button/menu-toggle | selectors: data-id=button/menu-toggle",
+      "selectors": [
+        "data-id=button/menu-toggle"
+      ],
+      "interactionType": "scroll",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321139700,
+      "endedAtMs": 1783321139737,
+      "startedAtIso": "2026-07-06T06:58:59.700Z",
+      "endedAtIso": "2026-07-06T06:58:59.737Z",
+      "durationMs": 37,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:58:59.708Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "scroll",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=button/menu-toggle"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T06:58:59.737Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/012-Szenario-52--Zeile-16--hautpmen--bewerbungsverfahren--ffnen--Zeile-3__autoscroll.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-16-[hautpmenü-bewerbungsverfahren-öffnen]-Zeile-3",
+      "stepDescription": "Click | data-id=button/menu-toggle | selectors: data-id=button/menu-toggle",
+      "selectors": [
+        "data-id=button/menu-toggle"
+      ],
+      "interactionType": "click",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321141820,
+      "endedAtMs": 1783321141951,
+      "startedAtIso": "2026-07-06T06:59:01.820Z",
+      "endedAtIso": "2026-07-06T06:59:01.951Z",
+      "durationMs": 131,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:59:01.830Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "click",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=button/menu-toggle"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T06:59:01.951Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "clickedElement": {
+        "x": 1192.40625,
+        "y": 28.96875,
+        "width": 52.59375,
+        "height": 47
+      },
+      "clickPoint": {
+        "x": 1219,
+        "y": 52
+      },
+      "clickedAtMs": 1783321141951,
+      "screenshotPath": "timeline-screenshots/013-Szenario-52--Zeile-16--hautpmen--bewerbungsverfahren--ffnen--Zeile-3.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-16-[hautpmenü-bewerbungsverfahren-öffnen]-Zeile-4__autoscroll",
+      "stepDescription": "Scroll | data-id=menu/item/pb/ | origin=[Szenario-52]-Zeile-16-[hautpmenü-bewerbungsverfahren-öffnen]-Zeile-4 | source=Click | data-id=menu/item/pb/ | selectors: data-id=menu/item/pb/",
+      "selectors": [
+        "data-id=menu/item/pb/"
+      ],
+      "interactionType": "scroll",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321144004,
+      "endedAtMs": 1783321144046,
+      "startedAtIso": "2026-07-06T06:59:04.004Z",
+      "endedAtIso": "2026-07-06T06:59:04.046Z",
+      "durationMs": 42,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:59:04.015Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "scroll",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=menu/item/pb/"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T06:59:04.046Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/014-Szenario-52--Zeile-16--hautpmen--bewerbungsverfahren--ffnen--Zeile-4__autoscroll.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-16-[hautpmenü-bewerbungsverfahren-öffnen]-Zeile-4",
+      "stepDescription": "Click | data-id=menu/item/pb/ | selectors: data-id=menu/item/pb/",
+      "selectors": [
+        "data-id=menu/item/pb/"
+      ],
+      "interactionType": "click",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321146157,
+      "endedAtMs": 1783321146287,
+      "startedAtIso": "2026-07-06T06:59:06.157Z",
+      "endedAtIso": "2026-07-06T06:59:06.287Z",
+      "durationMs": 130,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:59:06.167Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "click",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=menu/item/pb/"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T06:59:06.287Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "clickedElement": {
+        "x": 921,
+        "y": 283.34375,
+        "width": 343,
+        "height": 32
+      },
+      "clickPoint": {
+        "x": 1093,
+        "y": 299
+      },
+      "clickedAtMs": 1783321146286,
+      "screenshotPath": "timeline-screenshots/015-Szenario-52--Zeile-16--hautpmen--bewerbungsverfahren--ffnen--Zeile-4.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-16-[hautpmenü-bewerbungsverfahren-öffnen]-Zeile-5__autoscroll",
+      "stepDescription": "Scroll | data-id=menu/link/pb/verfahren/ | origin=[Szenario-52]-Zeile-16-[hautpmenü-bewerbungsverfahren-öffnen]-Zeile-5 | source=Click | data-id=menu/link/pb/verfahren/ | selectors: data-id=menu/link/pb/verfahren/",
+      "selectors": [
+        "data-id=menu/link/pb/verfahren/"
+      ],
+      "interactionType": "scroll",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321148352,
+      "endedAtMs": 1783321148395,
+      "startedAtIso": "2026-07-06T06:59:08.352Z",
+      "endedAtIso": "2026-07-06T06:59:08.395Z",
+      "durationMs": 43,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:59:08.364Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "scroll",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=menu/link/pb/verfahren/"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T06:59:08.395Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/016-Szenario-52--Zeile-16--hautpmen--bewerbungsverfahren--ffnen--Zeile-5__autoscroll.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-16-[hautpmenü-bewerbungsverfahren-öffnen]-Zeile-5",
+      "stepDescription": "Click | data-id=menu/link/pb/verfahren/ | selectors: data-id=menu/link/pb/verfahren/",
+      "selectors": [
+        "data-id=menu/link/pb/verfahren/"
+      ],
+      "interactionType": "click",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321150470,
+      "endedAtMs": 1783321150583,
+      "startedAtIso": "2026-07-06T06:59:10.470Z",
+      "endedAtIso": "2026-07-06T06:59:10.583Z",
+      "durationMs": 113,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:59:10.481Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "click",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=menu/link/pb/verfahren/"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T06:59:10.583Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "clickedElement": {
+        "x": 940.59375,
+        "y": 323.34375,
+        "width": 323.40625,
+        "height": 32
+      },
+      "clickPoint": {
+        "x": 1102,
+        "y": 339
+      },
+      "clickedAtMs": 1783321150583,
+      "screenshotPath": "timeline-screenshots/017-Szenario-52--Zeile-16--hautpmen--bewerbungsverfahren--ffnen--Zeile-5.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-17__autoscroll",
+      "stepDescription": "Scroll | data-id=btn/create | origin=[Szenario-52]-Zeile-17 | source=Click | data-id=btn/create | selectors: data-id=btn/create",
+      "selectors": [
+        "data-id=btn/create"
+      ],
+      "interactionType": "scroll",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321152653,
+      "endedAtMs": 1783321152714,
+      "startedAtIso": "2026-07-06T06:59:12.653Z",
+      "endedAtIso": "2026-07-06T06:59:12.714Z",
+      "durationMs": 61,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:59:12.667Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "scroll",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=btn/create"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T06:59:12.714Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/018-Szenario-52--Zeile-17__autoscroll.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-17",
+      "stepDescription": "Click | data-id=btn/create | selectors: data-id=btn/create",
+      "selectors": [
+        "data-id=btn/create"
+      ],
+      "interactionType": "click",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321154825,
+      "endedAtMs": 1783321154989,
+      "startedAtIso": "2026-07-06T06:59:14.825Z",
+      "endedAtIso": "2026-07-06T06:59:14.989Z",
+      "durationMs": 164,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:59:14.847Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "click",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=btn/create"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T06:59:14.989Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "clickedElement": {
+        "x": 1007.3125,
+        "y": 161.828125,
+        "width": 237.59375,
+        "height": 31.015625
+      },
+      "clickPoint": {
+        "x": 1126,
+        "y": 177
+      },
+      "clickedAtMs": 1783321154989,
+      "screenshotPath": "timeline-screenshots/019-Szenario-52--Zeile-17.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-19__autoscroll",
+      "stepDescription": "Scroll | data-id=p_common/t_allgemein/bezeichnung_lang | origin=[Szenario-52]-Zeile-19 | source=Eingabe | data-id=p_common/t_allgemein/bezeichnung_lang | value=name des neuen Verfahrens 815194 | selectors: data-id=p_common/t_allgemein/bezeichnung_lang",
+      "selectors": [
+        "data-id=p_common/t_allgemein/bezeichnung_lang"
+      ],
+      "interactionType": "scroll",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321157108,
+      "endedAtMs": 1783321157175,
+      "startedAtIso": "2026-07-06T06:59:17.108Z",
+      "endedAtIso": "2026-07-06T06:59:17.175Z",
+      "durationMs": 67,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:59:17.121Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "scroll",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=p_common/t_allgemein/bezeichnung_lang"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T06:59:17.175Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/020-Szenario-52--Zeile-19__autoscroll.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-19",
+      "stepDescription": "Eingabe | data-id=p_common/t_allgemein/bezeichnung_lang | value=name des neuen Verfahrens 815194 | selectors: data-id=p_common/t_allgemein/bezeichnung_lang",
+      "selectors": [
+        "data-id=p_common/t_allgemein/bezeichnung_lang"
+      ],
+      "interactionType": "fill",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321159256,
+      "endedAtMs": 1783321160796,
+      "startedAtIso": "2026-07-06T06:59:19.256Z",
+      "endedAtIso": "2026-07-06T06:59:20.796Z",
+      "durationMs": 1540,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:59:19.267Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "fill",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=p_common/t_allgemein/bezeichnung_lang"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T06:59:20.796Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "fillPoint": {
+        "x": 358,
+        "y": 431
+      },
+      "screenshotPath": "timeline-screenshots/021-Szenario-52--Zeile-19.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-20__autoscroll",
+      "stepDescription": "Scroll | data-id=p_common/t_allgemein/bezeichnung_kurz | origin=[Szenario-52]-Zeile-20 | source=Eingabe | data-id=p_common/t_allgemein/bezeichnung_kurz | value=lalaheute | selectors: data-id=p_common/t_allgemein/bezeichnung_kurz",
+      "selectors": [
+        "data-id=p_common/t_allgemein/bezeichnung_kurz"
+      ],
+      "interactionType": "scroll",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321162887,
+      "endedAtMs": 1783321162943,
+      "startedAtIso": "2026-07-06T06:59:22.887Z",
+      "endedAtIso": "2026-07-06T06:59:22.943Z",
+      "durationMs": 56,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:59:22.903Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "scroll",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=p_common/t_allgemein/bezeichnung_kurz"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T06:59:22.943Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/022-Szenario-52--Zeile-20__autoscroll.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-20",
+      "stepDescription": "Eingabe | data-id=p_common/t_allgemein/bezeichnung_kurz | value=lalaheute | selectors: data-id=p_common/t_allgemein/bezeichnung_kurz",
+      "selectors": [
+        "data-id=p_common/t_allgemein/bezeichnung_kurz"
+      ],
+      "interactionType": "fill",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321165019,
+      "endedAtMs": 1783321165565,
+      "startedAtIso": "2026-07-06T06:59:25.019Z",
+      "endedAtIso": "2026-07-06T06:59:25.565Z",
+      "durationMs": 546,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:59:25.027Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "fill",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=p_common/t_allgemein/bezeichnung_kurz"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T06:59:25.565Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "fillPoint": {
+        "x": 214,
+        "y": 507
+      },
+      "screenshotPath": "timeline-screenshots/023-Szenario-52--Zeile-20.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-21__autoscroll",
+      "stepDescription": "Scroll | data-id=p_common/t_allgemein/es_date | origin=[Szenario-52]-Zeile-21 | source=Eingabe | data-id=p_common/t_allgemein/es_date | value=12.12.2028 | selectors: data-id=p_common/t_allgemein/es_date",
+      "selectors": [
+        "data-id=p_common/t_allgemein/es_date"
+      ],
+      "interactionType": "scroll",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321167652,
+      "endedAtMs": 1783321167699,
+      "startedAtIso": "2026-07-06T06:59:27.652Z",
+      "endedAtIso": "2026-07-06T06:59:27.699Z",
+      "durationMs": 47,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:59:27.664Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "scroll",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=p_common/t_allgemein/es_date"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T06:59:27.699Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/024-Szenario-52--Zeile-21__autoscroll.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-21",
+      "stepDescription": "Eingabe | data-id=p_common/t_allgemein/es_date | value=12.12.2028 | selectors: data-id=p_common/t_allgemein/es_date",
+      "selectors": [
+        "data-id=p_common/t_allgemein/es_date"
+      ],
+      "interactionType": "fill",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321169810,
+      "endedAtMs": 1783321170454,
+      "startedAtIso": "2026-07-06T06:59:29.810Z",
+      "endedAtIso": "2026-07-06T06:59:30.454Z",
+      "durationMs": 644,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:59:29.825Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "fill",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=p_common/t_allgemein/es_date"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T06:59:30.454Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "fillPoint": {
+        "x": 483,
+        "y": 507
+      },
+      "screenshotPath": "timeline-screenshots/025-Szenario-52--Zeile-21.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-22__autoscroll",
+      "stepDescription": "Scroll | data-id=g_r1_allg/p_termin_common/alg_bw_beginn | origin=[Szenario-52]-Zeile-22 | source=Eingabe | data-id=g_r1_allg/p_termin_common/alg_bw_beginn | value=30.09.2026 | selectors: data-id=g_r1_allg/p_termin_common/alg_bw_beginn",
+      "selectors": [
+        "data-id=g_r1_allg/p_termin_common/alg_bw_beginn"
+      ],
+      "interactionType": "scroll",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321172547,
+      "endedAtMs": 1783321172595,
+      "startedAtIso": "2026-07-06T06:59:32.547Z",
+      "endedAtIso": "2026-07-06T06:59:32.595Z",
+      "durationMs": 48,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:59:32.562Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "scroll",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=g_r1_allg/p_termin_common/alg_bw_beginn"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T06:59:32.595Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/026-Szenario-52--Zeile-22__autoscroll.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-22",
+      "stepDescription": "Eingabe | data-id=g_r1_allg/p_termin_common/alg_bw_beginn | value=30.09.2026 | selectors: data-id=g_r1_allg/p_termin_common/alg_bw_beginn",
+      "selectors": [
+        "data-id=g_r1_allg/p_termin_common/alg_bw_beginn"
+      ],
+      "interactionType": "fill",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321174681,
+      "endedAtMs": 1783321175286,
+      "startedAtIso": "2026-07-06T06:59:34.681Z",
+      "endedAtIso": "2026-07-06T06:59:35.286Z",
+      "durationMs": 605,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:59:34.692Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "fill",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=g_r1_allg/p_termin_common/alg_bw_beginn"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T06:59:35.286Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "fillPoint": {
+        "x": 340,
+        "y": 726
+      },
+      "screenshotPath": "timeline-screenshots/027-Szenario-52--Zeile-22.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-23__autoscroll",
+      "stepDescription": "Scroll | data-id=g_r1_allg/p_termin_common/alg_bw_ende | origin=[Szenario-52]-Zeile-23 | source=Eingabe | data-id=g_r1_allg/p_termin_common/alg_bw_ende | value=12.11.2028 | selectors: data-id=g_r1_allg/p_termin_common/alg_bw_ende",
+      "selectors": [
+        "data-id=g_r1_allg/p_termin_common/alg_bw_ende"
+      ],
+      "interactionType": "scroll",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321177356,
+      "endedAtMs": 1783321177395,
+      "startedAtIso": "2026-07-06T06:59:37.356Z",
+      "endedAtIso": "2026-07-06T06:59:37.395Z",
+      "durationMs": 39,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:59:37.367Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "scroll",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=g_r1_allg/p_termin_common/alg_bw_ende"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T06:59:37.395Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/028-Szenario-52--Zeile-23__autoscroll.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-23",
+      "stepDescription": "Eingabe | data-id=g_r1_allg/p_termin_common/alg_bw_ende | value=12.11.2028 | selectors: data-id=g_r1_allg/p_termin_common/alg_bw_ende",
+      "selectors": [
+        "data-id=g_r1_allg/p_termin_common/alg_bw_ende"
+      ],
+      "interactionType": "fill",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321179482,
+      "endedAtMs": 1783321180082,
+      "startedAtIso": "2026-07-06T06:59:39.482Z",
+      "endedAtIso": "2026-07-06T06:59:40.082Z",
+      "durationMs": 600,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:59:39.492Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "fill",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=g_r1_allg/p_termin_common/alg_bw_ende"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T06:59:40.082Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "fillPoint": {
+        "x": 913,
+        "y": 530
+      },
+      "screenshotPath": "timeline-screenshots/029-Szenario-52--Zeile-23.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-26__autoscroll",
+      "stepDescription": "Scroll | data-id=btn/action-save | origin=[Szenario-52]-Zeile-26 | source=Click | data-id=btn/action-save | selectors: data-id=btn/action-save",
+      "selectors": [
+        "data-id=btn/action-save"
+      ],
+      "interactionType": "scroll",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321182151,
+      "endedAtMs": 1783321182186,
+      "startedAtIso": "2026-07-06T06:59:42.151Z",
+      "endedAtIso": "2026-07-06T06:59:42.186Z",
+      "durationMs": 35,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:59:42.160Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "scroll",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=btn/action-save"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T06:59:42.186Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/030-Szenario-52--Zeile-26__autoscroll.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-26",
+      "stepDescription": "Click | data-id=btn/action-save | selectors: data-id=btn/action-save",
+      "selectors": [
+        "data-id=btn/action-save"
+      ],
+      "interactionType": "click",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321184289,
+      "endedAtMs": 1783321184376,
+      "startedAtIso": "2026-07-06T06:59:44.289Z",
+      "endedAtIso": "2026-07-06T06:59:44.376Z",
+      "durationMs": 87,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:59:44.296Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "click",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=btn/action-save"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T06:59:44.376Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "clickedElement": {
+        "x": 169.78125,
+        "y": 149.34375,
+        "width": 108.59375,
+        "height": 33.015625
+      },
+      "clickPoint": {
+        "x": 224,
+        "y": 166
+      },
+      "clickedAtMs": 1783321184376,
+      "screenshotPath": "timeline-screenshots/031-Szenario-52--Zeile-26.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-28__autoscroll",
+      "stepDescription": "Scroll | text=1. Auswahlrunde | origin=[Szenario-52]-Zeile-28 | source=Click | text=1. Auswahlrunde | selectors: text=1. Auswahlrunde",
+      "selectors": [
+        "text=1. Auswahlrunde"
+      ],
+      "interactionType": "scroll",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321186457,
+      "endedAtMs": 1783321186491,
+      "startedAtIso": "2026-07-06T06:59:46.457Z",
+      "endedAtIso": "2026-07-06T06:59:46.491Z",
+      "durationMs": 34,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:59:46.465Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "scroll",
+            "availableCount": 1,
+            "selectorStrategy": "text",
+            "selectors": [
+              "text=1. Auswahlrunde"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T06:59:46.491Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/032-Szenario-52--Zeile-28__autoscroll.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-28",
+      "stepDescription": "Click | text=1. Auswahlrunde | selectors: text=1. Auswahlrunde",
+      "selectors": [
+        "text=1. Auswahlrunde"
+      ],
+      "interactionType": "click",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321188620,
+      "endedAtMs": 1783321190259,
+      "startedAtIso": "2026-07-06T06:59:48.620Z",
+      "endedAtIso": "2026-07-06T06:59:50.259Z",
+      "durationMs": 1639,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:59:48.644Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "click",
+            "availableCount": 1,
+            "selectorStrategy": "text",
+            "selectors": [
+              "text=1. Auswahlrunde"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T06:59:50.259Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "clickedElement": {
+        "x": 152,
+        "y": 269.34375,
+        "width": 114,
+        "height": 24.015625
+      },
+      "clickPoint": {
+        "x": 209,
+        "y": 281
+      },
+      "clickedAtMs": 1783321190259,
+      "screenshotPath": "timeline-screenshots/033-Szenario-52--Zeile-28.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-31__autoscroll",
+      "stepDescription": "Scroll | data-id=g_r1_ibw/p_termin_r1/r1_ibw_beginn | origin=[Szenario-52]-Zeile-31 | source=Eingabe | data-id=g_r1_ibw/p_termin_r1/r1_ibw_beginn | value=30.09.2026 | selectors: data-id=g_r1_ibw/p_termin_r1/r1_ibw_beginn",
+      "selectors": [
+        "data-id=g_r1_ibw/p_termin_r1/r1_ibw_beginn"
+      ],
+      "interactionType": "scroll",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321192365,
+      "endedAtMs": 1783321192437,
+      "startedAtIso": "2026-07-06T06:59:52.365Z",
+      "endedAtIso": "2026-07-06T06:59:52.437Z",
+      "durationMs": 72,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:59:52.383Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "scroll",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=g_r1_ibw/p_termin_r1/r1_ibw_beginn"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T06:59:52.437Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/034-Szenario-52--Zeile-31__autoscroll.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-31",
+      "stepDescription": "Eingabe | data-id=g_r1_ibw/p_termin_r1/r1_ibw_beginn | value=30.09.2026 | selectors: data-id=g_r1_ibw/p_termin_r1/r1_ibw_beginn",
+      "selectors": [
+        "data-id=g_r1_ibw/p_termin_r1/r1_ibw_beginn"
+      ],
+      "interactionType": "fill",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321194540,
+      "endedAtMs": 1783321195172,
+      "startedAtIso": "2026-07-06T06:59:54.540Z",
+      "endedAtIso": "2026-07-06T06:59:55.172Z",
+      "durationMs": 632,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:59:54.555Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "fill",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=g_r1_ibw/p_termin_r1/r1_ibw_beginn"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T06:59:55.172Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "fillPoint": {
+        "x": 340,
+        "y": 461
+      },
+      "screenshotPath": "timeline-screenshots/035-Szenario-52--Zeile-31.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-32__autoscroll",
+      "stepDescription": "Scroll | data-id=g_r1_ibw/p_termin_r1/r1_ibw_ende | origin=[Szenario-52]-Zeile-32 | source=Eingabe | data-id=g_r1_ibw/p_termin_r1/r1_ibw_ende | value=30.12.2026 | selectors: data-id=g_r1_ibw/p_termin_r1/r1_ibw_ende",
+      "selectors": [
+        "data-id=g_r1_ibw/p_termin_r1/r1_ibw_ende"
+      ],
+      "interactionType": "scroll",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321197247,
+      "endedAtMs": 1783321197303,
+      "startedAtIso": "2026-07-06T06:59:57.247Z",
+      "endedAtIso": "2026-07-06T06:59:57.303Z",
+      "durationMs": 56,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:59:57.258Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "scroll",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=g_r1_ibw/p_termin_r1/r1_ibw_ende"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T06:59:57.302Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/036-Szenario-52--Zeile-32__autoscroll.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-32",
+      "stepDescription": "Eingabe | data-id=g_r1_ibw/p_termin_r1/r1_ibw_ende | value=30.12.2026 | selectors: data-id=g_r1_ibw/p_termin_r1/r1_ibw_ende",
+      "selectors": [
+        "data-id=g_r1_ibw/p_termin_r1/r1_ibw_ende"
+      ],
+      "interactionType": "fill",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321199413,
+      "endedAtMs": 1783321200117,
+      "startedAtIso": "2026-07-06T06:59:59.413Z",
+      "endedAtIso": "2026-07-06T07:00:00.117Z",
+      "durationMs": 704,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T06:59:59.428Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "fill",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=g_r1_ibw/p_termin_r1/r1_ibw_ende"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:00:00.117Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "fillPoint": {
+        "x": 913,
+        "y": 461
+      },
+      "screenshotPath": "timeline-screenshots/037-Szenario-52--Zeile-32.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-35__autoscroll",
+      "stepDescription": "Scroll | data-id=g_r1_ebw/g_r1_ebw~1/r1_ebw_beginn | origin=[Szenario-52]-Zeile-35 | source=Eingabe | data-id=g_r1_ebw/g_r1_ebw~1/r1_ebw_beginn | value=12.11.2027 | selectors: data-id=g_r1_ebw/g_r1_ebw~1/r1_ebw_beginn",
+      "selectors": [
+        "data-id=g_r1_ebw/g_r1_ebw~1/r1_ebw_beginn"
+      ],
+      "interactionType": "scroll",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321202215,
+      "endedAtMs": 1783321202269,
+      "startedAtIso": "2026-07-06T07:00:02.215Z",
+      "endedAtIso": "2026-07-06T07:00:02.269Z",
+      "durationMs": 54,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:00:02.232Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "scroll",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=g_r1_ebw/g_r1_ebw~1/r1_ebw_beginn"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:00:02.269Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/038-Szenario-52--Zeile-35__autoscroll.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-35",
+      "stepDescription": "Eingabe | data-id=g_r1_ebw/g_r1_ebw~1/r1_ebw_beginn | value=12.11.2027 | selectors: data-id=g_r1_ebw/g_r1_ebw~1/r1_ebw_beginn",
+      "selectors": [
+        "data-id=g_r1_ebw/g_r1_ebw~1/r1_ebw_beginn"
+      ],
+      "interactionType": "fill",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321204388,
+      "endedAtMs": 1783321205068,
+      "startedAtIso": "2026-07-06T07:00:04.388Z",
+      "endedAtIso": "2026-07-06T07:00:05.068Z",
+      "durationMs": 680,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:00:04.409Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "fill",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=g_r1_ebw/g_r1_ebw~1/r1_ebw_beginn"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:00:05.068Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "fillPoint": {
+        "x": 340,
+        "y": 567
+      },
+      "screenshotPath": "timeline-screenshots/039-Szenario-52--Zeile-35.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-36__autoscroll",
+      "stepDescription": "Scroll | data-id=g_r1_ebw/g_r1_ebw~1/r1_ebw_ende | origin=[Szenario-52]-Zeile-36 | source=Eingabe | data-id=g_r1_ebw/g_r1_ebw~1/r1_ebw_ende | value=12.12.2027 | selectors: data-id=g_r1_ebw/g_r1_ebw~1/r1_ebw_ende",
+      "selectors": [
+        "data-id=g_r1_ebw/g_r1_ebw~1/r1_ebw_ende"
+      ],
+      "interactionType": "scroll",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321207190,
+      "endedAtMs": 1783321207233,
+      "startedAtIso": "2026-07-06T07:00:07.190Z",
+      "endedAtIso": "2026-07-06T07:00:07.233Z",
+      "durationMs": 43,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:00:07.202Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "scroll",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=g_r1_ebw/g_r1_ebw~1/r1_ebw_ende"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:00:07.233Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/040-Szenario-52--Zeile-36__autoscroll.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-36",
+      "stepDescription": "Eingabe | data-id=g_r1_ebw/g_r1_ebw~1/r1_ebw_ende | value=12.12.2027 | selectors: data-id=g_r1_ebw/g_r1_ebw~1/r1_ebw_ende",
+      "selectors": [
+        "data-id=g_r1_ebw/g_r1_ebw~1/r1_ebw_ende"
+      ],
+      "interactionType": "fill",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321209310,
+      "endedAtMs": 1783321209952,
+      "startedAtIso": "2026-07-06T07:00:09.310Z",
+      "endedAtIso": "2026-07-06T07:00:09.952Z",
+      "durationMs": 642,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:00:09.322Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "fill",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=g_r1_ebw/g_r1_ebw~1/r1_ebw_ende"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:00:09.952Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "fillPoint": {
+        "x": 913,
+        "y": 567
+      },
+      "screenshotPath": "timeline-screenshots/041-Szenario-52--Zeile-36.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-38__autoscroll",
+      "stepDescription": "Scroll | data-id=g_r1_av/g_r1_av~2/r1_av_beginn | origin=[Szenario-52]-Zeile-38 | source=Eingabe | data-id=g_r1_av/g_r1_av~2/r1_av_beginn | value=01.01.2028 | selectors: data-id=g_r1_av/g_r1_av~2/r1_av_beginn",
+      "selectors": [
+        "data-id=g_r1_av/g_r1_av~2/r1_av_beginn"
+      ],
+      "interactionType": "scroll",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321212055,
+      "endedAtMs": 1783321212098,
+      "startedAtIso": "2026-07-06T07:00:12.055Z",
+      "endedAtIso": "2026-07-06T07:00:12.098Z",
+      "durationMs": 43,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:00:12.067Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "scroll",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=g_r1_av/g_r1_av~2/r1_av_beginn"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:00:12.098Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/042-Szenario-52--Zeile-38__autoscroll.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-38",
+      "stepDescription": "Eingabe | data-id=g_r1_av/g_r1_av~2/r1_av_beginn | value=01.01.2028 | selectors: data-id=g_r1_av/g_r1_av~2/r1_av_beginn",
+      "selectors": [
+        "data-id=g_r1_av/g_r1_av~2/r1_av_beginn"
+      ],
+      "interactionType": "fill",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321214200,
+      "endedAtMs": 1783321214870,
+      "startedAtIso": "2026-07-06T07:00:14.200Z",
+      "endedAtIso": "2026-07-06T07:00:14.870Z",
+      "durationMs": 670,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:00:14.220Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "fill",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=g_r1_av/g_r1_av~2/r1_av_beginn"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:00:14.870Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "fillPoint": {
+        "x": 340,
+        "y": 674
+      },
+      "screenshotPath": "timeline-screenshots/043-Szenario-52--Zeile-38.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-39__autoscroll",
+      "stepDescription": "Scroll | data-id=g_r1_av/g_r1_av~2/r1_av_ende | origin=[Szenario-52]-Zeile-39 | source=Eingabe | data-id=g_r1_av/g_r1_av~2/r1_av_ende | value=12.05.2028 | selectors: data-id=g_r1_av/g_r1_av~2/r1_av_ende",
+      "selectors": [
+        "data-id=g_r1_av/g_r1_av~2/r1_av_ende"
+      ],
+      "interactionType": "scroll",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321216945,
+      "endedAtMs": 1783321216989,
+      "startedAtIso": "2026-07-06T07:00:16.945Z",
+      "endedAtIso": "2026-07-06T07:00:16.989Z",
+      "durationMs": 44,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:00:16.956Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "scroll",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=g_r1_av/g_r1_av~2/r1_av_ende"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:00:16.989Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/044-Szenario-52--Zeile-39__autoscroll.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-39",
+      "stepDescription": "Eingabe | data-id=g_r1_av/g_r1_av~2/r1_av_ende | value=12.05.2028 | selectors: data-id=g_r1_av/g_r1_av~2/r1_av_ende",
+      "selectors": [
+        "data-id=g_r1_av/g_r1_av~2/r1_av_ende"
+      ],
+      "interactionType": "fill",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321219113,
+      "endedAtMs": 1783321219744,
+      "startedAtIso": "2026-07-06T07:00:19.113Z",
+      "endedAtIso": "2026-07-06T07:00:19.744Z",
+      "durationMs": 631,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:00:19.126Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "fill",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=g_r1_av/g_r1_av~2/r1_av_ende"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:00:19.744Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "fillPoint": {
+        "x": 913,
+        "y": 658
+      },
+      "screenshotPath": "timeline-screenshots/045-Szenario-52--Zeile-39.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-45__autoscroll",
+      "stepDescription": "Scroll | data-id=g_rlg_groups/btn/action-insert-scope | origin=[Szenario-52]-Zeile-45 | source=Click | data-id=g_rlg_groups/btn/action-insert-scope | selectors: data-id=g_rlg_groups/btn/action-insert-scope",
+      "selectors": [
+        "data-id=g_rlg_groups/btn/action-insert-scope"
+      ],
+      "interactionType": "scroll",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321221827,
+      "endedAtMs": 1783321229670,
+      "startedAtIso": "2026-07-06T07:00:21.827Z",
+      "endedAtIso": "2026-07-06T07:00:29.670Z",
+      "durationMs": 7843,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:00:21.838Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "scroll",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=g_rlg_groups/btn/action-insert-scope"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:00:29.670Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "scrollDirection": "links",
+      "screenshotPath": "timeline-screenshots/046-Szenario-52--Zeile-45__autoscroll.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-45",
+      "stepDescription": "Click | data-id=g_rlg_groups/btn/action-insert-scope | selectors: data-id=g_rlg_groups/btn/action-insert-scope",
+      "selectors": [
+        "data-id=g_rlg_groups/btn/action-insert-scope"
+      ],
+      "interactionType": "click",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321231777,
+      "endedAtMs": 1783321231941,
+      "startedAtIso": "2026-07-06T07:00:31.777Z",
+      "endedAtIso": "2026-07-06T07:00:31.941Z",
+      "durationMs": 164,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:00:31.793Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "click",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=g_rlg_groups/btn/action-insert-scope"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:00:31.941Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "clickedElement": {
+        "x": 75,
+        "y": 588.296875,
+        "width": 242.59375,
+        "height": 33.015625
+      },
+      "clickPoint": {
+        "x": 196,
+        "y": 605
+      },
+      "clickedAtMs": 1783321231941,
+      "screenshotPath": "timeline-screenshots/047-Szenario-52--Zeile-45.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-46__autoscroll",
+      "stepDescription": "Scroll | data-id=g_rlg_groups/$data0/beschreibung | origin=[Szenario-52]-Zeile-46 | source=Eingabe | data-id=g_rlg_groups/$data0/beschreibung | value=Zuordnungsbeschereibung | selectors: data-id=g_rlg_groups/$data0/beschreibung",
+      "selectors": [
+        "data-id=g_rlg_groups/$data0/beschreibung"
+      ],
+      "interactionType": "scroll",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321234028,
+      "endedAtMs": 1783321234080,
+      "startedAtIso": "2026-07-06T07:00:34.028Z",
+      "endedAtIso": "2026-07-06T07:00:34.080Z",
+      "durationMs": 52,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:00:34.041Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "scroll",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=g_rlg_groups/$data0/beschreibung"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:00:34.080Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/048-Szenario-52--Zeile-46__autoscroll.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-46",
+      "stepDescription": "Eingabe | data-id=g_rlg_groups/$data0/beschreibung | value=Zuordnungsbeschereibung | selectors: data-id=g_rlg_groups/$data0/beschreibung",
+      "selectors": [
+        "data-id=g_rlg_groups/$data0/beschreibung"
+      ],
+      "interactionType": "fill",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321236160,
+      "endedAtMs": 1783321237374,
+      "startedAtIso": "2026-07-06T07:00:36.160Z",
+      "endedAtIso": "2026-07-06T07:00:37.374Z",
+      "durationMs": 1214,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:00:36.172Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "fill",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=g_rlg_groups/$data0/beschreibung"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:00:37.374Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "fillPoint": {
+        "x": 755,
+        "y": 516
+      },
+      "screenshotPath": "timeline-screenshots/049-Szenario-52--Zeile-46.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-48__autoscroll",
+      "stepDescription": "Scroll | data-id=g_rlg_groups/$data0/zuordnungsregeln | origin=[Szenario-52]-Zeile-48 | source=Eingabe | data-id=g_rlg_groups/$data0/zuordnungsregeln | value=Zuordnungsregeln | selectors: data-id=g_rlg_groups/$data0/zuordnungsregeln",
+      "selectors": [
+        "data-id=g_rlg_groups/$data0/zuordnungsregeln"
+      ],
+      "interactionType": "scroll",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321239459,
+      "endedAtMs": 1783321239502,
+      "startedAtIso": "2026-07-06T07:00:39.459Z",
+      "endedAtIso": "2026-07-06T07:00:39.502Z",
+      "durationMs": 43,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:00:39.470Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "scroll",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=g_rlg_groups/$data0/zuordnungsregeln"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:00:39.502Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/050-Szenario-52--Zeile-48__autoscroll.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-48",
+      "stepDescription": "Eingabe | data-id=g_rlg_groups/$data0/zuordnungsregeln | value=Zuordnungsregeln | selectors: data-id=g_rlg_groups/$data0/zuordnungsregeln",
+      "selectors": [
+        "data-id=g_rlg_groups/$data0/zuordnungsregeln"
+      ],
+      "interactionType": "fill",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321241581,
+      "endedAtMs": 1783321242537,
+      "startedAtIso": "2026-07-06T07:00:41.581Z",
+      "endedAtIso": "2026-07-06T07:00:42.537Z",
+      "durationMs": 956,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:00:41.592Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "fill",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=g_rlg_groups/$data0/zuordnungsregeln"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:00:42.537Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "fillPoint": {
+        "x": 617,
+        "y": 648
+      },
+      "screenshotPath": "timeline-screenshots/051-Szenario-52--Zeile-48.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-50__autoscroll",
+      "stepDescription": "Scroll | data-id=$data0/btn/action-remove-scope | origin=[Szenario-52]-Zeile-50 | source=Click | data-id=$data0/btn/action-remove-scope | selectors: data-id=$data0/btn/action-remove-scope",
+      "selectors": [
+        "data-id=$data0/btn/action-remove-scope"
+      ],
+      "interactionType": "scroll",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321244644,
+      "endedAtMs": 1783321244694,
+      "startedAtIso": "2026-07-06T07:00:44.644Z",
+      "endedAtIso": "2026-07-06T07:00:44.694Z",
+      "durationMs": 50,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:00:44.658Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "scroll",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=$data0/btn/action-remove-scope"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:00:44.694Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/052-Szenario-52--Zeile-50__autoscroll.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-50",
+      "stepDescription": "Click | data-id=$data0/btn/action-remove-scope | selectors: data-id=$data0/btn/action-remove-scope",
+      "selectors": [
+        "data-id=$data0/btn/action-remove-scope"
+      ],
+      "interactionType": "click",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321246779,
+      "endedAtMs": 1783321246949,
+      "startedAtIso": "2026-07-06T07:00:46.779Z",
+      "endedAtIso": "2026-07-06T07:00:46.949Z",
+      "durationMs": 170,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:00:46.790Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "click",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=$data0/btn/action-remove-scope"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:00:46.949Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "clickedElement": {
+        "x": 1174.40625,
+        "y": 476.5,
+        "width": 38.59375,
+        "height": 33
+      },
+      "clickPoint": {
+        "x": 1194,
+        "y": 493
+      },
+      "clickedAtMs": 1783321246949,
+      "screenshotPath": "timeline-screenshots/053-Szenario-52--Zeile-50.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-51__autoscroll",
+      "stepDescription": "Scroll | text=Ja | origin=[Szenario-52]-Zeile-51 | source=Click | text=Ja | selectors: text=Ja",
+      "selectors": [
+        "text=Ja"
+      ],
+      "interactionType": "scroll",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321249056,
+      "endedAtMs": 1783321249140,
+      "startedAtIso": "2026-07-06T07:00:49.056Z",
+      "endedAtIso": "2026-07-06T07:00:49.140Z",
+      "durationMs": 84,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:00:49.082Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "scroll",
+            "availableCount": 1,
+            "selectorStrategy": "text",
+            "selectors": [
+              "text=Ja"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:00:49.140Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/054-Szenario-52--Zeile-51__autoscroll.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-51",
+      "stepDescription": "Click | text=Ja | selectors: text=Ja",
+      "selectors": [
+        "text=Ja"
+      ],
+      "interactionType": "click",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321251243,
+      "endedAtMs": 1783321252885,
+      "startedAtIso": "2026-07-06T07:00:51.243Z",
+      "endedAtIso": "2026-07-06T07:00:52.885Z",
+      "durationMs": 1642,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:00:51.258Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "click",
+            "availableCount": 1,
+            "selectorStrategy": "text",
+            "selectors": [
+              "text=Ja"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:00:52.885Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "clickedElement": {
+        "x": 785.5,
+        "y": 387.984375,
+        "width": 13,
+        "height": 24.015625
+      },
+      "clickPoint": {
+        "x": 792,
+        "y": 400
+      },
+      "clickedAtMs": 1783321252885,
+      "screenshotPath": "timeline-screenshots/055-Szenario-52--Zeile-51.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-53__autoscroll",
+      "stepDescription": "Scroll | text=2. Auswahlrunde | origin=[Szenario-52]-Zeile-53 | source=Click | text=2. Auswahlrunde | selectors: text=2. Auswahlrunde",
+      "selectors": [
+        "text=2. Auswahlrunde"
+      ],
+      "interactionType": "scroll",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321254971,
+      "endedAtMs": 1783321255020,
+      "startedAtIso": "2026-07-06T07:00:54.971Z",
+      "endedAtIso": "2026-07-06T07:00:55.020Z",
+      "durationMs": 49,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:00:54.985Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "scroll",
+            "availableCount": 1,
+            "selectorStrategy": "text",
+            "selectors": [
+              "text=2. Auswahlrunde"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:00:55.020Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/056-Szenario-52--Zeile-53__autoscroll.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-53",
+      "stepDescription": "Click | text=2. Auswahlrunde | selectors: text=2. Auswahlrunde",
+      "selectors": [
+        "text=2. Auswahlrunde"
+      ],
+      "interactionType": "click",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321257091,
+      "endedAtMs": 1783321257233,
+      "startedAtIso": "2026-07-06T07:00:57.091Z",
+      "endedAtIso": "2026-07-06T07:00:57.233Z",
+      "durationMs": 142,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:00:57.101Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "click",
+            "availableCount": 1,
+            "selectorStrategy": "text",
+            "selectors": [
+              "text=2. Auswahlrunde"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:00:57.233Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "clickedElement": {
+        "x": 298,
+        "y": 161.890625,
+        "width": 114,
+        "height": 24.015625
+      },
+      "clickPoint": {
+        "x": 355,
+        "y": 174
+      },
+      "clickedAtMs": 1783321257233,
+      "screenshotPath": "timeline-screenshots/057-Szenario-52--Zeile-53.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-55__autoscroll",
+      "stepDescription": "Scroll | data-id=g_r2_bw/p_termin_r2/r2_bw_beginn | origin=[Szenario-52]-Zeile-55 | source=Eingabe | data-id=g_r2_bw/p_termin_r2/r2_bw_beginn | value=12.12.2027 | selectors: data-id=g_r2_bw/p_termin_r2/r2_bw_beginn",
+      "selectors": [
+        "data-id=g_r2_bw/p_termin_r2/r2_bw_beginn"
+      ],
+      "interactionType": "scroll",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321259306,
+      "endedAtMs": 1783321259349,
+      "startedAtIso": "2026-07-06T07:00:59.306Z",
+      "endedAtIso": "2026-07-06T07:00:59.349Z",
+      "durationMs": 43,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:00:59.318Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "scroll",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=g_r2_bw/p_termin_r2/r2_bw_beginn"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:00:59.349Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/058-Szenario-52--Zeile-55__autoscroll.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-55",
+      "stepDescription": "Eingabe | data-id=g_r2_bw/p_termin_r2/r2_bw_beginn | value=12.12.2027 | selectors: data-id=g_r2_bw/p_termin_r2/r2_bw_beginn",
+      "selectors": [
+        "data-id=g_r2_bw/p_termin_r2/r2_bw_beginn"
+      ],
+      "interactionType": "fill",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321261422,
+      "endedAtMs": 1783321262053,
+      "startedAtIso": "2026-07-06T07:01:01.422Z",
+      "endedAtIso": "2026-07-06T07:01:02.053Z",
+      "durationMs": 631,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:01:01.434Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "fill",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=g_r2_bw/p_termin_r2/r2_bw_beginn"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:01:02.053Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "fillPoint": {
+        "x": 340,
+        "y": 403
+      },
+      "screenshotPath": "timeline-screenshots/059-Szenario-52--Zeile-55.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-56__autoscroll",
+      "stepDescription": "Scroll | data-id=g_r2_bw/p_termin_r2/r2_bw_ende | origin=[Szenario-52]-Zeile-56 | source=Eingabe | data-id=g_r2_bw/p_termin_r2/r2_bw_ende | value=12.12.2027 | selectors: data-id=g_r2_bw/p_termin_r2/r2_bw_ende",
+      "selectors": [
+        "data-id=g_r2_bw/p_termin_r2/r2_bw_ende"
+      ],
+      "interactionType": "scroll",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321264123,
+      "endedAtMs": 1783321264170,
+      "startedAtIso": "2026-07-06T07:01:04.123Z",
+      "endedAtIso": "2026-07-06T07:01:04.170Z",
+      "durationMs": 47,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:01:04.134Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "scroll",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=g_r2_bw/p_termin_r2/r2_bw_ende"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:01:04.170Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/060-Szenario-52--Zeile-56__autoscroll.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-56",
+      "stepDescription": "Eingabe | data-id=g_r2_bw/p_termin_r2/r2_bw_ende | value=12.12.2027 | selectors: data-id=g_r2_bw/p_termin_r2/r2_bw_ende",
+      "selectors": [
+        "data-id=g_r2_bw/p_termin_r2/r2_bw_ende"
+      ],
+      "interactionType": "fill",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321266238,
+      "endedAtMs": 1783321266843,
+      "startedAtIso": "2026-07-06T07:01:06.238Z",
+      "endedAtIso": "2026-07-06T07:01:06.843Z",
+      "durationMs": 605,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:01:06.248Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "fill",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=g_r2_bw/p_termin_r2/r2_bw_ende"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:01:06.843Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "fillPoint": {
+        "x": 913,
+        "y": 403
+      },
+      "screenshotPath": "timeline-screenshots/061-Szenario-52--Zeile-56.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-59__autoscroll",
+      "stepDescription": "Scroll | data-id=g_r2_av/g_r2_av~1/r2_av_beginn | origin=[Szenario-52]-Zeile-59 | source=Eingabe | data-id=g_r2_av/g_r2_av~1/r2_av_beginn | value=12.12.2027 | selectors: data-id=g_r2_av/g_r2_av~1/r2_av_beginn",
+      "selectors": [
+        "data-id=g_r2_av/g_r2_av~1/r2_av_beginn"
+      ],
+      "interactionType": "scroll",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321268924,
+      "endedAtMs": 1783321268972,
+      "startedAtIso": "2026-07-06T07:01:08.924Z",
+      "endedAtIso": "2026-07-06T07:01:08.972Z",
+      "durationMs": 48,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:01:08.939Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "scroll",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=g_r2_av/g_r2_av~1/r2_av_beginn"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:01:08.972Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/062-Szenario-52--Zeile-59__autoscroll.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-59",
+      "stepDescription": "Eingabe | data-id=g_r2_av/g_r2_av~1/r2_av_beginn | value=12.12.2027 | selectors: data-id=g_r2_av/g_r2_av~1/r2_av_beginn",
+      "selectors": [
+        "data-id=g_r2_av/g_r2_av~1/r2_av_beginn"
+      ],
+      "interactionType": "fill",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321271055,
+      "endedAtMs": 1783321271700,
+      "startedAtIso": "2026-07-06T07:01:11.055Z",
+      "endedAtIso": "2026-07-06T07:01:11.700Z",
+      "durationMs": 645,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:01:11.070Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "fill",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=g_r2_av/g_r2_av~1/r2_av_beginn"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:01:11.699Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "fillPoint": {
+        "x": 340,
+        "y": 509
+      },
+      "screenshotPath": "timeline-screenshots/063-Szenario-52--Zeile-59.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-60__autoscroll",
+      "stepDescription": "Scroll | data-id=g_r2_av/g_r2_av~1/r2_av_ende | origin=[Szenario-52]-Zeile-60 | source=Eingabe | data-id=g_r2_av/g_r2_av~1/r2_av_ende | value=12.12.2027 | selectors: data-id=g_r2_av/g_r2_av~1/r2_av_ende",
+      "selectors": [
+        "data-id=g_r2_av/g_r2_av~1/r2_av_ende"
+      ],
+      "interactionType": "scroll",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321273789,
+      "endedAtMs": 1783321273839,
+      "startedAtIso": "2026-07-06T07:01:13.789Z",
+      "endedAtIso": "2026-07-06T07:01:13.839Z",
+      "durationMs": 50,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:01:13.804Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "scroll",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=g_r2_av/g_r2_av~1/r2_av_ende"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:01:13.839Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/064-Szenario-52--Zeile-60__autoscroll.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-60",
+      "stepDescription": "Eingabe | data-id=g_r2_av/g_r2_av~1/r2_av_ende | value=12.12.2027 | selectors: data-id=g_r2_av/g_r2_av~1/r2_av_ende",
+      "selectors": [
+        "data-id=g_r2_av/g_r2_av~1/r2_av_ende"
+      ],
+      "interactionType": "fill",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321275943,
+      "endedAtMs": 1783321276651,
+      "startedAtIso": "2026-07-06T07:01:15.943Z",
+      "endedAtIso": "2026-07-06T07:01:16.651Z",
+      "durationMs": 708,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:01:15.973Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "fill",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=g_r2_av/g_r2_av~1/r2_av_ende"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:01:16.651Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "fillPoint": {
+        "x": 913,
+        "y": 509
+      },
+      "screenshotPath": "timeline-screenshots/065-Szenario-52--Zeile-60.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-62__autoscroll",
+      "stepDescription": "Scroll | data-id=btn/action-save | origin=[Szenario-52]-Zeile-62 | source=Click | data-id=btn/action-save | selectors: data-id=btn/action-save",
+      "selectors": [
+        "data-id=btn/action-save"
+      ],
+      "interactionType": "scroll",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321278754,
+      "endedAtMs": 1783321278805,
+      "startedAtIso": "2026-07-06T07:01:18.754Z",
+      "endedAtIso": "2026-07-06T07:01:18.805Z",
+      "durationMs": 51,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:01:18.766Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "scroll",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=btn/action-save"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:01:18.805Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/066-Szenario-52--Zeile-62__autoscroll.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-62",
+      "stepDescription": "Click | data-id=btn/action-save | selectors: data-id=btn/action-save",
+      "selectors": [
+        "data-id=btn/action-save"
+      ],
+      "interactionType": "click",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321280923,
+      "endedAtMs": 1783321281130,
+      "startedAtIso": "2026-07-06T07:01:20.923Z",
+      "endedAtIso": "2026-07-06T07:01:21.130Z",
+      "durationMs": 207,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:01:20.940Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "click",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=btn/action-save"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:01:21.130Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung"
+          }
+        }
+      ],
+      "clickedElement": {
+        "x": 193.78125,
+        "y": 149.34375,
+        "width": 108.59375,
+        "height": 33.015625
+      },
+      "clickPoint": {
+        "x": 248,
+        "y": 166
+      },
+      "clickedAtMs": 1783321281130,
+      "screenshotPath": "timeline-screenshots/067-Szenario-52--Zeile-62.png"
+    },
+    {
+      "stepId": "controlbtn-actions",
+      "stepDescription": "",
+      "selectors": [],
+      "interactionType": "set-runtime-variable",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321283220,
+      "endedAtMs": 1783321283221,
+      "startedAtIso": "2026-07-06T07:01:23.220Z",
+      "endedAtIso": "2026-07-06T07:01:23.221Z",
+      "durationMs": 1,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:01:23.221Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung",
+            "aktion": "Bewerbungsverfahren veröffentlichen"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/068-controlbtn-actions.png"
+    },
+    {
+      "stepId": "controlbtn-actions-2",
+      "stepDescription": "",
+      "selectors": [],
+      "interactionType": "set-runtime-variable",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321285313,
+      "endedAtMs": 1783321285314,
+      "startedAtIso": "2026-07-06T07:01:25.313Z",
+      "endedAtIso": "2026-07-06T07:01:25.314Z",
+      "durationMs": 1,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:01:25.314Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung",
+            "aktion": "Bewerbungsverfahren veröffentlichen",
+            "bestaetigungsbutton": "Ja"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/069-controlbtn-actions-2.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-64-[aktion-auslösen]-Zeile-7__autoscroll",
+      "stepDescription": "Scroll | data-id=controlBtn/actions | origin=[Szenario-52]-Zeile-64-[aktion-auslösen]-Zeile-7 | source=Click | data-id=controlBtn/actions | selectors: data-id=controlBtn/actions",
+      "selectors": [
+        "data-id=controlBtn/actions"
+      ],
+      "interactionType": "scroll",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321287397,
+      "endedAtMs": 1783321287447,
+      "startedAtIso": "2026-07-06T07:01:27.397Z",
+      "endedAtIso": "2026-07-06T07:01:27.447Z",
+      "durationMs": 50,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:01:27.412Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "scroll",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=controlBtn/actions"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:01:27.447Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung",
+            "aktion": "Bewerbungsverfahren veröffentlichen",
+            "bestaetigungsbutton": "Ja"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/070-Szenario-52--Zeile-64--aktion-ausl-sen--Zeile-7__autoscroll.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-64-[aktion-auslösen]-Zeile-7",
+      "stepDescription": "Click | data-id=controlBtn/actions | selectors: data-id=controlBtn/actions",
+      "selectors": [
+        "data-id=controlBtn/actions"
+      ],
+      "interactionType": "click",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321289549,
+      "endedAtMs": 1783321289703,
+      "startedAtIso": "2026-07-06T07:01:29.549Z",
+      "endedAtIso": "2026-07-06T07:01:29.703Z",
+      "durationMs": 154,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:01:29.563Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "click",
+            "availableCount": 1,
+            "selectorStrategy": "data-id",
+            "selectors": [
+              "data-id=controlBtn/actions"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:01:29.703Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung",
+            "aktion": "Bewerbungsverfahren veröffentlichen",
+            "bestaetigungsbutton": "Ja"
+          }
+        }
+      ],
+      "clickedElement": {
+        "x": 86.390625,
+        "y": 149.34375,
+        "width": 102.59375,
+        "height": 33.015625
+      },
+      "clickPoint": {
+        "x": 138,
+        "y": 166
+      },
+      "clickedAtMs": 1783321289703,
+      "screenshotPath": "timeline-screenshots/071-Szenario-52--Zeile-64--aktion-ausl-sen--Zeile-7.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-64-[aktion-auslösen]-Zeile-8__autoscroll",
+      "stepDescription": "Scroll | text=Bewerbungsverfahren veröffentlichen | origin=[Szenario-52]-Zeile-64-[aktion-auslösen]-Zeile-8 | source=Click | text=Bewerbungsverfahren veröffentlichen | selectors: text=Bewerbungsverfahren veröffentlichen",
+      "selectors": [
+        "text=Bewerbungsverfahren veröffentlichen"
+      ],
+      "interactionType": "scroll",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321291801,
+      "endedAtMs": 1783321291861,
+      "startedAtIso": "2026-07-06T07:01:31.801Z",
+      "endedAtIso": "2026-07-06T07:01:31.861Z",
+      "durationMs": 60,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:01:31.816Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "scroll",
+            "availableCount": 1,
+            "selectorStrategy": "text",
+            "selectors": [
+              "text=Bewerbungsverfahren veröffentlichen"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:01:31.861Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung",
+            "aktion": "Bewerbungsverfahren veröffentlichen",
+            "bestaetigungsbutton": "Ja"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/072-Szenario-52--Zeile-64--aktion-ausl-sen--Zeile-8__autoscroll.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-64-[aktion-auslösen]-Zeile-8",
+      "stepDescription": "Click | text=Bewerbungsverfahren veröffentlichen | selectors: text=Bewerbungsverfahren veröffentlichen",
+      "selectors": [
+        "text=Bewerbungsverfahren veröffentlichen"
+      ],
+      "interactionType": "click",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321293968,
+      "endedAtMs": 1783321294167,
+      "startedAtIso": "2026-07-06T07:01:33.968Z",
+      "endedAtIso": "2026-07-06T07:01:34.167Z",
+      "durationMs": 199,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:01:33.987Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "click",
+            "availableCount": 1,
+            "selectorStrategy": "text",
+            "selectors": [
+              "text=Bewerbungsverfahren veröffentlichen"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:01:34.167Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung",
+            "aktion": "Bewerbungsverfahren veröffentlichen",
+            "bestaetigungsbutton": "Ja"
+          }
+        }
+      ],
+      "clickedElement": {
+        "x": 163.390625,
+        "y": 248.359375,
+        "width": 287,
+        "height": 31
+      },
+      "clickPoint": {
+        "x": 307,
+        "y": 264
+      },
+      "clickedAtMs": 1783321294167,
+      "screenshotPath": "timeline-screenshots/073-Szenario-52--Zeile-64--aktion-ausl-sen--Zeile-8.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-64-[aktion-auslösen]-Zeile-9__autoscroll",
+      "stepDescription": "Scroll | text=Ja | origin=[Szenario-52]-Zeile-64-[aktion-auslösen]-Zeile-9 | source=Click | text=Ja | selectors: text=Ja",
+      "selectors": [
+        "text=Ja"
+      ],
+      "interactionType": "scroll",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321296258,
+      "endedAtMs": 1783321296321,
+      "startedAtIso": "2026-07-06T07:01:36.258Z",
+      "endedAtIso": "2026-07-06T07:01:36.321Z",
+      "durationMs": 63,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:01:36.270Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "scroll",
+            "availableCount": 1,
+            "selectorStrategy": "text",
+            "selectors": [
+              "text=Ja"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:01:36.321Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung",
+            "aktion": "Bewerbungsverfahren veröffentlichen",
+            "bestaetigungsbutton": "Ja"
+          }
+        }
+      ],
+      "screenshotPath": "timeline-screenshots/074-Szenario-52--Zeile-64--aktion-ausl-sen--Zeile-9__autoscroll.png"
+    },
+    {
+      "stepId": "[Szenario-52]-Zeile-64-[aktion-auslösen]-Zeile-9",
+      "stepDescription": "Click | text=Ja | selectors: text=Ja",
+      "selectors": [
+        "text=Ja"
+      ],
+      "interactionType": "click",
+      "status": "executed",
+      "skipped": false,
+      "skipReason": null,
+      "startedAtMs": 1783321298422,
+      "endedAtMs": 1783321298630,
+      "startedAtIso": "2026-07-06T07:01:38.422Z",
+      "endedAtIso": "2026-07-06T07:01:38.630Z",
+      "durationMs": 208,
+      "error": null,
+      "log": [
+        {
+          "timestamp": "2026-07-06T07:01:38.438Z",
+          "level": "info",
+          "message": "target-availability",
+          "data": {
+            "interactionType": "click",
+            "availableCount": 1,
+            "selectorStrategy": "text",
+            "selectors": [
+              "text=Ja"
+            ],
+            "preferredControl": null,
+            "textMode": "text",
+            "targetIndex": null,
+            "error": null
+          }
+        },
+        {
+          "timestamp": "2026-07-06T07:01:38.630Z",
+          "level": "info",
+          "message": "runtime-variables",
+          "data": {
+            "random": "815194",
+            "url": "https://neo-integration.de",
+            "password": "!Neo-2405Neo!",
+            "username": "pb_abs_lep_verfahrenssteuerung",
+            "aktion": "Bewerbungsverfahren veröffentlichen",
+            "bestaetigungsbutton": "Ja"
+          }
+        }
+      ],
+      "clickedElement": {
+        "x": 905.5,
+        "y": 399.984375,
+        "width": 13,
+        "height": 24.015625
+      },
+      "clickPoint": {
+        "x": 912,
+        "y": 412
+      },
+      "clickedAtMs": 1783321298630,
+      "screenshotPath": "timeline-screenshots/075-Szenario-52--Zeile-64--aktion-ausl-sen--Zeile-9.png"
+    }
+  ],
+  "video": {
+    "viewport": {
+      "width": 1280,
+      "height": 720
+    },
+    "stepSegments": [
+      {
+        "stepId": "fragment-init-1-oeffnen",
+        "label": "fragment-init-1-oeffnen",
+        "interactionType": "set-runtime-variable",
+        "startMs": 1783321110975,
+        "endMs": 1783321110979
+      },
+      {
+        "stepId": "fragment-init-2-oeffnen",
+        "label": "fragment-init-2-oeffnen",
+        "interactionType": "set-runtime-variable",
+        "startMs": 1783321113109,
+        "endMs": 1783321113110
+      },
+      {
+        "stepId": "fragment-init-3-oeffnen",
+        "label": "fragment-init-3-oeffnen",
+        "interactionType": "set-runtime-variable",
+        "startMs": 1783321115196,
+        "endMs": 1783321115197
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-6-[neo-login]-Zeile-9",
+        "label": "Oeffnen | url=https://neo-integration.de",
+        "interactionType": "open",
+        "startMs": 1783321117252,
+        "endMs": 1783321120455
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-6-[neo-login]-Zeile-11__autoscroll",
+        "label": "Scroll | data-id=login/input/user | origin=[Szenario-52]-Zeile-6-[neo-login]-Zeile-11 | source=Eingabe | data-id=login/input/user | value=pb_abs_lep_verfahrenssteuerung | selectors: data-id=login/input/user",
+        "interactionType": "scroll",
+        "startMs": 1783321122686,
+        "endMs": 1783321122751
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-6-[neo-login]-Zeile-11",
+        "label": "Eingabe | data-id=login/input/user | value=pb_abs_lep_verfahrenssteuerung | selectors: data-id=login/input/user",
+        "interactionType": "fill",
+        "startMs": 1783321124902,
+        "endMs": 1783321125007
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-6-[neo-login]-Zeile-12__autoscroll",
+        "label": "Scroll | data-id=login/input/pass | origin=[Szenario-52]-Zeile-6-[neo-login]-Zeile-12 | source=Eingabe | data-id=login/input/pass | value=!Neo-2405Neo! | selectors: data-id=login/input/pass",
+        "interactionType": "scroll",
+        "startMs": 1783321127152,
+        "endMs": 1783321127217
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-6-[neo-login]-Zeile-12",
+        "label": "Eingabe | data-id=login/input/pass | value=!Neo-2405Neo! | selectors: data-id=login/input/pass",
+        "interactionType": "fill",
+        "startMs": 1783321129393,
+        "endMs": 1783321129487
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-6-[neo-login]-Zeile-13__autoscroll",
+        "label": "Scroll | data-id=login/button/submit | origin=[Szenario-52]-Zeile-6-[neo-login]-Zeile-13 | source=Click | data-id=login/button/submit | selectors: data-id=login/button/submit",
+        "interactionType": "scroll",
+        "startMs": 1783321131677,
+        "endMs": 1783321131715
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-6-[neo-login]-Zeile-13",
+        "label": "Click | data-id=login/button/submit | selectors: data-id=login/button/submit",
+        "interactionType": "click",
+        "startMs": 1783321133913,
+        "endMs": 1783321134136
+      },
+      {
+        "stepId": "login-confirm-organization-dialog",
+        "label": "login-confirm-organization-dialog",
+        "interactionType": null,
+        "startMs": 1783321139639,
+        "endMs": 1783321139652
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-16-[hautpmenü-bewerbungsverfahren-öffnen]-Zeile-3__autoscroll",
+        "label": "Scroll | data-id=button/menu-toggle | origin=[Szenario-52]-Zeile-16-[hautpmenü-bewerbungsverfahren-öffnen]-Zeile-3 | source=Click | data-id=button/menu-toggle | selectors: data-id=button/menu-toggle",
+        "interactionType": "scroll",
+        "startMs": 1783321139700,
+        "endMs": 1783321139737
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-16-[hautpmenü-bewerbungsverfahren-öffnen]-Zeile-3",
+        "label": "Click | data-id=button/menu-toggle | selectors: data-id=button/menu-toggle",
+        "interactionType": "click",
+        "startMs": 1783321141820,
+        "endMs": 1783321141951
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-16-[hautpmenü-bewerbungsverfahren-öffnen]-Zeile-4__autoscroll",
+        "label": "Scroll | data-id=menu/item/pb/ | origin=[Szenario-52]-Zeile-16-[hautpmenü-bewerbungsverfahren-öffnen]-Zeile-4 | source=Click | data-id=menu/item/pb/ | selectors: data-id=menu/item/pb/",
+        "interactionType": "scroll",
+        "startMs": 1783321144004,
+        "endMs": 1783321144046
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-16-[hautpmenü-bewerbungsverfahren-öffnen]-Zeile-4",
+        "label": "Click | data-id=menu/item/pb/ | selectors: data-id=menu/item/pb/",
+        "interactionType": "click",
+        "startMs": 1783321146157,
+        "endMs": 1783321146287
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-16-[hautpmenü-bewerbungsverfahren-öffnen]-Zeile-5__autoscroll",
+        "label": "Scroll | data-id=menu/link/pb/verfahren/ | origin=[Szenario-52]-Zeile-16-[hautpmenü-bewerbungsverfahren-öffnen]-Zeile-5 | source=Click | data-id=menu/link/pb/verfahren/ | selectors: data-id=menu/link/pb/verfahren/",
+        "interactionType": "scroll",
+        "startMs": 1783321148352,
+        "endMs": 1783321148395
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-16-[hautpmenü-bewerbungsverfahren-öffnen]-Zeile-5",
+        "label": "Click | data-id=menu/link/pb/verfahren/ | selectors: data-id=menu/link/pb/verfahren/",
+        "interactionType": "click",
+        "startMs": 1783321150470,
+        "endMs": 1783321150583
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-17__autoscroll",
+        "label": "Scroll | data-id=btn/create | origin=[Szenario-52]-Zeile-17 | source=Click | data-id=btn/create | selectors: data-id=btn/create",
+        "interactionType": "scroll",
+        "startMs": 1783321152653,
+        "endMs": 1783321152714
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-17",
+        "label": "Click | data-id=btn/create | selectors: data-id=btn/create",
+        "interactionType": "click",
+        "startMs": 1783321154825,
+        "endMs": 1783321154989
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-19__autoscroll",
+        "label": "Scroll | data-id=p_common/t_allgemein/bezeichnung_lang | origin=[Szenario-52]-Zeile-19 | source=Eingabe | data-id=p_common/t_allgemein/bezeichnung_lang | value=name des neuen Verfahrens 815194 | selectors: data-id=p_common/t_allgemein/bezeichnung_lang",
+        "interactionType": "scroll",
+        "startMs": 1783321157108,
+        "endMs": 1783321157175
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-19",
+        "label": "Eingabe | data-id=p_common/t_allgemein/bezeichnung_lang | value=name des neuen Verfahrens 815194 | selectors: data-id=p_common/t_allgemein/bezeichnung_lang",
+        "interactionType": "fill",
+        "startMs": 1783321159256,
+        "endMs": 1783321160796
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-20__autoscroll",
+        "label": "Scroll | data-id=p_common/t_allgemein/bezeichnung_kurz | origin=[Szenario-52]-Zeile-20 | source=Eingabe | data-id=p_common/t_allgemein/bezeichnung_kurz | value=lalaheute | selectors: data-id=p_common/t_allgemein/bezeichnung_kurz",
+        "interactionType": "scroll",
+        "startMs": 1783321162887,
+        "endMs": 1783321162943
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-20",
+        "label": "Eingabe | data-id=p_common/t_allgemein/bezeichnung_kurz | value=lalaheute | selectors: data-id=p_common/t_allgemein/bezeichnung_kurz",
+        "interactionType": "fill",
+        "startMs": 1783321165019,
+        "endMs": 1783321165565
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-21__autoscroll",
+        "label": "Scroll | data-id=p_common/t_allgemein/es_date | origin=[Szenario-52]-Zeile-21 | source=Eingabe | data-id=p_common/t_allgemein/es_date | value=12.12.2028 | selectors: data-id=p_common/t_allgemein/es_date",
+        "interactionType": "scroll",
+        "startMs": 1783321167652,
+        "endMs": 1783321167699
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-21",
+        "label": "Eingabe | data-id=p_common/t_allgemein/es_date | value=12.12.2028 | selectors: data-id=p_common/t_allgemein/es_date",
+        "interactionType": "fill",
+        "startMs": 1783321169810,
+        "endMs": 1783321170454
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-22__autoscroll",
+        "label": "Scroll | data-id=g_r1_allg/p_termin_common/alg_bw_beginn | origin=[Szenario-52]-Zeile-22 | source=Eingabe | data-id=g_r1_allg/p_termin_common/alg_bw_beginn | value=30.09.2026 | selectors: data-id=g_r1_allg/p_termin_common/alg_bw_beginn",
+        "interactionType": "scroll",
+        "startMs": 1783321172547,
+        "endMs": 1783321172595
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-22",
+        "label": "Eingabe | data-id=g_r1_allg/p_termin_common/alg_bw_beginn | value=30.09.2026 | selectors: data-id=g_r1_allg/p_termin_common/alg_bw_beginn",
+        "interactionType": "fill",
+        "startMs": 1783321174681,
+        "endMs": 1783321175286
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-23__autoscroll",
+        "label": "Scroll | data-id=g_r1_allg/p_termin_common/alg_bw_ende | origin=[Szenario-52]-Zeile-23 | source=Eingabe | data-id=g_r1_allg/p_termin_common/alg_bw_ende | value=12.11.2028 | selectors: data-id=g_r1_allg/p_termin_common/alg_bw_ende",
+        "interactionType": "scroll",
+        "startMs": 1783321177356,
+        "endMs": 1783321177395
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-23",
+        "label": "Eingabe | data-id=g_r1_allg/p_termin_common/alg_bw_ende | value=12.11.2028 | selectors: data-id=g_r1_allg/p_termin_common/alg_bw_ende",
+        "interactionType": "fill",
+        "startMs": 1783321179482,
+        "endMs": 1783321180082
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-26__autoscroll",
+        "label": "Scroll | data-id=btn/action-save | origin=[Szenario-52]-Zeile-26 | source=Click | data-id=btn/action-save | selectors: data-id=btn/action-save",
+        "interactionType": "scroll",
+        "startMs": 1783321182151,
+        "endMs": 1783321182186
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-26",
+        "label": "Click | data-id=btn/action-save | selectors: data-id=btn/action-save",
+        "interactionType": "click",
+        "startMs": 1783321184289,
+        "endMs": 1783321184376
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-28__autoscroll",
+        "label": "Scroll | text=1. Auswahlrunde | origin=[Szenario-52]-Zeile-28 | source=Click | text=1. Auswahlrunde | selectors: text=1. Auswahlrunde",
+        "interactionType": "scroll",
+        "startMs": 1783321186457,
+        "endMs": 1783321186491
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-28",
+        "label": "Click | text=1. Auswahlrunde | selectors: text=1. Auswahlrunde",
+        "interactionType": "click",
+        "startMs": 1783321188620,
+        "endMs": 1783321190259
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-31__autoscroll",
+        "label": "Scroll | data-id=g_r1_ibw/p_termin_r1/r1_ibw_beginn | origin=[Szenario-52]-Zeile-31 | source=Eingabe | data-id=g_r1_ibw/p_termin_r1/r1_ibw_beginn | value=30.09.2026 | selectors: data-id=g_r1_ibw/p_termin_r1/r1_ibw_beginn",
+        "interactionType": "scroll",
+        "startMs": 1783321192365,
+        "endMs": 1783321192437
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-31",
+        "label": "Eingabe | data-id=g_r1_ibw/p_termin_r1/r1_ibw_beginn | value=30.09.2026 | selectors: data-id=g_r1_ibw/p_termin_r1/r1_ibw_beginn",
+        "interactionType": "fill",
+        "startMs": 1783321194540,
+        "endMs": 1783321195172
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-32__autoscroll",
+        "label": "Scroll | data-id=g_r1_ibw/p_termin_r1/r1_ibw_ende | origin=[Szenario-52]-Zeile-32 | source=Eingabe | data-id=g_r1_ibw/p_termin_r1/r1_ibw_ende | value=30.12.2026 | selectors: data-id=g_r1_ibw/p_termin_r1/r1_ibw_ende",
+        "interactionType": "scroll",
+        "startMs": 1783321197247,
+        "endMs": 1783321197303
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-32",
+        "label": "Eingabe | data-id=g_r1_ibw/p_termin_r1/r1_ibw_ende | value=30.12.2026 | selectors: data-id=g_r1_ibw/p_termin_r1/r1_ibw_ende",
+        "interactionType": "fill",
+        "startMs": 1783321199413,
+        "endMs": 1783321200117
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-35__autoscroll",
+        "label": "Scroll | data-id=g_r1_ebw/g_r1_ebw~1/r1_ebw_beginn | origin=[Szenario-52]-Zeile-35 | source=Eingabe | data-id=g_r1_ebw/g_r1_ebw~1/r1_ebw_beginn | value=12.11.2027 | selectors: data-id=g_r1_ebw/g_r1_ebw~1/r1_ebw_beginn",
+        "interactionType": "scroll",
+        "startMs": 1783321202215,
+        "endMs": 1783321202269
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-35",
+        "label": "Eingabe | data-id=g_r1_ebw/g_r1_ebw~1/r1_ebw_beginn | value=12.11.2027 | selectors: data-id=g_r1_ebw/g_r1_ebw~1/r1_ebw_beginn",
+        "interactionType": "fill",
+        "startMs": 1783321204388,
+        "endMs": 1783321205068
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-36__autoscroll",
+        "label": "Scroll | data-id=g_r1_ebw/g_r1_ebw~1/r1_ebw_ende | origin=[Szenario-52]-Zeile-36 | source=Eingabe | data-id=g_r1_ebw/g_r1_ebw~1/r1_ebw_ende | value=12.12.2027 | selectors: data-id=g_r1_ebw/g_r1_ebw~1/r1_ebw_ende",
+        "interactionType": "scroll",
+        "startMs": 1783321207190,
+        "endMs": 1783321207233
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-36",
+        "label": "Eingabe | data-id=g_r1_ebw/g_r1_ebw~1/r1_ebw_ende | value=12.12.2027 | selectors: data-id=g_r1_ebw/g_r1_ebw~1/r1_ebw_ende",
+        "interactionType": "fill",
+        "startMs": 1783321209310,
+        "endMs": 1783321209952
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-38__autoscroll",
+        "label": "Scroll | data-id=g_r1_av/g_r1_av~2/r1_av_beginn | origin=[Szenario-52]-Zeile-38 | source=Eingabe | data-id=g_r1_av/g_r1_av~2/r1_av_beginn | value=01.01.2028 | selectors: data-id=g_r1_av/g_r1_av~2/r1_av_beginn",
+        "interactionType": "scroll",
+        "startMs": 1783321212055,
+        "endMs": 1783321212098
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-38",
+        "label": "Eingabe | data-id=g_r1_av/g_r1_av~2/r1_av_beginn | value=01.01.2028 | selectors: data-id=g_r1_av/g_r1_av~2/r1_av_beginn",
+        "interactionType": "fill",
+        "startMs": 1783321214200,
+        "endMs": 1783321214870
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-39__autoscroll",
+        "label": "Scroll | data-id=g_r1_av/g_r1_av~2/r1_av_ende | origin=[Szenario-52]-Zeile-39 | source=Eingabe | data-id=g_r1_av/g_r1_av~2/r1_av_ende | value=12.05.2028 | selectors: data-id=g_r1_av/g_r1_av~2/r1_av_ende",
+        "interactionType": "scroll",
+        "startMs": 1783321216945,
+        "endMs": 1783321216989
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-39",
+        "label": "Eingabe | data-id=g_r1_av/g_r1_av~2/r1_av_ende | value=12.05.2028 | selectors: data-id=g_r1_av/g_r1_av~2/r1_av_ende",
+        "interactionType": "fill",
+        "startMs": 1783321219113,
+        "endMs": 1783321219744
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-45__autoscroll",
+        "label": "Scroll | data-id=g_rlg_groups/btn/action-insert-scope | origin=[Szenario-52]-Zeile-45 | source=Click | data-id=g_rlg_groups/btn/action-insert-scope | selectors: data-id=g_rlg_groups/btn/action-insert-scope",
+        "interactionType": "scroll",
+        "startMs": 1783321221827,
+        "endMs": 1783321229670
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-45",
+        "label": "Click | data-id=g_rlg_groups/btn/action-insert-scope | selectors: data-id=g_rlg_groups/btn/action-insert-scope",
+        "interactionType": "click",
+        "startMs": 1783321231777,
+        "endMs": 1783321231941
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-46__autoscroll",
+        "label": "Scroll | data-id=g_rlg_groups/$data0/beschreibung | origin=[Szenario-52]-Zeile-46 | source=Eingabe | data-id=g_rlg_groups/$data0/beschreibung | value=Zuordnungsbeschereibung | selectors: data-id=g_rlg_groups/$data0/beschreibung",
+        "interactionType": "scroll",
+        "startMs": 1783321234028,
+        "endMs": 1783321234080
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-46",
+        "label": "Eingabe | data-id=g_rlg_groups/$data0/beschreibung | value=Zuordnungsbeschereibung | selectors: data-id=g_rlg_groups/$data0/beschreibung",
+        "interactionType": "fill",
+        "startMs": 1783321236160,
+        "endMs": 1783321237374
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-48__autoscroll",
+        "label": "Scroll | data-id=g_rlg_groups/$data0/zuordnungsregeln | origin=[Szenario-52]-Zeile-48 | source=Eingabe | data-id=g_rlg_groups/$data0/zuordnungsregeln | value=Zuordnungsregeln | selectors: data-id=g_rlg_groups/$data0/zuordnungsregeln",
+        "interactionType": "scroll",
+        "startMs": 1783321239459,
+        "endMs": 1783321239502
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-48",
+        "label": "Eingabe | data-id=g_rlg_groups/$data0/zuordnungsregeln | value=Zuordnungsregeln | selectors: data-id=g_rlg_groups/$data0/zuordnungsregeln",
+        "interactionType": "fill",
+        "startMs": 1783321241581,
+        "endMs": 1783321242537
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-50__autoscroll",
+        "label": "Scroll | data-id=$data0/btn/action-remove-scope | origin=[Szenario-52]-Zeile-50 | source=Click | data-id=$data0/btn/action-remove-scope | selectors: data-id=$data0/btn/action-remove-scope",
+        "interactionType": "scroll",
+        "startMs": 1783321244644,
+        "endMs": 1783321244694
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-50",
+        "label": "Click | data-id=$data0/btn/action-remove-scope | selectors: data-id=$data0/btn/action-remove-scope",
+        "interactionType": "click",
+        "startMs": 1783321246779,
+        "endMs": 1783321246949
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-51__autoscroll",
+        "label": "Scroll | text=Ja | origin=[Szenario-52]-Zeile-51 | source=Click | text=Ja | selectors: text=Ja",
+        "interactionType": "scroll",
+        "startMs": 1783321249056,
+        "endMs": 1783321249140
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-51",
+        "label": "Click | text=Ja | selectors: text=Ja",
+        "interactionType": "click",
+        "startMs": 1783321251243,
+        "endMs": 1783321252885
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-53__autoscroll",
+        "label": "Scroll | text=2. Auswahlrunde | origin=[Szenario-52]-Zeile-53 | source=Click | text=2. Auswahlrunde | selectors: text=2. Auswahlrunde",
+        "interactionType": "scroll",
+        "startMs": 1783321254971,
+        "endMs": 1783321255020
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-53",
+        "label": "Click | text=2. Auswahlrunde | selectors: text=2. Auswahlrunde",
+        "interactionType": "click",
+        "startMs": 1783321257091,
+        "endMs": 1783321257233
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-55__autoscroll",
+        "label": "Scroll | data-id=g_r2_bw/p_termin_r2/r2_bw_beginn | origin=[Szenario-52]-Zeile-55 | source=Eingabe | data-id=g_r2_bw/p_termin_r2/r2_bw_beginn | value=12.12.2027 | selectors: data-id=g_r2_bw/p_termin_r2/r2_bw_beginn",
+        "interactionType": "scroll",
+        "startMs": 1783321259306,
+        "endMs": 1783321259349
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-55",
+        "label": "Eingabe | data-id=g_r2_bw/p_termin_r2/r2_bw_beginn | value=12.12.2027 | selectors: data-id=g_r2_bw/p_termin_r2/r2_bw_beginn",
+        "interactionType": "fill",
+        "startMs": 1783321261422,
+        "endMs": 1783321262053
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-56__autoscroll",
+        "label": "Scroll | data-id=g_r2_bw/p_termin_r2/r2_bw_ende | origin=[Szenario-52]-Zeile-56 | source=Eingabe | data-id=g_r2_bw/p_termin_r2/r2_bw_ende | value=12.12.2027 | selectors: data-id=g_r2_bw/p_termin_r2/r2_bw_ende",
+        "interactionType": "scroll",
+        "startMs": 1783321264123,
+        "endMs": 1783321264170
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-56",
+        "label": "Eingabe | data-id=g_r2_bw/p_termin_r2/r2_bw_ende | value=12.12.2027 | selectors: data-id=g_r2_bw/p_termin_r2/r2_bw_ende",
+        "interactionType": "fill",
+        "startMs": 1783321266238,
+        "endMs": 1783321266843
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-59__autoscroll",
+        "label": "Scroll | data-id=g_r2_av/g_r2_av~1/r2_av_beginn | origin=[Szenario-52]-Zeile-59 | source=Eingabe | data-id=g_r2_av/g_r2_av~1/r2_av_beginn | value=12.12.2027 | selectors: data-id=g_r2_av/g_r2_av~1/r2_av_beginn",
+        "interactionType": "scroll",
+        "startMs": 1783321268924,
+        "endMs": 1783321268972
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-59",
+        "label": "Eingabe | data-id=g_r2_av/g_r2_av~1/r2_av_beginn | value=12.12.2027 | selectors: data-id=g_r2_av/g_r2_av~1/r2_av_beginn",
+        "interactionType": "fill",
+        "startMs": 1783321271055,
+        "endMs": 1783321271700
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-60__autoscroll",
+        "label": "Scroll | data-id=g_r2_av/g_r2_av~1/r2_av_ende | origin=[Szenario-52]-Zeile-60 | source=Eingabe | data-id=g_r2_av/g_r2_av~1/r2_av_ende | value=12.12.2027 | selectors: data-id=g_r2_av/g_r2_av~1/r2_av_ende",
+        "interactionType": "scroll",
+        "startMs": 1783321273789,
+        "endMs": 1783321273839
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-60",
+        "label": "Eingabe | data-id=g_r2_av/g_r2_av~1/r2_av_ende | value=12.12.2027 | selectors: data-id=g_r2_av/g_r2_av~1/r2_av_ende",
+        "interactionType": "fill",
+        "startMs": 1783321275943,
+        "endMs": 1783321276651
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-62__autoscroll",
+        "label": "Scroll | data-id=btn/action-save | origin=[Szenario-52]-Zeile-62 | source=Click | data-id=btn/action-save | selectors: data-id=btn/action-save",
+        "interactionType": "scroll",
+        "startMs": 1783321278754,
+        "endMs": 1783321278805
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-62",
+        "label": "Click | data-id=btn/action-save | selectors: data-id=btn/action-save",
+        "interactionType": "click",
+        "startMs": 1783321280923,
+        "endMs": 1783321281130
+      },
+      {
+        "stepId": "controlbtn-actions",
+        "label": "controlbtn-actions",
+        "interactionType": "set-runtime-variable",
+        "startMs": 1783321283220,
+        "endMs": 1783321283221
+      },
+      {
+        "stepId": "controlbtn-actions-2",
+        "label": "controlbtn-actions-2",
+        "interactionType": "set-runtime-variable",
+        "startMs": 1783321285313,
+        "endMs": 1783321285314
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-64-[aktion-auslösen]-Zeile-7__autoscroll",
+        "label": "Scroll | data-id=controlBtn/actions | origin=[Szenario-52]-Zeile-64-[aktion-auslösen]-Zeile-7 | source=Click | data-id=controlBtn/actions | selectors: data-id=controlBtn/actions",
+        "interactionType": "scroll",
+        "startMs": 1783321287397,
+        "endMs": 1783321287447
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-64-[aktion-auslösen]-Zeile-7",
+        "label": "Click | data-id=controlBtn/actions | selectors: data-id=controlBtn/actions",
+        "interactionType": "click",
+        "startMs": 1783321289549,
+        "endMs": 1783321289703
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-64-[aktion-auslösen]-Zeile-8__autoscroll",
+        "label": "Scroll | text=Bewerbungsverfahren veröffentlichen | origin=[Szenario-52]-Zeile-64-[aktion-auslösen]-Zeile-8 | source=Click | text=Bewerbungsverfahren veröffentlichen | selectors: text=Bewerbungsverfahren veröffentlichen",
+        "interactionType": "scroll",
+        "startMs": 1783321291801,
+        "endMs": 1783321291861
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-64-[aktion-auslösen]-Zeile-8",
+        "label": "Click | text=Bewerbungsverfahren veröffentlichen | selectors: text=Bewerbungsverfahren veröffentlichen",
+        "interactionType": "click",
+        "startMs": 1783321293968,
+        "endMs": 1783321294167
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-64-[aktion-auslösen]-Zeile-9__autoscroll",
+        "label": "Scroll | text=Ja | origin=[Szenario-52]-Zeile-64-[aktion-auslösen]-Zeile-9 | source=Click | text=Ja | selectors: text=Ja",
+        "interactionType": "scroll",
+        "startMs": 1783321296258,
+        "endMs": 1783321296321
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-64-[aktion-auslösen]-Zeile-9",
+        "label": "Click | text=Ja | selectors: text=Ja",
+        "interactionType": "click",
+        "startMs": 1783321298422,
+        "endMs": 1783321298630
+      }
+    ],
+    "clickMarkers": [
+      {
+        "stepId": "[Szenario-52]-Zeile-6-[neo-login]-Zeile-13",
+        "interactionType": "click",
+        "x": 912,
+        "y": 638,
+        "atMs": 1783321134135
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-16-[hautpmenü-bewerbungsverfahren-öffnen]-Zeile-3",
+        "interactionType": "click",
+        "x": 1219,
+        "y": 52,
+        "atMs": 1783321141951
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-16-[hautpmenü-bewerbungsverfahren-öffnen]-Zeile-4",
+        "interactionType": "click",
+        "x": 1093,
+        "y": 299,
+        "atMs": 1783321146286
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-16-[hautpmenü-bewerbungsverfahren-öffnen]-Zeile-5",
+        "interactionType": "click",
+        "x": 1102,
+        "y": 339,
+        "atMs": 1783321150583
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-17",
+        "interactionType": "click",
+        "x": 1126,
+        "y": 177,
+        "atMs": 1783321154989
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-26",
+        "interactionType": "click",
+        "x": 224,
+        "y": 166,
+        "atMs": 1783321184376
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-28",
+        "interactionType": "click",
+        "x": 209,
+        "y": 281,
+        "atMs": 1783321190259
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-45",
+        "interactionType": "click",
+        "x": 196,
+        "y": 605,
+        "atMs": 1783321231941
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-50",
+        "interactionType": "click",
+        "x": 1194,
+        "y": 493,
+        "atMs": 1783321246949
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-51",
+        "interactionType": "click",
+        "x": 792,
+        "y": 400,
+        "atMs": 1783321252885
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-53",
+        "interactionType": "click",
+        "x": 355,
+        "y": 174,
+        "atMs": 1783321257233
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-62",
+        "interactionType": "click",
+        "x": 248,
+        "y": 166,
+        "atMs": 1783321281130
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-64-[aktion-auslösen]-Zeile-7",
+        "interactionType": "click",
+        "x": 138,
+        "y": 166,
+        "atMs": 1783321289703
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-64-[aktion-auslösen]-Zeile-8",
+        "interactionType": "click",
+        "x": 307,
+        "y": 264,
+        "atMs": 1783321294167
+      },
+      {
+        "stepId": "[Szenario-52]-Zeile-64-[aktion-auslösen]-Zeile-9",
+        "interactionType": "click",
+        "x": 912,
+        "y": 412,
+        "atMs": 1783321298630
+      }
+    ]
+  }
+}

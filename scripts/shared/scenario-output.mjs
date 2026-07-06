@@ -45,8 +45,3 @@ export function buildPersistentScenarioArtifactsRoot(workspaceRoot, scenarioId, 
     sanitizeScenarioOutputToken(generatorType, 'generator'),
   )
 }
-
-export function parseScenarioVersionFromXml(xmlRaw, fallback = 'unknown') {
-  const match = String(xmlRaw || '').match(/<SzenarioScript\b[^>]*\bszenario-version=(["'])(.*?)\1/i)
-  return buildScenarioArtifactVersionToken(match?.[2], fallback)
-}

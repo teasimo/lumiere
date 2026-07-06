@@ -1,0 +1,10 @@
+{
+  "createdAtIso": "2026-07-06T07:01:51.986Z",
+  "scenarioId": "52",
+  "scenarioVersion": "2",
+  "generatorType": "testscript",
+  "sourceArtifactsDirRelative": "output/52/runs/20260706-085827-054/artifacts",
+  "rawVideoRelative": "szenario/52/2_de8f512a83f6/testscript/rohvideo/video.webm",
+  "timelineRelative": "szenario/52/2_de8f512a83f6/testscript/timeline/scenario-step-timeline.json",
+  "screenshotsRelative": "szenario/52/2_de8f512a83f6/testscript/screenshots"
+}

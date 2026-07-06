@@ -26,7 +26,6 @@ import {
   buildScenarioArtifactVersionToken,
   buildScenarioOutputFolderName,
   buildScenarioOutputRoot,
-  parseScenarioVersionFromXml,
   sanitizeScenarioOutputToken,
 } from '../shared/scenario-output.mjs'
 import { appendFragmentSourceArg, normalizeFragmentSource, resolveFragmentSourceForScenario } from '../shared/lunettes-fragment-source.mjs'
@@ -3956,8 +3955,7 @@ async function runScenarioTtsMode({ scenarioPath, scenarioId, scenarioVersion: s
   const { scenarioRoot, resolvedJsonPath, resolvedXmlPath, videoScriptRange } = await loadScenarioRootForTts(scenarioAbsolutePath, {
     fragmentSource,
   })
-  const scenarioXmlRaw = await readFile(scenarioAbsolutePath, 'utf8')
-  const scenarioVersion = String(scenarioVersionOverride || '').trim() || parseScenarioVersionFromXml(scenarioXmlRaw)
+  const scenarioVersion = String(scenarioVersionOverride || '').trim() || 'unknown'
 
   const artifacts = await ensureScenarioVideoTimelinePair({
     scenarioId: scenarioIdOverride,
@@ -4260,17 +4258,23 @@ async function runScenarioTtsMode({ scenarioPath, scenarioId, scenarioVersion: s
           const clipStartMs = presentationRange
             ? Math.max(0, Number(presentationRange.startMs) || 0)
             : 0
+          const clipEndMs = presentationRange?.endMs == null
+            ? null
+            : Math.max(clipStartMs, Number(presentationRange.endMs) || clipStartMs)
           return visualTimeline.clickMarkers.map((marker) => {
             const absoluteAtMs = Math.max(0, Number(marker?.atMs || 0))
             const sourceRelativeAtMs = Math.max(0, absoluteAtMs - timelineOriginMs)
-            const clipRelativeAtMs = Math.max(0, sourceRelativeAtMs - clipStartMs)
+            if (sourceRelativeAtMs < clipStartMs || (clipEndMs != null && sourceRelativeAtMs > clipEndMs)) {
+              return null
+            }
             return {
+              stepId: String(marker?.stepId || '').trim() || undefined,
               x: Math.max(0, Number(marker?.x || 0)),
               y: Math.max(0, Number(marker?.y || 0)),
-              at: clipRelativeAtMs / 1000,
+              at: sourceRelativeAtMs / 1000,
               durationMs: Math.max(1, Math.floor((Number(clickIndicatorConfig?.beforeMs || 0) + Number(clickIndicatorConfig?.afterMs || 0)) || 900)),
             }
-          })
+          }).filter(Boolean)
         })()
       : [],
     chapterCards: resolvedChapterCards,
@@ -4432,6 +4436,7 @@ async function main() {
     await runScenarioTtsMode({
       scenarioPath: parsed.scenarioPath,
       scenarioId: parsed.scenarioId,
+      scenarioVersion: parsed.scenarioVersion,
       software: parsed.software,
       profileName: parsed.profile,
       outputVideo: parsed.outputVideo,

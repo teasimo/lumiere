@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { createWriteStream, existsSync } from 'fs'
-import { mkdir, readdir, readFile, rm, stat, writeFile } from 'fs/promises'
+import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'fs/promises'
 import { dirname, extname, join, relative, resolve } from 'path'
 import { execFile, spawn } from 'child_process'
 import { Buffer } from 'buffer'
@@ -222,18 +222,6 @@ function buildPersistentScenarioArtifactRemotePrefix({ s3Config, szenarioId, sce
   return `s3://${s3Config.bucket}/${prefixParts.join('/')}`
 }
 
-function preferKnownScenarioVersion(primaryValue, fallbackValue) {
-  const primary = String(primaryValue ?? '').trim()
-  if (primary && primary.toLowerCase() !== 'unknown') {
-    return primary
-  }
-  const fallback = String(fallbackValue ?? '').trim()
-  if (fallback) {
-    return fallback
-  }
-  return primary || 'unknown'
-}
-
 function buildAwsCliArgs(s3Config) {
   const args = []
   if (s3Config.endpointUrl) {
@@ -349,13 +337,13 @@ export function assertManagedLiveTestWorkerHealthy(context, state) {
   if (!context.liveTestWorkerEnabled) {
     return
   }
-  if (state?.fatalError) {
+  if (state?.fatalError && context.liveTestWorkerFatalAffectsWatcher === true) {
     throw state.fatalError
   }
 }
 
 function raceWithManagedLiveTestWorkerHealth(context, state, promise) {
-  if (!context.liveTestWorkerEnabled || !state?.fatalSignal) {
+  if (!context.liveTestWorkerEnabled || !state?.fatalSignal || context.liveTestWorkerFatalAffectsWatcher !== true) {
     return promise
   }
   return Promise.race([promise, state.fatalSignal])
@@ -390,7 +378,11 @@ function startManagedLiveTestWorker(context, state) {
       console.error(`[watcher] Live-Test-Worker unerwartet beendet. Neustart fruehestens in ${context.liveTestWorkerRestartBackoffMs} ms.`)
     }
     if (state.fatalError) {
-      console.error(`[watcher] ${state.fatalError.message}`)
+      if (context.liveTestWorkerFatalAffectsWatcher === true) {
+        console.error(`[watcher] ${state.fatalError.message}`)
+      } else {
+        console.error(`[watcher] Live-Test-Worker deaktiviert: ${state.fatalError.message}`)
+      }
     }
   })
   child.on('error', (error) => {
@@ -401,7 +393,11 @@ function startManagedLiveTestWorker(context, state) {
     noteManagedLiveTestWorkerExit(context, state, { spawnError: error, startedAtMs })
     console.error(`[watcher] Live-Test-Worker konnte nicht gestartet werden: ${error.message}`)
     if (state.fatalError) {
-      console.error(`[watcher] ${state.fatalError.message}`)
+      if (context.liveTestWorkerFatalAffectsWatcher === true) {
+        console.error(`[watcher] ${state.fatalError.message}`)
+      } else {
+        console.error(`[watcher] Live-Test-Worker deaktiviert: ${state.fatalError.message}`)
+      }
     }
   })
 
@@ -433,12 +429,10 @@ function parseScenarioIdentityFromXml(xmlRaw, fallbackScenarioId) {
   }
 
   const scenarioId = sanitizeFileToken(root['@_id'] || fallbackScenarioId, fallbackScenarioId)
-  const scenarioVersion = String(root['@_szenario-version'] || '').trim() || 'unknown'
   const title = String(root['@_titel'] || '').trim()
 
   return {
     scenarioId,
-    scenarioVersion,
     title,
   }
 }
@@ -499,14 +493,24 @@ function extractScenarioVersionFromApiPayload(payload) {
   return null
 }
 
-async function resolveJobScenarioVersion(job, context) {
-  const payload = job?.payload && typeof job.payload === 'object' ? job.payload : {}
-  const payloadXml = typeof payload.szenario === 'string' ? payload.szenario.trim() : ''
-  if (payloadXml) {
-    const fallbackScenarioId = sanitizeFileToken(job?.szenario_id || payload?.szenario_id, 'scenario')
-    return parseScenarioIdentityFromXml(payloadXml, fallbackScenarioId).scenarioVersion
-  }
+export function getEffectiveJobPayload(job) {
+  const nestedPayload = job?.payload && typeof job.payload === 'object' ? job.payload : {}
 
+  return {
+    szenario_id: job?.szenario_id ?? null,
+    szenario_version: job?.szenario_version ?? null,
+    scenario_version: job?.scenario_version ?? null,
+    version: job?.version ?? null,
+    szenario: typeof job?.szenario === 'string' ? job.szenario : null,
+    titel: typeof job?.titel === 'string' ? job.titel : null,
+    software: typeof job?.software === 'string' ? job.software : null,
+    confluence_page_id: job?.confluence_page_id ?? null,
+    ...nestedPayload,
+  }
+}
+
+async function resolveJobScenarioVersion(job, context) {
+  const payload = getEffectiveJobPayload(job)
   const directVersion = String(
     payload?.version
       ?? payload?.szenario_version
@@ -650,12 +654,13 @@ function resolveCanonicalScenarioXmlPath(szenarioId) {
   return join(resolveScenarioCacheDir(szenarioId), 'source.xml')
 }
 
-async function persistScenarioXml({ job, xmlRaw }) {
+async function persistScenarioXml({ job, xmlRaw, scenarioVersion = 'unknown' }) {
   const fallbackScenarioId = sanitizeFileToken(job?.szenario_id || `job-${job?.id || 'unknown'}`, 'scenario')
   const identity = parseScenarioIdentityFromXml(xmlRaw, fallbackScenarioId)
   const lunettesScenarioId = job?.szenario_id || fallbackScenarioId
   const scenarioDir = resolveScenarioCacheDir(lunettesScenarioId)
-  const versionToken = sanitizeFileToken(identity.scenarioVersion, 'unknown')
+  const normalizedScenarioVersion = String(scenarioVersion || '').trim() || 'unknown'
+  const versionToken = sanitizeFileToken(normalizedScenarioVersion, 'unknown')
   const timestamp = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)
   const canonicalPath = resolveCanonicalScenarioXmlPath(lunettesScenarioId)
   const versionedPath = join(scenarioDir, `${versionToken}-job-${job.id}-${timestamp}.xml`)
@@ -671,7 +676,7 @@ async function persistScenarioXml({ job, xmlRaw }) {
   await writeFile(cacheMetaPath, JSON.stringify({
     szenario_id: job?.szenario_id ?? null,
     scenario_id: identity.scenarioId,
-    scenario_version: identity.scenarioVersion,
+    scenario_version: normalizedScenarioVersion,
     title: identity.title,
     canonical_path: relative(workspaceRoot, canonicalPath),
     updated_at: new Date().toISOString(),
@@ -679,6 +684,7 @@ async function persistScenarioXml({ job, xmlRaw }) {
 
   return {
     ...identity,
+    scenarioVersion: normalizedScenarioVersion,
     lunettesScenarioId: job?.szenario_id ?? null,
     scenarioDir,
     canonicalPath,
@@ -723,11 +729,11 @@ async function resolveLatestScenarioXmlFromCache(szenarioId) {
   return canonicalPath
 }
 
-async function resolveScenarioInput(job) {
-  const payload = job?.payload && typeof job.payload === 'object' ? job.payload : {}
+async function resolveScenarioInput(job, scenarioVersion = 'unknown') {
+  const payload = getEffectiveJobPayload(job)
   const payloadXml = typeof payload.szenario === 'string' ? payload.szenario.trim() : ''
   if (payloadXml) {
-    const persisted = await persistScenarioXml({ job, xmlRaw: payloadXml })
+    const persisted = await persistScenarioXml({ job, xmlRaw: payloadXml, scenarioVersion })
     return {
       scenarioPath: persisted.canonicalPath,
       scenarioMeta: persisted,
@@ -743,13 +749,16 @@ async function resolveScenarioInput(job) {
   const xmlRaw = await readFile(cachedPath, 'utf8')
   return {
     scenarioPath: cachedPath,
-    scenarioMeta: parseScenarioIdentityFromXml(xmlRaw, sanitizeFileToken(job?.szenario_id, 'scenario')),
+    scenarioMeta: {
+      ...parseScenarioIdentityFromXml(xmlRaw, sanitizeFileToken(job?.szenario_id, 'scenario')),
+      scenarioVersion: String(scenarioVersion || '').trim() || 'unknown',
+    },
     source: 'cache',
   }
 }
 
 export function buildScenarioArtifactPlan(job, scenarioInput, scenarioVersion) {
-  const payload = job?.payload && typeof job.payload === 'object' ? job.payload : {}
+  const payload = getEffectiveJobPayload(job)
   const scenarioId = sanitizeFileToken(payload?.szenario_id, scenarioInput?.scenarioMeta?.scenarioId || 'scenario')
   const lunettesScenarioId = String(job?.szenario_id || payload?.szenario_id || scenarioId).trim() || scenarioId
   const persistentTestscriptDir = buildPersistentScenarioArtifactsRoot(workspaceRoot, scenarioId, scenarioVersion, 'testscript')
@@ -809,31 +818,74 @@ async function clearLocalArtifactPath(pathValue) {
   await rm(pathValue, { recursive: true, force: true })
 }
 
+async function directoryHasEntries(pathValue) {
+  try {
+    const entries = await readdir(pathValue)
+    return entries.length > 0
+  } catch {
+    return false
+  }
+}
+
 async function restoreScenarioArtifactsFromS3(context, plan) {
   if (!context.s3ArtifactsEnabled) {
     return
   }
 
   for (const artifact of plan.restore) {
-    await clearLocalArtifactPath(artifact.localPath)
-    await ensureDir(artifact.localPath)
     const remotePrefix = buildPersistentScenarioArtifactRemotePrefix({
       s3Config: context.s3Config,
       szenarioId: plan.lunettesScenarioId,
       scenarioVersion: plan.scenarioVersion,
       generatorKey: artifact.generatorKey,
     })
-    console.log(`[watcher] Restore ${artifact.artifactKey}: ${remotePrefix} -> ${normalizeWorkspaceRelativePath(artifact.localPath)}`)
-    await runAwsCli(context.s3Config, [
+    const stagingPath = join(
+      runtimeRoot,
+      'restore-staging',
+      `${plan.lunettesScenarioId}-${plan.scenarioVersion}-${artifact.artifactKey}`,
+    )
+    await clearLocalArtifactPath(stagingPath)
+    await ensureDir(stagingPath)
+    console.log(`[watcher] Restore ${artifact.artifactKey}: ${remotePrefix} -> ${normalizeWorkspaceRelativePath(stagingPath)}`)
+
+    const restoreSucceeded = await runAwsCli(context.s3Config, [
       's3',
       'sync',
       remotePrefix,
-      artifact.localPath,
+      stagingPath,
       '--only-show-errors',
-    ]).catch((error) => {
+    ]).then(() => true).catch((error) => {
       const message = String(error?.stderr || error?.message || error).trim()
       console.warn(`[watcher] Restore ${artifact.artifactKey} fehlgeschlagen oder leer: ${message}`)
+      return false
     })
+
+    const stagingHasEntries = restoreSucceeded && await directoryHasEntries(stagingPath)
+    if (!stagingHasEntries) {
+      console.log(`[watcher] Restore ${artifact.artifactKey}: kein verwendbares S3-Artefakt gefunden, lokaler Bestand bleibt erhalten.`)
+      await clearLocalArtifactPath(stagingPath)
+      continue
+    }
+
+    const backupPath = `${artifact.localPath}.restore-backup`
+    await clearLocalArtifactPath(backupPath)
+    if (existsSync(artifact.localPath)) {
+      await rename(artifact.localPath, backupPath)
+    }
+
+    try {
+      await ensureDir(dirname(artifact.localPath))
+      await rename(stagingPath, artifact.localPath)
+      await clearLocalArtifactPath(backupPath)
+      console.log(`[watcher] Restore ${artifact.artifactKey}: lokaler Artefaktordner aktualisiert.`)
+    } catch (error) {
+      await clearLocalArtifactPath(artifact.localPath)
+      if (existsSync(backupPath)) {
+        await rename(backupPath, artifact.localPath).catch(() => {})
+      }
+      await clearLocalArtifactPath(stagingPath)
+      throw error
+    }
   }
 }
 
@@ -1411,7 +1463,7 @@ function buildPublishCommand({ scenarioPath, payload }) {
 }
 
 async function buildJobExecutionPlan(job, context, scenarioInput) {
-  const payload = job?.payload && typeof job.payload === 'object' ? job.payload : {}
+  const payload = getEffectiveJobPayload(job)
 
   if (job.type === 'testscript') {
     return {
@@ -1501,7 +1553,7 @@ function buildExecutionSummary(stepResults, payload = {}) {
 
 async function buildJobResult(job, scenarioInput, logPath, executionSummary = null) {
   const scenarioPathRelative = relative(workspaceRoot, scenarioInput.scenarioPath)
-  const payload = job?.payload && typeof job.payload === 'object' ? job.payload : {}
+  const payload = getEffectiveJobPayload(job)
   const scenarioId = sanitizeFileToken(payload?.szenario_id, scenarioInput.scenarioMeta.scenarioId || 'scenario')
   const baseResult = {
     job_type: job.type,
@@ -1559,7 +1611,7 @@ async function buildJobResult(job, scenarioInput, logPath, executionSummary = nu
 }
 
 async function buildFailureResult(job, logPath) {
-  const payload = job?.payload && typeof job.payload === 'object' ? job.payload : {}
+  const payload = getEffectiveJobPayload(job)
   const scenarioId = sanitizeFileToken(payload?.szenario_id || job?.szenario_id, 'scenario')
   const result = {
     job_type: job?.type || null,
@@ -1596,11 +1648,8 @@ async function processJob(job, context) {
   const scenarioVersion = await resolveJobScenarioVersion(job, context)
   const restorePlan = buildScenarioArtifactPlan(job, null, scenarioVersion)
   await restoreScenarioArtifactsFromS3(context, restorePlan)
-  const scenarioInput = await resolveScenarioInput(job)
-  const effectiveScenarioVersion = preferKnownScenarioVersion(
-    scenarioInput.scenarioMeta?.scenarioVersion,
-    scenarioVersion,
-  )
+  const scenarioInput = await resolveScenarioInput(job, scenarioVersion)
+  const effectiveScenarioVersion = scenarioVersion
   const artifactPlan = buildScenarioArtifactPlan(job, scenarioInput, effectiveScenarioVersion)
   const scenarioPathRelative = relative(workspaceRoot, scenarioInput.scenarioPath)
   const plan = await buildJobExecutionPlan(job, context, scenarioInput)
@@ -1834,6 +1883,7 @@ function buildWatcherContext(cliOptions) {
     86400000,
     defaultLiveTestWorkerMinUptimeMs,
   )
+  const liveTestWorkerFatalAffectsWatcher = liveTestWorkerConfig?.fatal_affects_watcher === true
   const s3Config = readS3Config()
   const liveTestWorkerArgs = [
     'scripts/test-script-generator/run-live-test-worker.mjs',
@@ -1876,6 +1926,7 @@ function buildWatcherContext(cliOptions) {
     liveTestWorkerCrashWindowMs,
     liveTestWorkerMaxCrashCount,
     liveTestWorkerMinUptimeMs,
+    liveTestWorkerFatalAffectsWatcher,
     liveTestWorkerArgs,
     liveTestWorkerEnv: process.env,
   }

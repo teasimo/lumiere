@@ -8,7 +8,6 @@ import { getTestScriptConfig, loadCentralConfig } from '../shared/central-config
 import {
   buildPersistentScenarioArtifactsRoot,
   buildScenarioOutputRoot,
-  parseScenarioVersionFromXml,
   sanitizeScenarioOutputToken,
 } from '../shared/scenario-output.mjs'
 import { resolveFragmentSourceForScenario } from '../shared/lunettes-fragment-source.mjs'
@@ -288,8 +287,7 @@ async function persistScenarioRunArtifacts({
 }) {
   const scenarioAbsolutePath = resolve(workspaceRoot, scenarioPath)
   const scenarioPathRelative = relative(workspaceRoot, scenarioAbsolutePath)
-  const scenarioXmlRaw = await readFile(scenarioAbsolutePath, 'utf8')
-  const scenarioVersion = String(scenarioVersionOverride || '').trim() || parseScenarioVersionFromXml(scenarioXmlRaw)
+  const scenarioVersion = String(scenarioVersionOverride || '').trim() || 'unknown'
   const specAbsolutePath = resolve(specPath)
   const generatedSiblingPaths = getGeneratedSiblingPathsFromSpec(specAbsolutePath)
   const specMetaPath = generatedSiblingPaths.specMetaPath
