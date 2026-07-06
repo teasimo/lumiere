@@ -40,6 +40,14 @@ function shiftYears(baseDate, amount) {
   return shiftMonths(baseDate, amount * 12)
 }
 
+function normalizeDateOffsetAmount(value, functionName) {
+  const amount = Number(value)
+  if (!Number.isFinite(amount) || !Number.isInteger(amount)) {
+    throw new Error(`${functionName} expects an integer amount.`)
+  }
+  return amount
+}
+
 export const centralDataFunctions = {
   /**
    * Generate a random integer between 0 and 999999
@@ -90,6 +98,18 @@ export const centralDataFunctions = {
     return formatGermanDate(shiftDays(createLocalDate(), 7))
   },
 
+  inXTagen(amount) {
+    return formatGermanDate(shiftDays(createLocalDate(), normalizeDateOffsetAmount(amount, 'inXTagen')))
+  },
+
+  inXMonaten(amount) {
+    return formatGermanDate(shiftMonths(createLocalDate(), normalizeDateOffsetAmount(amount, 'inXMonaten')))
+  },
+
+  inXJahren(amount) {
+    return formatGermanDate(shiftYears(createLocalDate(), normalizeDateOffsetAmount(amount, 'inXJahren')))
+  },
+
   naechstenMonat() {
     return formatGermanDate(shiftMonths(createLocalDate(), 1))
   },
@@ -100,6 +120,18 @@ export const centralDataFunctions = {
 
   letzteWoche() {
     return formatGermanDate(shiftDays(createLocalDate(), -7))
+  },
+
+  vorXTagen(amount) {
+    return formatGermanDate(shiftDays(createLocalDate(), -normalizeDateOffsetAmount(amount, 'vorXTagen')))
+  },
+
+  vorXMonaten(amount) {
+    return formatGermanDate(shiftMonths(createLocalDate(), -normalizeDateOffsetAmount(amount, 'vorXMonaten')))
+  },
+
+  vorXJahren(amount) {
+    return formatGermanDate(shiftYears(createLocalDate(), -normalizeDateOffsetAmount(amount, 'vorXJahren')))
   },
 
   letztenMonat() {

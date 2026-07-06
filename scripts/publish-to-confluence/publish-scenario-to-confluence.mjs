@@ -10,6 +10,7 @@ import { promisify } from 'util'
 import { XMLParser } from 'fast-xml-parser'
 import {
   buildPersistentScenarioArtifactsRoot,
+  buildScenarioOutputFolderName,
 } from '../shared/scenario-output.mjs'
 import { loadCentralConfig } from '../shared/central-config.mjs'
 import { parseScenarioXml } from '../shared/parse-scenario-xml.mjs'

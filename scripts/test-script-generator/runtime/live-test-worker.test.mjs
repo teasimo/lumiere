@@ -13,6 +13,39 @@ import {
 import { LiveTestWorkerRunner, normalizeScriptLineToScenarioXml } from './live-test-worker.mjs'
 import { scenarioToSpecSource } from '../generate-tests-from-scenario-xml.mjs'
 
+function padDatePart(value) {
+  return String(value).padStart(2, '0')
+}
+
+function formatGermanDate(date) {
+  return `${padDatePart(date.getDate())}.${padDatePart(date.getMonth() + 1)}.${date.getFullYear()}`
+}
+
+function createLocalDate() {
+  const now = new Date()
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate())
+}
+
+function shiftDays(baseDate, amount) {
+  const nextDate = new Date(baseDate)
+  nextDate.setDate(nextDate.getDate() + amount)
+  return nextDate
+}
+
+function shiftMonths(baseDate, amount) {
+  const year = baseDate.getFullYear()
+  const month = baseDate.getMonth()
+  const day = baseDate.getDate()
+  const targetMonthDate = new Date(year, month + amount, 1)
+  const lastDayOfTargetMonth = new Date(targetMonthDate.getFullYear(), targetMonthDate.getMonth() + 1, 0).getDate()
+  targetMonthDate.setDate(Math.min(day, lastDayOfTargetMonth))
+  return targetMonthDate
+}
+
+function shiftYears(baseDate, amount) {
+  return shiftMonths(baseDate, amount * 12)
+}
+
 function createFakePage() {
   const handlers = new Map()
 
@@ -816,6 +849,47 @@ test('scenarioToSpecSource maps Upload temp=true to inline upload interaction', 
   assert.equal(resolved.resolvedRoot.flow[0].interaction.temp, true)
   assert.equal(resolved.resolvedRoot.flow[0].interaction.filename, 'beispiel-{{kunde.id}}.csv')
   assert.equal(resolved.resolvedRoot.flow[0].interaction.value, 'nummer;name\n{{kunde.id}};{{kunde.name}}')
+})
+
+test('scenarioToSpecSource resolves parameterized date functions in variables', async () => {
+  const runtimeRoot = await mkdtemp(join(tmpdir(), 'live-test-worker-'))
+  const scenarioPath = join(runtimeRoot, 'date-functions.xml')
+  const xsdPath = join(process.cwd(), 'schemas', 'szenarioscript.xsd')
+  const generatedSpecPath = join(runtimeRoot, 'date-functions.generated.spec.js')
+
+  await writeFile(scenarioPath, [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<SzenarioScript>',
+    '  <Variablen>',
+    '    <Variable name="inTagen" default="{{inXTagen(10)}}" />',
+    '    <Variable name="inMonaten" default="{{inXMonaten(2)}}" />',
+    '    <Variable name="inJahren" default="{{inXJahren(1)}}" />',
+    '    <Variable name="vorTagen" default="{{vorXTagen(10)}}" />',
+    '    <Variable name="vorMonaten" default="{{vorXMonaten(2)}}" />',
+    '    <Variable name="vorJahren" default="{{vorXJahren(1)}}" />',
+    '  </Variablen>',
+    '  <Gruppe>',
+    '    <Oeffnen url="https://example.test/{{inTagen}}" />',
+    '  </Gruppe>',
+    '</SzenarioScript>',
+    '',
+  ].join('\n'), 'utf8')
+
+  const baseDate = createLocalDate()
+  const resolved = await scenarioToSpecSource({
+    scenarioPath,
+    xsdPath,
+    generatedSpecPath,
+  })
+
+  assert.deepEqual(resolved.resolvedRoot.initialRuntimeVariables, {
+    inTagen: formatGermanDate(shiftDays(baseDate, 10)),
+    inMonaten: formatGermanDate(shiftMonths(baseDate, 2)),
+    inJahren: formatGermanDate(shiftYears(baseDate, 1)),
+    vorTagen: formatGermanDate(shiftDays(baseDate, -10)),
+    vorMonaten: formatGermanDate(shiftMonths(baseDate, -2)),
+    vorJahren: formatGermanDate(shiftYears(baseDate, -1)),
+  })
 })
 
 test('scenarioToSpecSource maps class attribute as regex-capable component selector', async () => {

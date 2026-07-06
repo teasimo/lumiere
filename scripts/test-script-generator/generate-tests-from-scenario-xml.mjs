@@ -277,6 +277,73 @@ function getPathValue(source, pathExpr) {
   }, source)
 }
 
+function splitFunctionArguments(argsText) {
+  const args = []
+  let current = ''
+  let quote = null
+  let escaped = false
+
+  for (const char of String(argsText || '')) {
+    if (escaped) {
+      current += char
+      escaped = false
+      continue
+    }
+
+    if (char === '\\' && quote) {
+      escaped = true
+      continue
+    }
+
+    if ((char === '"' || char === "'") && (!quote || quote === char)) {
+      quote = quote ? null : char
+      current += char
+      continue
+    }
+
+    if (char === ',' && !quote) {
+      args.push(current.trim())
+      current = ''
+      continue
+    }
+
+    current += char
+  }
+
+  if (quote) {
+    throw new Error('Unterminated string argument.')
+  }
+
+  if (current.trim() || String(argsText || '').trim()) {
+    args.push(current.trim())
+  }
+
+  return args
+}
+
+function parseFunctionArgument(rawArg, context) {
+  const arg = String(rawArg || '').trim()
+  if (!arg) {
+    return ''
+  }
+
+  const quotedMatch = arg.match(/^(['"])([\s\S]*)\1$/)
+  if (quotedMatch) {
+    return quotedMatch[2].replace(/\\(['"\\])/g, '$1')
+  }
+
+  if (/^-?\d+(?:\.\d+)?$/.test(arg)) {
+    return Number(arg)
+  }
+
+  const contextValue = getPathValue(context, arg)
+  if (contextValue !== undefined) {
+    return contextValue
+  }
+
+  return arg
+}
+
 function resolveTemplateString(text, context, dataFunctions = {}) {
   if (typeof text !== 'string') {
     return text
@@ -288,12 +355,16 @@ function resolveTemplateString(text, context, dataFunctions = {}) {
       return ''
     }
 
-    const funcMatch = expr.match(/^(\w+)\s*\(\s*\)$/)
+    const funcMatch = expr.match(/^(\w+)\s*\(([\s\S]*)\)$/)
     if (funcMatch) {
       const funcName = funcMatch[1]
       if (typeof dataFunctions[funcName] === 'function') {
         try {
-          const result = dataFunctions[funcName]()
+          const argsText = String(funcMatch[2] || '').trim()
+          const args = argsText
+            ? splitFunctionArguments(argsText).map((arg) => parseFunctionArgument(arg, context))
+            : []
+          const result = dataFunctions[funcName](...args)
           return result == null ? '' : String(result)
         } catch (error) {
           console.warn(`Error calling data function ${funcName}: ${error.message}`)

@@ -142,12 +142,27 @@ Eingebaute zentrale Funktionen:
 - `gestern()`
 - `morgen()`
 - `naechsteWoche()`
+- `inXTagen(zahl)`
+- `inXMonaten(zahl)`
+- `inXJahren(zahl)`
 - `naechstenMonat()`
 - `naechstesJahr()`
 - `letzteWoche()`
+- `vorXTagen(zahl)`
+- `vorXMonaten(zahl)`
+- `vorXJahren(zahl)`
 - `letztenMonat()`
 - `letztesJahr()`
 - `slug(text)`
+
+Beispiel:
+
+```xml
+<Variablen>
+  <Variable name="startdatum" default="{{inXTagen(14)}}"/>
+  <Variable name="archivdatum" default="{{vorXJahren(1)}}"/>
+</Variablen>
+```
 
 Quelle: [scripts/test-script-generator/central-data-functions.mjs](/home/simon/Documents/Programming/ssvn-controlling/lumiere/scripts/test-script-generator/central-data-functions.mjs)
 
