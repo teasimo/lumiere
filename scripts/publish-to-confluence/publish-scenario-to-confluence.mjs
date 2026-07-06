@@ -716,9 +716,7 @@ function createTimelineReference(resolvedStepId, timelineEntry, timelineContext)
   }
 
   const screenshotRelativePath = String(timelineEntry?.screenshotPath || '').trim()
-  const screenshotAbsolutePath = screenshotRelativePath
-    ? resolve(dirname(timelineContext.timelinePath), screenshotRelativePath)
-    : null
+  const screenshotAbsolutePath = resolveTimelineScreenshotPath(timelineContext.timelinePath, screenshotRelativePath)
 
   const attachmentName = screenshotAbsolutePath
     ? timelineContext.screenshotAttachmentNames.get(screenshotAbsolutePath) || null
@@ -729,6 +727,26 @@ function createTimelineReference(resolvedStepId, timelineEntry, timelineContext)
     stepId: normalizedResolvedStepId || String(timelineEntry?.stepId || '').trim() || null,
     screenshotAttachmentName: attachmentName,
   }
+}
+
+function resolveTimelineScreenshotPath(timelinePath, screenshotRelativePath) {
+  const relativePath = normalizeWorkspaceRelativePath(screenshotRelativePath)
+  if (!relativePath) {
+    return null
+  }
+
+  const timelineDir = dirname(timelinePath)
+  const artifactRoot = dirname(timelineDir)
+  const screenshotPrefix = 'timeline-screenshots/'
+  const candidates = [resolve(timelineDir, relativePath)]
+
+  if (relativePath.startsWith(screenshotPrefix)) {
+    candidates.push(resolve(artifactRoot, 'screenshots', relativePath.slice(screenshotPrefix.length)))
+  }
+
+  candidates.push(resolve(artifactRoot, relativePath))
+
+  return candidates.find((candidate) => existsSync(candidate)) || candidates[0]
 }
 
 function isTimelineInteractionTag(tag) {
@@ -874,6 +892,7 @@ function collectScreenshotUploadPlan({ timeline, timelinePath, scenarioId }) {
   const screenshotAttachmentNames = new Map()
   const uploads = []
   const seen = new Set()
+  const missing = []
 
   for (const entry of Array.isArray(timeline?.steps) ? timeline.steps : []) {
     const relativePath = String(entry?.screenshotPath || '').trim()
@@ -881,8 +900,9 @@ function collectScreenshotUploadPlan({ timeline, timelinePath, scenarioId }) {
       continue
     }
 
-    const absolutePath = resolve(dirname(timelinePath), relativePath)
+    const absolutePath = resolveTimelineScreenshotPath(timelinePath, relativePath)
     if (!existsSync(absolutePath)) {
+      missing.push(relativePath)
       continue
     }
 
@@ -897,6 +917,12 @@ function collectScreenshotUploadPlan({ timeline, timelinePath, scenarioId }) {
       filePath: absolutePath,
       attachmentName,
     })
+  }
+
+  if (missing.length > 0) {
+    const examples = missing.slice(0, 5).join(', ')
+    const suffix = missing.length > 5 ? `, ... (${missing.length} gesamt)` : ''
+    throw new Error(`Timeline referenziert fehlende Screenshots: ${examples}${suffix}`)
   }
 
   return {
@@ -1017,17 +1043,20 @@ ${MANAGED_BLOCK_END}`
 
 async function buildTimelineArchive({ timelinePath, scenarioId }) {
   const timelineDir = dirname(timelinePath)
+  const artifactRoot = dirname(timelineDir)
   const archivePath = resolve('/tmp', `${String(scenarioId)}-timeline-screenshots.zip`)
   const timelineFilename = basename(timelinePath)
-  const screenshotsDirName = 'timeline-screenshots'
-  const args = ['-rq', archivePath, timelineFilename]
+  const args = ['-rq', archivePath, join('timeline', timelineFilename)]
 
-  if (existsSync(join(timelineDir, screenshotsDirName))) {
-    args.push(screenshotsDirName)
+  if (existsSync(join(artifactRoot, 'screenshots'))) {
+    args.push('screenshots')
+  }
+  if (existsSync(join(timelineDir, 'timeline-screenshots'))) {
+    args.push(join('timeline', 'timeline-screenshots'))
   }
 
   try {
-    await execFileAsync('zip', args, { cwd: timelineDir })
+    await execFileAsync('zip', args, { cwd: artifactRoot })
   } catch (error) {
     const stderr = String(error?.stderr || '').trim()
     throw new Error(`ZIP fuer Timeline/Screenshots konnte nicht erstellt werden: ${stderr || error.message}`)

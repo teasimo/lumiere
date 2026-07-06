@@ -58,7 +58,7 @@ function buildTimelineStepSegment(step) {
 
 function buildTimelineClickMarker(step) {
   const interactionType = inferTimelineInteractionType(step)
-  const point = step?.clickPoint
+  const point = step?.clickPoint || step?.fillPoint
   const x = Number(point?.x)
   const y = Number(point?.y)
   if (!Number.isFinite(x) || !Number.isFinite(y)) {
@@ -118,11 +118,9 @@ function buildTimelineVideoSection(timeline, viewport = null) {
       stepSegments.push(segment)
     }
 
-    if (inferTimelineInteractionType(step) === 'click') {
-      const clickMarker = buildTimelineClickMarker(step)
-      if (clickMarker) {
-        clickMarkers.push(clickMarker)
-      }
+    const clickMarker = buildTimelineClickMarker(step)
+    if (clickMarker) {
+      clickMarkers.push(clickMarker)
     }
   }
 

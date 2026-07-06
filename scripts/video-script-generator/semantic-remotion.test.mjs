@@ -137,3 +137,49 @@ test('buildSemanticVideoPlan inserts scroll segments between included steps', ()
     sourceEndMs: 1200,
   })
 })
+
+test('buildSemanticVideoPlan bridges unchanged step overlays across scroll segments', () => {
+  const plan = buildSemanticVideoPlan({
+    scenarioRoot: {
+      id: 'scenario-scroll-overlay',
+      title: 'Scenario Scroll Overlay',
+      flow: [
+        { id: 'step-1', title: 'Same Section', interaction: { type: 'fill' } },
+        { id: 'step-2', title: 'Same Section', interaction: { type: 'fill' } },
+        { id: 'step-3', title: 'Different Section', interaction: { type: 'fill' } },
+      ],
+    },
+    timelineReport: {
+      steps: [
+        { stepId: 'step-1', startedAtMs: 1000, endedAtMs: 1500 },
+        { stepId: 'step-2__autoscroll', interactionType: 'scroll', startedAtMs: 1800, endedAtMs: 1900 },
+        { stepId: 'step-2', startedAtMs: 2200, endedAtMs: 2700 },
+        { stepId: 'step-3__autoscroll', interactionType: 'scroll', startedAtMs: 3000, endedAtMs: 3100 },
+        { stepId: 'step-3', startedAtMs: 3400, endedAtMs: 3900 },
+      ],
+    },
+    stepSegments: [
+      { stepId: 'step-1', interactionType: 'fill', start: 0, end: 0.5 },
+      { stepId: 'step-2__autoscroll', interactionType: 'scroll', start: 0.8, end: 0.9 },
+      { stepId: 'step-2', interactionType: 'fill', start: 1.2, end: 1.7 },
+      { stepId: 'step-3__autoscroll', interactionType: 'scroll', start: 2, end: 2.1 },
+      { stepId: 'step-3', interactionType: 'fill', start: 2.4, end: 2.9 },
+    ],
+    adjustedAudioFiles: [],
+    inputVideo: '/tmp/input.mp4',
+    outputVideo: '/tmp/output.mp4',
+    width: 1280,
+    height: 720,
+    fps: 30,
+  })
+
+  const steps = plan.chapters.flatMap((chapter) => chapter.steps)
+  const bridgedScroll = steps.find((step) => step.id === 'step-2__autoscroll')
+  const changedScroll = steps.find((step) => step.id === 'step-3__autoscroll')
+
+  assert.equal(bridgedScroll.callouts.length, 1)
+  assert.equal(bridgedScroll.callouts[0].variant, 'step-overlay')
+  assert.equal(bridgedScroll.callouts[0].text, steps.find((step) => step.id === 'step-2').callouts[0].text)
+  assert.equal(bridgedScroll.callouts[0].durationMs, 100)
+  assert.equal(changedScroll.callouts.length, 0)
+})

@@ -2215,31 +2215,30 @@ function normalizeTimelineClickMarkers(timelineReport) {
     ? timelineReport.video.clickMarkers
     : []
 
-  if (directMarkers.length > 0) {
-    return directMarkers
-      .map((marker) => {
-        const x = Number(marker?.x)
-        const y = Number(marker?.y)
-        const atMs = Number(marker?.atMs ?? marker?.timeMs)
-        if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(atMs)) {
-          return null
-        }
-        return {
-          stepId: String(marker?.stepId || '').trim() || null,
-          interactionType: marker?.interactionType == null ? null : String(marker.interactionType),
-          x: Math.max(0, Math.round(x)),
-          y: Math.max(0, Math.round(y)),
-          atMs: Math.max(0, Math.round(atMs)),
-        }
-      })
-      .filter(Boolean)
-  }
+  const normalizedDirectMarkers = directMarkers
+    .map((marker) => {
+      const x = Number(marker?.x)
+      const y = Number(marker?.y)
+      const atMs = Number(marker?.atMs ?? marker?.timeMs)
+      if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(atMs)) {
+        return null
+      }
+      return {
+        stepId: String(marker?.stepId || '').trim() || null,
+        interactionType: marker?.interactionType == null ? null : String(marker.interactionType),
+        x: Math.max(0, Math.round(x)),
+        y: Math.max(0, Math.round(y)),
+        atMs: Math.max(0, Math.round(atMs)),
+      }
+    })
+    .filter(Boolean)
 
-  return (Array.isArray(timelineReport?.steps) ? timelineReport.steps : [])
-    .filter((step) => String(step?.interactionType || '').trim().toLowerCase() === 'click')
+  const stepMarkers = (Array.isArray(timelineReport?.steps) ? timelineReport.steps : [])
     .map((step) => {
-      const x = Number(step?.clickPoint?.x)
-      const y = Number(step?.clickPoint?.y)
+      const interactionType = String(step?.interactionType || '').trim().toLowerCase()
+      const point = step?.clickPoint || step?.fillPoint
+      const x = Number(point?.x)
+      const y = Number(point?.y)
       const clickedAtMs = Number(step?.clickedAtMs)
       const startedAtMs = Number(step?.startedAtMs)
       const endedAtMs = Number(step?.endedAtMs)
@@ -2254,13 +2253,25 @@ function normalizeTimelineClickMarkers(timelineReport) {
       }
       return {
         stepId: String(step?.stepId || '').trim() || null,
-        interactionType: step?.interactionType == null ? null : String(step.interactionType),
+        interactionType: interactionType || (step?.interactionType == null ? null : String(step.interactionType)),
         x: Math.max(0, Math.round(x)),
         y: Math.max(0, Math.round(y)),
         atMs: Math.max(0, Math.round(atMs)),
       }
     })
     .filter(Boolean)
+
+  const markersByStep = new Map()
+  for (const marker of [...normalizedDirectMarkers, ...stepMarkers]) {
+    const key = marker.stepId
+      ? `${marker.stepId}::${marker.interactionType || ''}`
+      : `${marker.x}:${marker.y}:${marker.atMs}:${marker.interactionType || ''}`
+    if (!markersByStep.has(key)) {
+      markersByStep.set(key, marker)
+    }
+  }
+
+  return [...markersByStep.values()]
 }
 
 function resolveTimelineOriginMs(timelineReport) {

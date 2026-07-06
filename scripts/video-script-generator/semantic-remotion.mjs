@@ -722,6 +722,7 @@ export function buildSemanticVideoPlan({
     title: defaultChapterTitle,
     steps: [],
   }
+  let previousStepOverlayText = null
 
   function ensureCurrentChapter() {
     if (!currentChapter) {
@@ -812,6 +813,7 @@ export function buildSemanticVideoPlan({
           clickMarkers: [],
         })
       }
+      previousStepOverlayText = null
       continue
     }
 
@@ -828,25 +830,6 @@ export function buildSemanticVideoPlan({
     }
     const basePauses = normalizePausesForClip(pausesByStepId.get(stepId) || [], stepClip)
     const baseMarkers = [...(clickMarkersByStepId.get(stepId) || [])]
-    const scrollSegmentsBeforeStep = scrollSegmentsByTargetStepId.get(stepId) || []
-    for (const scrollSegment of scrollSegmentsBeforeStep) {
-      const scrollClip = {
-        sourceStartMs: scrollSegment.sourceStartMs,
-        sourceEndMs: scrollSegment.sourceEndMs,
-      }
-      currentChapter.steps.push({
-        id: scrollSegment.id,
-        title: scrollSegment.label,
-        'row-index': flowEntry?.step?.['row-index'] ?? null,
-        tags: ['Scroll'],
-        clip: scrollClip,
-        freezes: [],
-        pauses: [],
-        narrations: [],
-        callouts: [],
-        clickMarkers: [],
-      })
-    }
 
     const holdDurationMs = clickPresentation.freezeBeforeMs + clickPresentation.highlightDurationMs + clickPresentation.afterMs
     if (holdDurationMs > 0 && CLICKMARKER_FREEZE && baseMarkers.length > 0) {
@@ -921,6 +904,35 @@ export function buildSemanticVideoPlan({
       durationMs: stepDurationMs,
       rowIndex,
     })
+    const canBridgeStepOverlay = Boolean(stepOverlay?.text && previousStepOverlayText === stepOverlay.text)
+    const scrollSegmentsBeforeStep = scrollSegmentsByTargetStepId.get(stepId) || []
+    for (const scrollSegment of scrollSegmentsBeforeStep) {
+      const scrollClip = {
+        sourceStartMs: scrollSegment.sourceStartMs,
+        sourceEndMs: scrollSegment.sourceEndMs,
+      }
+      const scrollDurationMs = Math.max(1, scrollClip.sourceEndMs - scrollClip.sourceStartMs)
+      currentChapter.steps.push({
+        id: scrollSegment.id,
+        title: scrollSegment.label,
+        'row-index': rowIndex,
+        tags: ['Scroll'],
+        clip: scrollClip,
+        freezes: [],
+        pauses: [],
+        narrations: [],
+        callouts: canBridgeStepOverlay
+          ? [{
+              ...stepOverlay,
+              durationMs: scrollDurationMs,
+            }]
+          : [],
+        clickMarkers: [],
+      })
+      if (!canBridgeStepOverlay) {
+        previousStepOverlayText = null
+      }
+    }
 
     currentChapter.steps.push({
       id: stepId,
@@ -934,6 +946,7 @@ export function buildSemanticVideoPlan({
       callouts: stepOverlay ? [stepOverlay] : [],
       clickMarkers: markersWithRowIndex,
     })
+    previousStepOverlayText = stepOverlay?.text || null
   }
 
   const filteredChapters = chapters.filter((chapter) => Array.isArray(chapter.steps) && chapter.steps.length > 0)

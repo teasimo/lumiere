@@ -298,12 +298,17 @@ test('timeline runtime writes a screenshot reference per step', async () => {
   assert.equal(timeline.video.stepSegments.length, 4)
   assert.equal(timeline.video.stepSegments[1].interactionType, 'click')
   assert.equal(timeline.video.stepSegments[1].label, 'Click button')
-  assert.equal(timeline.video.clickMarkers.length, 1)
+  assert.equal(timeline.video.clickMarkers.length, 2)
   assert.equal(timeline.video.clickMarkers[0].x, 240)
   assert.equal(timeline.video.clickMarkers[0].y, 104)
   assert.equal(timeline.video.clickMarkers[0].interactionType, 'click')
   assert.ok(timeline.video.clickMarkers[0].atMs >= timeline.steps[1].startedAtMs)
   assert.ok(timeline.video.clickMarkers[0].atMs <= timeline.steps[1].endedAtMs)
+  assert.equal(timeline.video.clickMarkers[1].x, 360)
+  assert.equal(timeline.video.clickMarkers[1].y, 220)
+  assert.equal(timeline.video.clickMarkers[1].interactionType, 'fill')
+  assert.ok(timeline.video.clickMarkers[1].atMs >= timeline.steps[2].startedAtMs)
+  assert.ok(timeline.video.clickMarkers[1].atMs <= timeline.steps[2].endedAtMs)
   assert.deepEqual(timeline.steps[1].clickedElement, {
     x: 120,
     y: 80,

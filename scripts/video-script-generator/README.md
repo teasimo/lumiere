@@ -40,7 +40,7 @@ Im aktuellen System gibt es zwei moegliche Rohquellen fuer Interaktionszeitpunkt
 Fuer `--scenario-tts` gilt:
 
 - Schrittsegmente kommen aus `timeline.video.stepSegments`, ersatzweise aus `timeline.steps`.
-- Click-Marker kommen aus `timeline.video.clickMarkers`, ersatzweise aus Click-Schritten mit `clickPoint` und `clickedAtMs`.
+- Click-/Eingabe-Marker kommen aus `timeline.video.clickMarkers`, ersatzweise aus Steps mit `clickPoint` oder `fillPoint`.
 - Der Viewport kommt aus `timeline.video.viewport`.
 
 Die Trace-Datei liefert weiterhin nicht nur eine einzige Zeitbasis:
