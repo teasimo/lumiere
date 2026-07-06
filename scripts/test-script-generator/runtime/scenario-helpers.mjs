@@ -2232,7 +2232,7 @@ export async function applyClickValueToLocator(page, locator, options = {}, meta
   const elementHandle = await locator.elementHandle({ timeout: 2500 }).catch(() => null)
   if (!elementHandle) {
     await clickWithOverlayRecovery(page, locator, options)
-    return { clickedElement, clickPoint }
+    return { clickedElement, clickPoint, clickedAtMs: Date.now() }
   }
 
   const elementInfo = await elementHandle.evaluate((el) => ({
@@ -2259,12 +2259,12 @@ export async function applyClickValueToLocator(page, locator, options = {}, meta
       : Boolean(result)
 
     if (handled) {
-      return { clickedElement, clickPoint }
+      return { clickedElement, clickPoint, clickedAtMs: Date.now() }
     }
   }
 
   await clickWithOverlayRecovery(page, locator, options)
-  return { clickedElement, clickPoint }
+  return { clickedElement, clickPoint, clickedAtMs: Date.now() }
 }
 
 export async function applyClickValueBySelector(page, selector, options = {}) {
@@ -2703,6 +2703,9 @@ export async function executeScenarioStep(context, step, runtimeOptions = {}) {
     }
     if (clickResult?.clickPoint) {
       stepRuntime?.setStepDetail?.('clickPoint', clickResult.clickPoint)
+    }
+    if (Number.isFinite(Number(clickResult?.clickedAtMs))) {
+      stepRuntime?.setStepDetail?.('clickedAtMs', Math.max(0, Math.round(Number(clickResult.clickedAtMs))))
     }
   }
 

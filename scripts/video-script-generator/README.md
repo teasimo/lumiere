@@ -4,6 +4,13 @@
 
 Diese Doku beschreibt das Zeitmodell des Video-Script-Generators. Sie dokumentiert bewusst die Begriffe, Umrechnungen und Fehlerquellen, die sich in der Entwicklung gezeigt haben.
 
+Wichtig zum aktuellen Stand:
+
+- Der Pfad `--scenario-tts` basiert fuer Schrittsegmente, Click-Marker und Viewport jetzt primaer auf `scenario-step-timeline.json`.
+- Der Pfad `--scenario-tts` liest Rohvideo und Timeline bevorzugt aus `szenario/<id>/<version>/testscript/{rohvideo,timeline}` und faellt nur fuer Altbestaende auf `output/*` zurueck.
+- Die Playwright-Trace bleibt nur noch fuer explizite Altpfade wie `--annotate-only` und fuer trace-spezifische Debug-/Migrationsfaelle relevant.
+- Diese Doku beschreibt deshalb weiterhin das Trace-Modell, aber nicht mehr als einzige Quelle fuer die Video-Zeitdaten.
+
 Betroffene Kernskripte:
 
 - `scripts/video-script-generator/annotate-video-from-trace.mjs`
@@ -15,16 +22,27 @@ Betroffene Kernskripte:
 
 Es gibt vier verschiedene Zeitebenen:
 
-1. Trace-Zeit
+1. Timeline-/Trace-Zeit
 2. Quellvideo-Zeit
 3. Clip-Zeit
 4. Finale Plan-/Video-Zeit
 
 Diese Ebenen duerfen nicht vermischt werden.
 
-## 1. Trace-Zeit
+## 1. Timeline-/Trace-Zeit
 
-Die Trace-Datei liefert nicht nur eine einzige Zeitbasis:
+Im aktuellen System gibt es zwei moegliche Rohquellen fuer Interaktionszeitpunkte:
+
+- die persistierte Szenario-Timeline `scenario-step-timeline.json`
+- die Playwright-Trace (`test.trace`, `0-trace.trace`)
+
+Fuer `--scenario-tts` gilt:
+
+- Schrittsegmente kommen aus `timeline.video.stepSegments`, ersatzweise aus `timeline.steps`.
+- Click-Marker kommen aus `timeline.video.clickMarkers`, ersatzweise aus Click-Schritten mit `clickPoint` und `clickedAtMs`.
+- Der Viewport kommt aus `timeline.video.viewport`.
+
+Die Trace-Datei liefert weiterhin nicht nur eine einzige Zeitbasis:
 
 - `test.trace` enthaelt Test- und `test.step`-Events.
 - `0-trace.trace` enthaelt Browser-/Frame-/Interaktions-Events, darunter die tatsaechlichen Click-Events und Pointer-Koordinaten.

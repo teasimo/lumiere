@@ -36,6 +36,108 @@ async function captureTimelineStepScreenshot({
   return screenshotRelativePath.replace(/\\/g, '/')
 }
 
+function buildTimelineStepSegment(step) {
+  const interactionType = inferTimelineInteractionType(step)
+  const startedAtMs = Number(step?.startedAtMs)
+  const endedAtMs = Number(step?.endedAtMs)
+  if (!Number.isFinite(startedAtMs) || !Number.isFinite(endedAtMs)) {
+    return null
+  }
+  const normalizedEndMs = endedAtMs <= startedAtMs
+    ? startedAtMs + 1
+    : endedAtMs
+
+  return {
+    stepId: String(step?.stepId || '').trim() || null,
+    label: String(step?.stepDescription || step?.stepId || '').trim() || '<step>',
+    interactionType,
+    startMs: Math.max(0, Math.round(startedAtMs)),
+    endMs: Math.max(1, Math.round(normalizedEndMs)),
+  }
+}
+
+function buildTimelineClickMarker(step) {
+  const interactionType = inferTimelineInteractionType(step)
+  const point = step?.clickPoint
+  const x = Number(point?.x)
+  const y = Number(point?.y)
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    return null
+  }
+
+  const clickedAtMs = Number(step?.clickedAtMs)
+  const startedAtMs = Number(step?.startedAtMs)
+  const endedAtMs = Number(step?.endedAtMs)
+  const fallbackAtMs = Number.isFinite(startedAtMs) && Number.isFinite(endedAtMs)
+    ? startedAtMs + Math.max(0, Math.round((endedAtMs - startedAtMs) / 2))
+    : Number.isFinite(startedAtMs)
+      ? startedAtMs
+      : endedAtMs
+
+  const atMs = Number.isFinite(clickedAtMs)
+    ? clickedAtMs
+    : fallbackAtMs
+
+  if (!Number.isFinite(atMs)) {
+    return null
+  }
+
+  return {
+    stepId: String(step?.stepId || '').trim() || null,
+    interactionType,
+    x: Math.max(0, Math.round(x)),
+    y: Math.max(0, Math.round(y)),
+    atMs: Math.max(0, Math.round(atMs)),
+  }
+}
+
+function inferTimelineInteractionType(step) {
+  const explicitType = String(step?.interactionType || '').trim().toLowerCase()
+  if (explicitType) {
+    return explicitType
+  }
+  if (step?.clickPoint || step?.clickedElement) {
+    return 'click'
+  }
+  if (step?.fillPoint) {
+    return 'fill'
+  }
+  if (step?.scrollDirection) {
+    return 'scroll'
+  }
+  return null
+}
+
+function buildTimelineVideoSection(timeline, viewport = null) {
+  const stepSegments = []
+  const clickMarkers = []
+
+  for (const step of Array.isArray(timeline) ? timeline : []) {
+    const segment = buildTimelineStepSegment(step)
+    if (segment) {
+      stepSegments.push(segment)
+    }
+
+    if (inferTimelineInteractionType(step) === 'click') {
+      const clickMarker = buildTimelineClickMarker(step)
+      if (clickMarker) {
+        clickMarkers.push(clickMarker)
+      }
+    }
+  }
+
+  return {
+    viewport: viewport && Number.isFinite(Number(viewport?.width)) && Number.isFinite(Number(viewport?.height))
+      ? {
+          width: Math.max(1, Math.round(Number(viewport.width))),
+          height: Math.max(1, Math.round(Number(viewport.height))),
+        }
+      : null,
+    stepSegments,
+    clickMarkers,
+  }
+}
+
 export function createScenarioExecutionRuntime({
   wrapStep = null,
   onStepComplete = null,
@@ -282,12 +384,16 @@ export function createScenarioTimelineRuntime({
     runStep: runtime.runStep,
 
     async flush() {
+      const viewport = typeof page?.viewportSize === 'function'
+        ? page.viewportSize()
+        : null
       const timelineReport = {
         scenarioId,
         scenarioVersion,
         scenarioSource,
         generatedAtIso: new Date().toISOString(),
         steps: timeline,
+        video: buildTimelineVideoSection(timeline, viewport),
       }
 
       const timelinePath = testInfo.outputPath('scenario-step-timeline.json')

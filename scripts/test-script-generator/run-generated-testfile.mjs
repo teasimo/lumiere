@@ -5,7 +5,12 @@ import { existsSync, statSync } from 'fs'
 import { basename, dirname, extname, join, relative, resolve } from 'path'
 import { spawnSync } from 'child_process'
 import { getTestScriptConfig, loadCentralConfig } from '../shared/central-config.mjs'
-import { buildScenarioOutputRoot, sanitizeScenarioOutputToken } from '../shared/scenario-output.mjs'
+import {
+  buildPersistentScenarioArtifactsRoot,
+  buildScenarioOutputRoot,
+  parseScenarioVersionFromXml,
+  sanitizeScenarioOutputToken,
+} from '../shared/scenario-output.mjs'
 import { resolveFragmentSourceForScenario } from '../shared/lunettes-fragment-source.mjs'
 import { buildScenarioXmlGeneratorInvocation } from '../shared/scenario-xml-generator.mjs'
 
@@ -260,6 +265,7 @@ function getGeneratedSiblingPathsFromSpec(specAbsolutePath) {
 
 async function persistScenarioRunArtifacts({
   scenarioPath,
+  scenarioId,
   specPath,
   runRoot,
   artifactsDir,
@@ -270,6 +276,8 @@ async function persistScenarioRunArtifacts({
 }) {
   const scenarioAbsolutePath = resolve(workspaceRoot, scenarioPath)
   const scenarioPathRelative = relative(workspaceRoot, scenarioAbsolutePath)
+  const scenarioXmlRaw = await readFile(scenarioAbsolutePath, 'utf8')
+  const scenarioVersion = parseScenarioVersionFromXml(scenarioXmlRaw)
   const specAbsolutePath = resolve(specPath)
   const generatedSiblingPaths = getGeneratedSiblingPathsFromSpec(specAbsolutePath)
   const specMetaPath = generatedSiblingPaths.specMetaPath
@@ -346,8 +354,106 @@ async function persistScenarioRunArtifacts({
     },
   }, null, 2), 'utf8')
 
+  const persistentArtifacts = await persistStableScenarioArtifacts({
+    scenarioId,
+    scenarioVersion,
+    artifactsDir: targetArtifactsDir,
+  })
+
+  if (persistentArtifacts) {
+    const runMeta = JSON.parse(await readFile(runMetaPath, 'utf8'))
+    runMeta.exportedTo.persistentRelative = persistentArtifacts.rootRelative
+    runMeta.exportedTo.persistentRawVideoRelative = persistentArtifacts.rawVideoRelative
+    runMeta.exportedTo.persistentTimelineRelative = persistentArtifacts.timelineRelative
+    runMeta.exportedTo.persistentScreenshotsRelative = persistentArtifacts.screenshotsRelative
+    await writeFile(runMetaPath, JSON.stringify(runMeta, null, 2), 'utf8')
+  }
+
   return {
     outputRoot: targetRoot,
+  }
+}
+
+async function findLatestFileByName(rootDir, filename) {
+  if (!existsSync(rootDir)) {
+    return null
+  }
+
+  const candidates = []
+
+  async function visit(currentDir) {
+    const entries = await readdir(currentDir, { withFileTypes: true }).catch(() => [])
+    for (const entry of entries) {
+      const absolutePath = join(currentDir, entry.name)
+      if (entry.isDirectory()) {
+        await visit(absolutePath)
+        continue
+      }
+      if (!entry.isFile() || entry.name !== filename) {
+        continue
+      }
+      const fileStat = statSync(absolutePath)
+      candidates.push({
+        absolutePath,
+        mtimeMs: fileStat.mtimeMs,
+      })
+    }
+  }
+
+  await visit(rootDir)
+  candidates.sort((left, right) => right.mtimeMs - left.mtimeMs)
+  return candidates[0]?.absolutePath || null
+}
+
+async function persistStableScenarioArtifacts({ scenarioId, scenarioVersion, artifactsDir }) {
+  const persistentRoot = buildPersistentScenarioArtifactsRoot(workspaceRoot, scenarioId, scenarioVersion, 'testscript')
+  await rm(persistentRoot, { recursive: true, force: true })
+  await mkdir(persistentRoot, { recursive: true })
+
+  const rawVideoPath = await findLatestFileByName(artifactsDir, 'video.webm')
+  const timelinePath = await findLatestFileByName(artifactsDir, 'scenario-step-timeline.json')
+
+  let rawVideoRelative = null
+  let timelineRelative = null
+  let screenshotsRelative = null
+
+  if (rawVideoPath) {
+    const targetPath = join(persistentRoot, 'rohvideo', 'video.webm')
+    await mkdir(dirname(targetPath), { recursive: true })
+    await cp(rawVideoPath, targetPath, { force: true })
+    rawVideoRelative = relative(workspaceRoot, targetPath)
+  }
+
+  if (timelinePath) {
+    const targetTimelinePath = join(persistentRoot, 'timeline', 'scenario-step-timeline.json')
+    await mkdir(dirname(targetTimelinePath), { recursive: true })
+    await cp(timelinePath, targetTimelinePath, { force: true })
+    timelineRelative = relative(workspaceRoot, targetTimelinePath)
+
+    const sourceScreenshotsDir = join(dirname(timelinePath), 'timeline-screenshots')
+    if (existsSync(sourceScreenshotsDir)) {
+      const targetScreenshotsDir = join(persistentRoot, 'screenshots')
+      await cp(sourceScreenshotsDir, targetScreenshotsDir, { recursive: true, force: true })
+      screenshotsRelative = relative(workspaceRoot, targetScreenshotsDir)
+    }
+  }
+
+  await writeFile(join(persistentRoot, 'export-meta.json'), JSON.stringify({
+    createdAtIso: new Date().toISOString(),
+    scenarioId,
+    scenarioVersion,
+    generatorType: 'testscript',
+    sourceArtifactsDirRelative: relative(workspaceRoot, artifactsDir),
+    rawVideoRelative,
+    timelineRelative,
+    screenshotsRelative,
+  }, null, 2), 'utf8')
+
+  return {
+    rootRelative: relative(workspaceRoot, persistentRoot),
+    rawVideoRelative,
+    timelineRelative,
+    screenshotsRelative,
   }
 }
 
@@ -617,6 +723,7 @@ async function main() {
   const runStatus = runResult.exitCode === 0 ? 'passed' : 'failed'
   const persistedArtifacts = await persistScenarioRunArtifacts({
     scenarioPath: options.scenarioPath,
+    scenarioId,
     specPath,
     runRoot,
     artifactsDir,

@@ -80,6 +80,14 @@ Wenn `S3_BUCKET` gesetzt ist, verwendet der Watcher zusaetzlich dieses Remote-Sc
 s3://<bucket>/<prefix>/scenario-artifacts/<szenario-id>/versions/<version>/<generator>/<artifact-key>/...
 ```
 
+Zusaetzlich gibt es eine persistente, nicht-temporaere Artefaktstruktur unter:
+
+```text
+szenario/<szenario-id>/<version>/<generator>/
+```
+
+Diese Struktur wird im Azure-Container ebenfalls per S3-Sync gespiegelt. Die bisherige temp-/run-orientierte Ablage bleibt parallel bestehen und wird vorerst nicht entfernt.
+
 Dabei gilt:
 
 - `<szenario-id>` ist die Lunettes-`szenario_id`
@@ -87,16 +95,23 @@ Dabei gilt:
 - `<generator>` ist aktuell `shared`, `testscript` oder `videoscript`
 - `<artifact-key>` ist z. B. `scenario-cache`, `runs`, `testfiles` oder `videogenerator`
 
+Inhalt der persistenten Struktur:
+
+- `szenario/<id>/<version>/testscript/rohvideo/video.webm`
+- `szenario/<id>/<version>/testscript/timeline/scenario-step-timeline.json`
+- `szenario/<id>/<version>/testscript/screenshots/...`
+- `szenario/<id>/<version>/videoscript/final/<dateiname>.mp4`
+
 Restore/Flush pro Job-Typ:
 
 - `testscript`:
-  Restore `shared/scenario-cache`
-  Flush `shared/scenario-cache`, `testscript/runs`, `testscript/testfiles`
+  Restore `shared/scenario-cache`, `szenario/<id>/<version>/testscript`
+  Flush `shared/scenario-cache`, `testscript/runs`, `testscript/testfiles`, `szenario/<id>/<version>/testscript`
 - `videoscript`:
-  Restore `shared/scenario-cache`, `testscript/runs`
-  Flush `shared/scenario-cache`, `videoscript/videogenerator`
+  Restore `shared/scenario-cache`, `szenario/<id>/<version>/testscript`, `szenario/<id>/<version>/videoscript`
+  Flush `shared/scenario-cache`, `videoscript/videogenerator`, `szenario/<id>/<version>/videoscript`
 - `publish`:
-  Restore `shared/scenario-cache`, `testscript/runs`, `videoscript/videogenerator`
+  Restore `shared/scenario-cache`, `testscript/runs`, `videoscript/videogenerator`, `szenario/<id>/<version>/testscript`, `szenario/<id>/<version>/videoscript`
   Flush `shared/scenario-cache`
 
 Verhalten:
@@ -113,9 +128,14 @@ Bei erfolgreichem Abschluss eines `testscript`-Jobs sendet der Watcher im `compl
 - `run_root`: Run-Wurzel unter `output/<szenario_id>/runs/<runId>`
 - `artifacts_dir`: Artefaktordner des Playwright-Laufs
 - `generated_dir`: exportierte generierte Testdateien und Runtime-Helfer
+- `persistent_artifacts_dir`: persistente Artefaktablage unter `szenario/...`
+- `persistent_raw_video`: persistentes Test-Rohvideo
+- `persistent_scenario_step_timeline`: persistente Timeline-Datei
+- `persistent_screenshots_dir`: persistente explizit generierte Screenshots
 - `run_meta_path`: Pfad zur `run-meta.json`
 - `scenario_step_timeline_path`: relativer Pfad zur gefundenen `scenario-step-timeline.json`
 - `scenario_step_timeline`: geparstes JSON der Timeline-Datei
+- `persistent_output_video`: persistentes finales Videoscript-Video bei `videoscript`-Jobs
 
 Die Timeline selbst hat dieses Grundformat:
 
@@ -124,6 +144,7 @@ Die Timeline selbst hat dieses Grundformat:
 - `scenarioSource`: Quelldatei des ausgefuehrten Szenarios
 - `generatedAtIso`: Schreibzeitpunkt der Timeline
 - `steps`: Liste aller ausgefuehrten, uebersprungenen, fehlgeschlagenen oder in Timeout gelaufenen Schritte
+- `video`: vorbereitete Video-Sicht auf dieselbe Timeline fuer den Video-Generator
 
 Felder pro Eintrag in `scenario_step_timeline.steps`:
 
@@ -139,6 +160,27 @@ Felder pro Eintrag in `scenario_step_timeline.steps`:
 - `durationMs`: Laufzeit des einzelnen Schritts
 - `error`: Fehlerobjekt bei `failed` oder `timeout`, sonst `null`
 - `log`: generische Step-Logs als Liste strukturierter Eintraege
+- optional `clickedElement`, `clickPoint`, `clickedAtMs`, `fillPoint`, `scrollDirection`: interaktionsspezifische Metadaten fuer Overlay-/Video-Weiterverarbeitung
+
+Felder in `scenario_step_timeline.video`:
+
+- `viewport`: Browser-Viewport mit `width` und `height`, falls waehrend des Laufs verfuegbar
+- `stepSegments`: normalisierte Schrittfenster fuer Video-Overlays
+- `clickMarkers`: normalisierte Click-Marker mit final verwendbaren Koordinaten und Zeitpunkten
+
+Felder pro Eintrag in `video.stepSegments`:
+
+- `stepId`: technische Schritt-ID
+- `label`: menschenlesbarer Labeltext fuer Overlays
+- `interactionType`: normalisierter Interaktionstyp
+- `startMs` / `endMs`: normalisierte Zeitfenster in Millisekunden
+
+Felder pro Eintrag in `video.clickMarkers`:
+
+- `stepId`: technische Schritt-ID des Clicks
+- `interactionType`: aktuell typischerweise `click`
+- `x` / `y`: Click-Koordinate im Video/Viewport
+- `atMs`: Click-Zeitpunkt in Millisekunden
 
 Felder in `error`:
 
@@ -177,6 +219,10 @@ Beispiel fuer den `result`-Payload eines erfolgreichen `testscript`-Jobs:
   "run_root": "output/7/runs/20260617-100358-605",
   "artifacts_dir": "output/7/runs/20260617-100358-605/artifacts",
   "generated_dir": "output/7/runs/20260617-100358-605/generated",
+  "persistent_artifacts_dir": "szenario/7/2/testscript",
+  "persistent_raw_video": "szenario/7/2/testscript/rohvideo/video.webm",
+  "persistent_scenario_step_timeline": "szenario/7/2/testscript/timeline/scenario-step-timeline.json",
+  "persistent_screenshots_dir": "szenario/7/2/testscript/screenshots",
   "run_meta_path": "output/7/runs/20260617-100358-605/run-meta.json",
   "scenario_step_timeline_path": "output/7/runs/20260617-100358-605/artifacts/temp-lunettes-job-watcher--9d5b3-s-generated-flow-for-source/scenario-step-timeline.json",
   "scenario_step_timeline": {

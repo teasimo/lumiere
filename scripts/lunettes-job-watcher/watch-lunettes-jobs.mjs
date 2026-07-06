@@ -15,6 +15,8 @@ import {
   loadCentralConfig,
 } from '../shared/central-config.mjs'
 import {
+  buildPersistentScenarioArtifactsRoot,
+  buildScenarioArtifactVersionToken,
   buildScenarioOutputFolderName,
   sanitizeScenarioOutputToken,
 } from '../shared/scenario-output.mjs'
@@ -38,6 +40,10 @@ const jobEventLogLineMaxLength = 800
 const jobEventLogFlushIntervalMs = 60000
 const defaultScriptInactivityTimeoutMs = 180000
 const defaultScriptTerminationGracePeriodMs = 60000
+const defaultLiveTestWorkerRestartBackoffMs = 5000
+const defaultLiveTestWorkerCrashWindowMs = 60000
+const defaultLiveTestWorkerMaxCrashCount = 3
+const defaultLiveTestWorkerMinUptimeMs = 10000
 
 class JobCanceledError extends Error {
   constructor(message = 'Job wurde serverseitig abgebrochen.') {
@@ -204,14 +210,10 @@ function readS3Config() {
   }
 }
 
-function buildS3ArtifactVersionToken(value) {
-  return sanitizeFileToken(value, 'unknown')
-}
-
-function buildScenarioArtifactRemotePrefix({ s3Config, szenarioId, scenarioVersion, generatorKey, artifactKey }) {
+function buildPersistentScenarioArtifactRemotePrefix({ s3Config, szenarioId, scenarioVersion, generatorKey }) {
   const normalizedScenarioId = sanitizeFileToken(szenarioId, 'scenario')
-  const normalizedVersion = buildS3ArtifactVersionToken(scenarioVersion)
-  const prefixParts = [s3Config.prefix, 'scenario-artifacts', normalizedScenarioId, 'versions', normalizedVersion, generatorKey, artifactKey]
+  const normalizedVersion = buildScenarioArtifactVersionToken(scenarioVersion)
+  const prefixParts = [s3Config.prefix, 'szenario', normalizedScenarioId, normalizedVersion, generatorKey]
     .filter(Boolean)
   return `s3://${s3Config.bucket}/${prefixParts.join('/')}`
 }
@@ -236,11 +238,119 @@ function sleep(ms) {
   })
 }
 
-function startManagedLiveTestWorker(context) {
+export function createManagedLiveTestWorkerState() {
+  let rejectFatalSignal = () => {}
+  const fatalSignal = new Promise((_, reject) => {
+    rejectFatalSignal = reject
+  })
+  fatalSignal.catch(() => {})
+  return {
+    child: null,
+    currentRunStartedAtMs: 0,
+    restartNotBeforeMs: 0,
+    recentCrashTimestamps: [],
+    fatalError: null,
+    lastExit: null,
+    fatalSignal,
+    rejectFatalSignal,
+  }
+}
+
+export function noteManagedLiveTestWorkerExit(context, state, {
+  code = null,
+  signal = null,
+  startedAtMs = 0,
+  exitedAtMs = Date.now(),
+  spawnError = null,
+} = {}) {
+  const uptimeMs = startedAtMs > 0 ? Math.max(0, exitedAtMs - startedAtMs) : null
+  const exitCode = Number.isInteger(code) ? code : null
+  const unexpected = Boolean(spawnError) || signal != null || exitCode !== 0
+
+  state.child = null
+  state.currentRunStartedAtMs = 0
+  state.lastExit = {
+    code: exitCode,
+    signal: signal == null ? null : String(signal),
+    startedAtMs,
+    exitedAtMs,
+    uptimeMs,
+    spawnErrorMessage: spawnError ? String(spawnError.message || spawnError) : null,
+    unexpected,
+  }
+
+  if (!unexpected) {
+    return state.lastExit
+  }
+
+  state.recentCrashTimestamps = state.recentCrashTimestamps
+    .filter((timestamp) => exitedAtMs - timestamp <= context.liveTestWorkerCrashWindowMs)
+  state.recentCrashTimestamps.push(exitedAtMs)
+  state.restartNotBeforeMs = exitedAtMs + context.liveTestWorkerRestartBackoffMs
+
+  const crashedTooOften = state.recentCrashTimestamps.length >= context.liveTestWorkerMaxCrashCount
+  const crashedTooEarly = uptimeMs != null && uptimeMs < context.liveTestWorkerMinUptimeMs
+
+  if (crashedTooEarly || crashedTooOften) {
+    const reasons = []
+    if (spawnError) {
+      reasons.push(`start_error=${String(spawnError.message || spawnError)}`)
+    }
+    if (exitCode != null) {
+      reasons.push(`exit_code=${exitCode}`)
+    }
+    if (signal != null) {
+      reasons.push(`signal=${signal}`)
+    }
+    if (uptimeMs != null) {
+      reasons.push(`uptime_ms=${uptimeMs}`)
+    }
+    if (crashedTooOften) {
+      reasons.push(`crashes_in_window=${state.recentCrashTimestamps.length}/${context.liveTestWorkerMaxCrashCount}`)
+      reasons.push(`window_ms=${context.liveTestWorkerCrashWindowMs}`)
+    }
+    if (crashedTooEarly) {
+      reasons.push(`min_uptime_ms=${context.liveTestWorkerMinUptimeMs}`)
+    }
+    state.fatalError = new Error(`Live-Test-Worker abgestuerzt (${reasons.join(' ')}).`)
+    state.rejectFatalSignal(state.fatalError)
+  }
+
+  return state.lastExit
+}
+
+export function shouldStartManagedLiveTestWorker(context, state, now = Date.now()) {
+  if (!context.liveTestWorkerEnabled) {
+    return false
+  }
+  if (state?.fatalError || state?.child) {
+    return false
+  }
+  return now >= Number(state?.restartNotBeforeMs || 0)
+}
+
+export function assertManagedLiveTestWorkerHealthy(context, state) {
+  if (!context.liveTestWorkerEnabled) {
+    return
+  }
+  if (state?.fatalError) {
+    throw state.fatalError
+  }
+}
+
+function raceWithManagedLiveTestWorkerHealth(context, state, promise) {
+  if (!context.liveTestWorkerEnabled || !state?.fatalSignal) {
+    return promise
+  }
+  return Promise.race([promise, state.fatalSignal])
+}
+
+function startManagedLiveTestWorker(context, state) {
   if (!context.liveTestWorkerEnabled) {
     return null
   }
 
+  const startedAtMs = Date.now()
   const child = spawn('node', context.liveTestWorkerArgs, {
     cwd: workspaceRoot,
     detached: process.platform !== 'win32',
@@ -249,11 +359,34 @@ function startManagedLiveTestWorker(context) {
     shell: false,
   })
 
+  state.child = child
+  state.currentRunStartedAtMs = startedAtMs
+
+  let settled = false
   child.on('exit', (code, signal) => {
+    if (settled) {
+      return
+    }
+    settled = true
+    const exitInfo = noteManagedLiveTestWorkerExit(context, state, { code, signal, startedAtMs })
     console.log(`[watcher] Live-Test-Worker beendet: code=${code ?? 'null'} signal=${signal ?? 'null'}`)
+    if (exitInfo?.unexpected && !state.fatalError) {
+      console.error(`[watcher] Live-Test-Worker unerwartet beendet. Neustart fruehestens in ${context.liveTestWorkerRestartBackoffMs} ms.`)
+    }
+    if (state.fatalError) {
+      console.error(`[watcher] ${state.fatalError.message}`)
+    }
   })
   child.on('error', (error) => {
+    if (settled) {
+      return
+    }
+    settled = true
+    noteManagedLiveTestWorkerExit(context, state, { spawnError: error, startedAtMs })
     console.error(`[watcher] Live-Test-Worker konnte nicht gestartet werden: ${error.message}`)
+    if (state.fatalError) {
+      console.error(`[watcher] ${state.fatalError.message}`)
+    }
   })
 
   console.log(`[watcher] Live-Test-Worker gestartet: node ${context.liveTestWorkerArgs.join(' ')}`)
@@ -599,30 +732,22 @@ async function resolveScenarioInput(job) {
   }
 }
 
-function buildScenarioArtifactPlan(job, scenarioInput, scenarioVersion) {
+export function buildScenarioArtifactPlan(job, scenarioInput, scenarioVersion) {
   const payload = job?.payload && typeof job.payload === 'object' ? job.payload : {}
   const scenarioId = sanitizeFileToken(payload?.szenario_id, scenarioInput?.scenarioMeta?.scenarioId || 'scenario')
   const lunettesScenarioId = String(job?.szenario_id || payload?.szenario_id || scenarioId).trim() || scenarioId
-  const folderName = buildScenarioOutputFolderName({ scenarioId, fallbackName: 'scenario' })
-  const scenarioOutputRoot = resolve(workspaceRoot, 'output', folderName)
-  const scenarioCacheDir = resolveScenarioCacheDir(lunettesScenarioId)
-  const testfilesDir = join(runtimeRoot, 'testfiles', scenarioId)
+  const persistentTestscriptDir = buildPersistentScenarioArtifactsRoot(workspaceRoot, scenarioId, scenarioVersion, 'testscript')
+  const persistentVideoscriptDir = buildPersistentScenarioArtifactsRoot(workspaceRoot, scenarioId, scenarioVersion, 'videoscript')
 
-  const scenarioCacheArtifact = {
-    artifactKey: 'scenario-cache',
-    localPath: scenarioCacheDir,
+  const persistentTestscriptArtifact = {
+    artifactKey: 'testscript',
+    localPath: persistentTestscriptDir,
+    generatorKey: 'testscript',
   }
-  const testscriptRunsArtifact = {
-    artifactKey: 'runs',
-    localPath: join(scenarioOutputRoot, 'runs'),
-  }
-  const testscriptFilesArtifact = {
-    artifactKey: 'testfiles',
-    localPath: testfilesDir,
-  }
-  const videoscriptArtifact = {
-    artifactKey: 'videogenerator',
-    localPath: join(scenarioOutputRoot, 'videogenerator'),
+  const persistentVideoscriptArtifact = {
+    artifactKey: 'videoscript',
+    localPath: persistentVideoscriptDir,
+    generatorKey: 'videoscript',
   }
 
   if (job.type === 'testscript') {
@@ -630,8 +755,8 @@ function buildScenarioArtifactPlan(job, scenarioInput, scenarioVersion) {
       scenarioId,
       lunettesScenarioId,
       scenarioVersion,
-      restore: [scenarioCacheArtifact],
-      flush: [scenarioCacheArtifact, testscriptRunsArtifact, testscriptFilesArtifact],
+      restore: [persistentTestscriptArtifact],
+      flush: [persistentTestscriptArtifact],
     }
   }
 
@@ -640,8 +765,8 @@ function buildScenarioArtifactPlan(job, scenarioInput, scenarioVersion) {
       scenarioId,
       lunettesScenarioId,
       scenarioVersion,
-      restore: [scenarioCacheArtifact, testscriptRunsArtifact],
-      flush: [scenarioCacheArtifact, videoscriptArtifact],
+      restore: [persistentTestscriptArtifact, persistentVideoscriptArtifact],
+      flush: [persistentVideoscriptArtifact],
     }
   }
 
@@ -650,8 +775,8 @@ function buildScenarioArtifactPlan(job, scenarioInput, scenarioVersion) {
       scenarioId,
       lunettesScenarioId,
       scenarioVersion,
-      restore: [scenarioCacheArtifact, testscriptRunsArtifact, videoscriptArtifact],
-      flush: [scenarioCacheArtifact],
+      restore: [persistentTestscriptArtifact, persistentVideoscriptArtifact],
+      flush: [],
     }
   }
 
@@ -659,8 +784,8 @@ function buildScenarioArtifactPlan(job, scenarioInput, scenarioVersion) {
     scenarioId,
     lunettesScenarioId,
     scenarioVersion,
-    restore: [scenarioCacheArtifact],
-    flush: [scenarioCacheArtifact],
+    restore: [],
+    flush: [],
   }
 }
 
@@ -676,12 +801,11 @@ async function restoreScenarioArtifactsFromS3(context, plan) {
   for (const artifact of plan.restore) {
     await clearLocalArtifactPath(artifact.localPath)
     await ensureDir(artifact.localPath)
-    const remotePrefix = buildScenarioArtifactRemotePrefix({
+    const remotePrefix = buildPersistentScenarioArtifactRemotePrefix({
       s3Config: context.s3Config,
       szenarioId: plan.lunettesScenarioId,
       scenarioVersion: plan.scenarioVersion,
-      generatorKey: artifact.artifactKey === 'scenario-cache' ? 'shared' : artifact.artifactKey === 'videogenerator' ? 'videoscript' : 'testscript',
-      artifactKey: artifact.artifactKey,
+      generatorKey: artifact.generatorKey,
     })
     console.log(`[watcher] Restore ${artifact.artifactKey}: ${remotePrefix} -> ${normalizeWorkspaceRelativePath(artifact.localPath)}`)
     await runAwsCli(context.s3Config, [
@@ -703,17 +827,11 @@ async function flushScenarioArtifactsToS3(context, plan) {
   }
 
   for (const artifact of plan.flush) {
-    const generatorKey = artifact.artifactKey === 'scenario-cache'
-      ? 'shared'
-      : artifact.artifactKey === 'videogenerator'
-        ? 'videoscript'
-        : 'testscript'
-    const remotePrefix = buildScenarioArtifactRemotePrefix({
+    const remotePrefix = buildPersistentScenarioArtifactRemotePrefix({
       s3Config: context.s3Config,
       szenarioId: plan.lunettesScenarioId,
       scenarioVersion: plan.scenarioVersion,
-      generatorKey,
-      artifactKey: artifact.artifactKey,
+      generatorKey: artifact.generatorKey,
     })
 
     console.log(`[watcher] Flush ${artifact.artifactKey}: ${normalizeWorkspaceRelativePath(artifact.localPath)} -> ${remotePrefix}`)
@@ -1385,6 +1503,10 @@ async function buildJobResult(job, scenarioInput, logPath, executionSummary = nu
           run_root: latestRun.parsed.exportedTo.rootRelative || null,
           artifacts_dir: latestRun.parsed.exportedTo.artifactsRelative || null,
           generated_dir: latestRun.parsed.exportedTo.generatedRelative || null,
+          persistent_artifacts_dir: latestRun.parsed.exportedTo.persistentRelative || null,
+          persistent_raw_video: latestRun.parsed.exportedTo.persistentRawVideoRelative || null,
+          persistent_scenario_step_timeline: latestRun.parsed.exportedTo.persistentTimelineRelative || null,
+          persistent_screenshots_dir: latestRun.parsed.exportedTo.persistentScreenshotsRelative || null,
         }
         : {}),
       run_meta_path: latestRun ? relative(workspaceRoot, latestRun.runMetaPath) : null,
@@ -1400,6 +1522,12 @@ async function buildJobResult(job, scenarioInput, logPath, executionSummary = nu
       render_meta_path: latestRender ? relative(workspaceRoot, latestRender.metaPath) : null,
       output_video: latestRender?.parsed?.outputVideo
         ? relative(workspaceRoot, resolve(String(latestRender.parsed.outputVideo)))
+        : null,
+      persistent_artifacts_dir: latestRender?.parsed?.persistentArtifactsDir
+        ? relative(workspaceRoot, resolve(String(latestRender.parsed.persistentArtifactsDir)))
+        : null,
+      persistent_output_video: latestRender?.parsed?.persistentOutputVideo
+        ? relative(workspaceRoot, resolve(String(latestRender.parsed.persistentOutputVideo)))
         : null,
       render_plan_path: latestRender?.parsed?.renderPlanPath
         ? relative(workspaceRoot, resolve(String(latestRender.parsed.renderPlanPath)))
@@ -1658,6 +1786,30 @@ function buildWatcherContext(cliOptions) {
   const scriptTerminationGracePeriodMs = clampNumber(watcherConfig.script_termination_grace_period_ms, 1000, 86400000, defaultScriptTerminationGracePeriodMs)
   const videoProfile = resolveDefaultVideoProfile(videoScriptConfig, watcherConfig)
   const liveTestWorkerEnabled = liveTestWorkerConfig?.enabled === true
+  const liveTestWorkerRestartBackoffMs = clampNumber(
+    liveTestWorkerConfig.restart_backoff_ms,
+    0,
+    3600000,
+    defaultLiveTestWorkerRestartBackoffMs,
+  )
+  const liveTestWorkerCrashWindowMs = clampNumber(
+    liveTestWorkerConfig.crash_window_ms,
+    1000,
+    86400000,
+    defaultLiveTestWorkerCrashWindowMs,
+  )
+  const liveTestWorkerMaxCrashCount = clampNumber(
+    liveTestWorkerConfig.max_crash_count,
+    1,
+    100,
+    defaultLiveTestWorkerMaxCrashCount,
+  )
+  const liveTestWorkerMinUptimeMs = clampNumber(
+    liveTestWorkerConfig.min_uptime_ms,
+    0,
+    86400000,
+    defaultLiveTestWorkerMinUptimeMs,
+  )
   const s3Config = readS3Config()
   const liveTestWorkerArgs = [
     'scripts/test-script-generator/run-live-test-worker.mjs',
@@ -1696,6 +1848,10 @@ function buildWatcherContext(cliOptions) {
     s3Config,
     s3ArtifactsEnabled: s3Config.enabled,
     liveTestWorkerEnabled,
+    liveTestWorkerRestartBackoffMs,
+    liveTestWorkerCrashWindowMs,
+    liveTestWorkerMaxCrashCount,
+    liveTestWorkerMinUptimeMs,
     liveTestWorkerArgs,
     liveTestWorkerEnv: process.env,
   }
@@ -1716,21 +1872,24 @@ async function main() {
   console.log(`Lunettes Job Watcher aktiv: worker_id=${context.workerId}, types=${context.types.join(',')}, software=${context.software.length > 0 ? context.software.join(',') : 'all'}, lease=${context.leaseSeconds}s`)
   console.log(`[watcher] base_url=${context.baseUrl} (${context.baseUrlSource})`)
   let liveTestWorkerChild = null
+  const liveTestWorkerState = createManagedLiveTestWorkerState()
 
   while (true) {
-    if (context.liveTestWorkerEnabled && (!liveTestWorkerChild || liveTestWorkerChild.exitCode != null)) {
-      liveTestWorkerChild = startManagedLiveTestWorker(context)
+    assertManagedLiveTestWorkerHealthy(context, liveTestWorkerState)
+    if (shouldStartManagedLiveTestWorker(context, liveTestWorkerState)) {
+      liveTestWorkerChild = startManagedLiveTestWorker(context, liveTestWorkerState)
     }
 
     let job = null
     try {
-      job = await claimNextJob(context)
+      job = await raceWithManagedLiveTestWorkerHealth(context, liveTestWorkerState, claimNextJob(context))
     } catch (error) {
       console.error(`[watcher] Claim fehlgeschlagen: ${error.message}`)
       if (options.once) {
         throw error
       }
-      await sleep(context.pollIntervalMs)
+      await raceWithManagedLiveTestWorkerHealth(context, liveTestWorkerState, sleep(context.pollIntervalMs))
+      assertManagedLiveTestWorkerHealthy(context, liveTestWorkerState)
       continue
     }
 
@@ -1739,12 +1898,13 @@ async function main() {
       if (options.once) {
         return
       }
-      await sleep(context.pollIntervalMs)
+      await raceWithManagedLiveTestWorkerHealth(context, liveTestWorkerState, sleep(context.pollIntervalMs))
+      assertManagedLiveTestWorkerHealthy(context, liveTestWorkerState)
       continue
     }
 
     try {
-      await processJob(job, context)
+      await raceWithManagedLiveTestWorkerHealth(context, liveTestWorkerState, processJob(job, context))
     } catch (error) {
       if (error instanceof JobCanceledError) {
         console.log(`[job ${job.id}] abgebrochen: ${error.message}`)

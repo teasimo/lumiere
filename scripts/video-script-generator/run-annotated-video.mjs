@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 import { existsSync, readFileSync, writeFileSync } from 'fs'
-import { copyFile, mkdir, readdir, readFile, stat, writeFile } from 'fs/promises'
-import { basename, dirname, extname, join, resolve } from 'path'
+import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from 'fs/promises'
+import { basename, dirname, extname, join, relative, resolve } from 'path'
 import { spawnSync } from 'child_process'
 import { createHash } from 'crypto'
 import { XMLParser } from 'fast-xml-parser'
@@ -20,7 +20,15 @@ import {
   resolveAzureSpeechEndpoint,
 } from '../shared/azure-speech.mjs'
 import { getVideoScriptConfig, loadCentralConfig } from '../shared/central-config.mjs'
-import { buildScenarioOutputFolderName, buildScenarioOutputRoot, sanitizeScenarioOutputToken } from '../shared/scenario-output.mjs'
+import {
+  buildPersistentScenarioArtifactsRoot,
+  buildScenarioArtifactVersionPathSegment,
+  buildScenarioArtifactVersionToken,
+  buildScenarioOutputFolderName,
+  buildScenarioOutputRoot,
+  parseScenarioVersionFromXml,
+  sanitizeScenarioOutputToken,
+} from '../shared/scenario-output.mjs'
 import { appendFragmentSourceArg, normalizeFragmentSource, resolveFragmentSourceForScenario } from '../shared/lunettes-fragment-source.mjs'
 import { buildScenarioXmlGeneratorInvocation } from '../shared/scenario-xml-generator.mjs'
 
@@ -1157,18 +1165,6 @@ function resolveScenarioClickIndicatorConfig(scenarioRoot, videoScriptConfig = {
   }
 }
 
-function buildAnnotateClickIndicatorArgs(clickIndicatorConfig) {
-  if (!clickIndicatorConfig || clickIndicatorConfig.enabled !== true) {
-    return ['--click-enabled=false']
-  }
-
-  const args = ['--click-enabled=true']
-  args.push(`--click-before-ms=${Math.max(0, Math.floor(clickIndicatorConfig.beforeMs || 0))}`)
-  args.push(`--click-after-ms=${Math.max(0, Math.floor(clickIndicatorConfig.afterMs || 0))}`)
-  args.push(`--click-fade-ms=${Math.max(0, Math.floor(clickIndicatorConfig.fadeMs || 0))}`)
-  return args
-}
-
 function resolveDidacticText(stepEntry, channelName) {
   const didactics =
     stepEntry?.presentation?.didactics
@@ -2104,44 +2100,41 @@ async function collectArtifactDirs(rootDir) {
   return dirs
 }
 
-async function findLatestScenarioVideoTimelinePair({ outputDir, scenarioPathRelative }) {
-  if (!existsSync(outputDir)) return null
-  const normalizedScenarioPath = normalizeWorkspaceRelativePath(scenarioPathRelative)
-
-  const dirs = [outputDir, ...await collectArtifactDirs(outputDir)]
-  const candidates = []
-
-  for (const dir of dirs) {
-    const videoPath = join(dir, 'video.webm')
-    const timelinePath = join(dir, 'scenario-step-timeline.json')
-    if (!existsSync(videoPath) || !existsSync(timelinePath)) {
-      continue
-    }
-
-    const timeline = await readJsonIfExists(timelinePath)
-    const source = normalizeWorkspaceRelativePath(timeline?.scenarioSource)
-    if (source !== normalizedScenarioPath) {
-      continue
-    }
-
-    const timelineStat = await stat(timelinePath)
-    candidates.push({
-      dir,
-      videoPath,
-      timelinePath,
-      timeline,
-      mtimeMs: timelineStat.mtimeMs,
-    })
+async function findPersistentScenarioVideoTimelinePair({
+  workspaceRoot,
+  scenarioId,
+  scenarioVersion,
+  scenarioPathRelative,
+}) {
+  const persistentRoot = buildPersistentScenarioArtifactsRoot(workspaceRoot, scenarioId, scenarioVersion, 'testscript')
+  const videoPath = join(persistentRoot, 'rohvideo', 'video.webm')
+  const timelinePath = join(persistentRoot, 'timeline', 'scenario-step-timeline.json')
+  if (!existsSync(videoPath) || !existsSync(timelinePath)) {
+    return null
   }
 
-  candidates.sort((left, right) => right.mtimeMs - left.mtimeMs)
-  return candidates[0] || null
+  const timeline = await readJsonIfExists(timelinePath)
+  const source = normalizeWorkspaceRelativePath(timeline?.scenarioSource)
+  if (source !== normalizeWorkspaceRelativePath(scenarioPathRelative)) {
+    return null
+  }
+
+  const timelineStat = await stat(timelinePath)
+  return {
+    dir: persistentRoot,
+    videoPath,
+    timelinePath,
+    timeline,
+    mtimeMs: timelineStat.mtimeMs,
+    sourceType: 'persistent',
+  }
 }
 
-async function ensureScenarioVideoTimelinePair({ scenarioPathRelative }) {
-  const outputRoot = OUTPUT_ROOT
-  const existing = await findLatestScenarioVideoTimelinePair({
-    outputDir: outputRoot,
+async function ensureScenarioVideoTimelinePair({ scenarioId, scenarioVersion, scenarioPathRelative }) {
+  const existing = await findPersistentScenarioVideoTimelinePair({
+    workspaceRoot: process.cwd(),
+    scenarioId,
+    scenarioVersion,
     scenarioPathRelative,
   })
   if (existing) {
@@ -2150,7 +2143,7 @@ async function ensureScenarioVideoTimelinePair({ scenarioPathRelative }) {
 
   throw new Error([
     'Kein vorhandenes Rohvideo fuer das Szenario gefunden.',
-    `Erwartet unter output/* mit scenarioSource=${scenarioPathRelative}.`,
+    `Erwartet unter szenario/${scenarioId}/${buildScenarioArtifactVersionPathSegment({ scenarioId, scenarioVersion })}/testscript mit scenarioSource=${scenarioPathRelative}.`,
     `Bitte zuerst ausfuehren: npm run generate:video:force -- ${scenarioPathRelative}`,
   ].join(' '))
 }
@@ -2168,6 +2161,116 @@ function applyClickHoldShift(timeMs, clickHolds) {
     }
   }
   return timeMs + shiftMs
+}
+
+function normalizeTimelineVideoSegments(timelineReport) {
+  const directSegments = Array.isArray(timelineReport?.video?.stepSegments)
+    ? timelineReport.video.stepSegments
+    : []
+
+  if (directSegments.length > 0) {
+    return directSegments
+      .map((segment, index) => {
+        const startMs = Math.max(0, Math.round(Number(segment?.startMs ?? segment?.startedAtMs ?? 0) || 0))
+        const endMs = Math.max(startMs + 1, Math.round(Number(segment?.endMs ?? segment?.endedAtMs ?? startMs + 1) || (startMs + 1)))
+        return {
+          stepId: String(segment?.stepId || '').trim() || `timeline-step-${index + 1}`,
+          label: String(segment?.label || segment?.stepDescription || segment?.stepId || `Step ${index + 1}`).trim(),
+          interactionType: segment?.interactionType == null ? null : String(segment.interactionType),
+          startMs,
+          endMs,
+        }
+      })
+      .filter((segment) => segment.endMs > segment.startMs)
+  }
+
+  return (Array.isArray(timelineReport?.steps) ? timelineReport.steps : [])
+    .map((step, index) => {
+      const startMs = Math.max(0, Math.round(Number(step?.startedAtMs || 0) || 0))
+      const endMs = Math.max(startMs + 1, Math.round(Number(step?.endedAtMs || startMs + 1) || (startMs + 1)))
+      return {
+        stepId: String(step?.stepId || '').trim() || `timeline-step-${index + 1}`,
+        label: String(step?.stepDescription || step?.stepId || `Step ${index + 1}`).trim(),
+        interactionType: step?.interactionType == null ? null : String(step.interactionType),
+        startMs,
+        endMs,
+      }
+    })
+    .filter((segment) => segment.endMs > segment.startMs)
+}
+
+function normalizeTimelineClickMarkers(timelineReport) {
+  const directMarkers = Array.isArray(timelineReport?.video?.clickMarkers)
+    ? timelineReport.video.clickMarkers
+    : []
+
+  if (directMarkers.length > 0) {
+    return directMarkers
+      .map((marker) => {
+        const x = Number(marker?.x)
+        const y = Number(marker?.y)
+        const atMs = Number(marker?.atMs ?? marker?.timeMs)
+        if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(atMs)) {
+          return null
+        }
+        return {
+          stepId: String(marker?.stepId || '').trim() || null,
+          interactionType: marker?.interactionType == null ? null : String(marker.interactionType),
+          x: Math.max(0, Math.round(x)),
+          y: Math.max(0, Math.round(y)),
+          atMs: Math.max(0, Math.round(atMs)),
+        }
+      })
+      .filter(Boolean)
+  }
+
+  return (Array.isArray(timelineReport?.steps) ? timelineReport.steps : [])
+    .filter((step) => String(step?.interactionType || '').trim().toLowerCase() === 'click')
+    .map((step) => {
+      const x = Number(step?.clickPoint?.x)
+      const y = Number(step?.clickPoint?.y)
+      const clickedAtMs = Number(step?.clickedAtMs)
+      const startedAtMs = Number(step?.startedAtMs)
+      const endedAtMs = Number(step?.endedAtMs)
+      const fallbackAtMs = Number.isFinite(startedAtMs) && Number.isFinite(endedAtMs)
+        ? startedAtMs + Math.max(0, Math.round((endedAtMs - startedAtMs) / 2))
+        : Number.isFinite(startedAtMs)
+          ? startedAtMs
+          : endedAtMs
+      const atMs = Number.isFinite(clickedAtMs) ? clickedAtMs : fallbackAtMs
+      if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(atMs)) {
+        return null
+      }
+      return {
+        stepId: String(step?.stepId || '').trim() || null,
+        interactionType: step?.interactionType == null ? null : String(step.interactionType),
+        x: Math.max(0, Math.round(x)),
+        y: Math.max(0, Math.round(y)),
+        atMs: Math.max(0, Math.round(atMs)),
+      }
+    })
+    .filter(Boolean)
+}
+
+export function buildVisualTimelineFromScenarioTimeline({ timelineReport, clickIndicatorConfig = null }) {
+  const stepSegments = normalizeTimelineVideoSegments(timelineReport)
+  const clickMarkers = clickIndicatorConfig?.enabled === true
+    ? normalizeTimelineClickMarkers(timelineReport)
+    : []
+  const clickDurationMs = Math.max(0, Math.floor((Number(clickIndicatorConfig?.beforeMs || 0) + Number(clickIndicatorConfig?.afterMs || 0))))
+  const clickHolds = clickDurationMs > 0
+    ? clickMarkers.map((marker) => ({
+        atMs: marker.atMs,
+        durationMs: clickDurationMs,
+      }))
+    : []
+
+  return {
+    viewport: timelineReport?.video?.viewport || null,
+    stepSegments,
+    clickMarkers,
+    clickHolds,
+  }
 }
 
 function applyNarrationTimingToAudioFiles(audioFiles, narrations) {
@@ -3831,8 +3934,11 @@ async function runScenarioTtsMode({ scenarioPath, scenarioId, fragmentSource = '
     fragmentSource,
   })
   const scenarioXmlRaw = await readFile(scenarioAbsolutePath, 'utf8')
+  const scenarioVersion = parseScenarioVersionFromXml(scenarioXmlRaw)
 
   const artifacts = await ensureScenarioVideoTimelinePair({
+    scenarioId: scenarioIdOverride,
+    scenarioVersion,
     scenarioPathRelative,
   })
 
@@ -3923,77 +4029,10 @@ async function runScenarioTtsMode({ scenarioPath, scenarioId, fragmentSource = '
   const clickIndicatorConfig = resolveScenarioClickIndicatorConfig(scenarioRoot, videoScriptConfig)
 
   const sourceVideoForTts = artifacts.videoPath
-  let clickAnnotateMeta = { clickHolds: [] }
-  let visualRemotionPlan = null
-
-  const resolveClickIndicatorImagePath = (rawImagePath) => {
-    if (!rawImagePath || typeof rawImagePath !== 'string') {
-      return null
-    }
-
-    const normalized = rawImagePath.trim()
-    if (!normalized) {
-      return null
-    }
-
-    if (normalized.startsWith('/')) {
-      return normalized
-    }
-
-    const workspaceCandidate = resolve(normalized)
-    if (existsSync(workspaceCandidate)) {
-      return workspaceCandidate
-    }
-
-    return resolve(dirname(scenarioAbsolutePath), normalized)
-  }
-
-  const tracePath = join(artifacts.dir, 'trace.zip')
-  if (clickIndicatorConfig?.enabled === true && existsSync(tracePath)) {
-    const clickAnnotatedVideo = join(ttsOutputDir, `${scenarioToken}-${profileToken}-click-${runId}.mp4`)
-    const annotateArgs = [
-      'scripts/video-script-generator/annotate-video-from-trace.mjs',
-      tracePath,
-      artifacts.videoPath,
-      clickAnnotatedVideo,
-      `--scenario-xml=${scenarioAbsolutePath}`,
-      '--skip-remotion-script',
-    ]
-
-    // Trace pass is data-only here: all visual cutting/overlay is handled by Remotion.
-    annotateArgs.push('--plan-only')
-
-    if (presentationRange) {
-      annotateArgs.push(`--clip-start-ms=${Math.max(0, Number(presentationRange.startMs) || 0)}`)
-      if (presentationRange.endMs != null) {
-        annotateArgs.push(`--clip-end-ms=${Math.max(0, Number(presentationRange.endMs) || 0)}`)
-      }
-    }
-
-    const clickIndicatorImagePath = resolveClickIndicatorImagePath(clickIndicatorConfig.image)
-    annotateArgs.push(...buildAnnotateClickIndicatorArgs({
-      ...clickIndicatorConfig,
-      image: clickIndicatorImagePath,
-    }))
-
-    const annotateExitCode = runCommand('node', annotateArgs)
-    if (annotateExitCode !== 0) {
-      throw new Error(`Klick-Indikator-Annotation fehlgeschlagen (Exit-Code ${annotateExitCode}).`)
-    }
-
-    clickAnnotateMeta = await readAnnotateMetaIfExists(clickAnnotatedVideo)
-    const annotateMetaRaw = await readJsonIfExists(getAnnotateMetaPath(clickAnnotatedVideo))
-    let remotionPlanPath = String(annotateMetaRaw?.remotionPlanPath || '').trim()
-    if (!remotionPlanPath) {
-      const fallbackRemotionPlanPath = `${clickAnnotatedVideo}.remotion-plan.json`
-      if (existsSync(fallbackRemotionPlanPath)) {
-        remotionPlanPath = fallbackRemotionPlanPath
-      }
-    }
-    if (remotionPlanPath) {
-      visualRemotionPlan = await readJsonIfExists(remotionPlanPath)
-    }
-  }
+  const visualTimeline = buildVisualTimelineFromScenarioTimeline({
+    timelineReport: artifacts.timeline,
+    clickIndicatorConfig,
+  })
 
   if (presentationRange && !remotionPlanOnly) {
     const presentationMetaPath = join(ttsOutputDir, `scenario-presentation-range-${profileToken}-${runId}.json`)
@@ -4006,16 +4045,7 @@ async function runScenarioTtsMode({ scenarioPath, scenarioId, fragmentSource = '
     }, null, 2), 'utf8')
   }
 
-  let clickHolds = Array.isArray(clickAnnotateMeta?.clickHolds) ? clickAnnotateMeta.clickHolds : []
-  if (clickHolds.length === 0 && Array.isArray(visualRemotionPlan?.timeline?.clickMarkers) && visualRemotionPlan.timeline.clickMarkers.length > 0) {
-    const durationMs = Math.max(0, Math.floor((Number(clickIndicatorConfig?.beforeMs || 0) + Number(clickIndicatorConfig?.afterMs || 0))))
-    if (durationMs > 0) {
-      clickHolds = visualRemotionPlan.timeline.clickMarkers.map((marker) => ({
-        atMs: Math.max(0, Math.round(Number(marker?.at || 0) * 1000)),
-        durationMs,
-      }))
-    }
-  }
+  let clickHolds = Array.isArray(visualTimeline.clickHolds) ? visualTimeline.clickHolds : []
   if (clickHolds.length > 0) {
     effectiveNarrations = effectiveNarrations
       .map((entry) => {
@@ -4190,17 +4220,20 @@ async function runScenarioTtsMode({ scenarioPath, scenarioId, fragmentSource = '
   }
 
   const visualOverlays = {
-    stepSegments: Array.isArray(visualRemotionPlan?.timeline?.stepSegments)
-      ? visualRemotionPlan.timeline.stepSegments
+    stepSegments: Array.isArray(visualTimeline.stepSegments)
+      ? visualTimeline.stepSegments.map((segment) => ({
+          label: String(segment?.label || ''),
+          start: Math.max(0, Number(segment?.startMs || 0)) / 1000,
+          end: Math.max(0, Number(segment?.endMs || 0)) / 1000,
+        }))
       : [],
-    chapterCurtains: Array.isArray(visualRemotionPlan?.timeline?.chapterCurtains)
-      ? visualRemotionPlan.timeline.chapterCurtains
-      : [],
-    clickMarkers: Array.isArray(visualRemotionPlan?.timeline?.clickMarkers)
-      ? visualRemotionPlan.timeline.clickMarkers.map((marker) => ({
-        ...marker,
-        durationMs: Math.max(1, Math.floor((Number(clickIndicatorConfig?.beforeMs || 0) + Number(clickIndicatorConfig?.afterMs || 0)) || 900)),
-      }))
+    clickMarkers: Array.isArray(visualTimeline.clickMarkers)
+      ? visualTimeline.clickMarkers.map((marker) => ({
+          x: Math.max(0, Number(marker?.x || 0)),
+          y: Math.max(0, Number(marker?.y || 0)),
+          at: Math.max(0, Number(marker?.atMs || 0)) / 1000,
+          durationMs: Math.max(1, Math.floor((Number(clickIndicatorConfig?.beforeMs || 0) + Number(clickIndicatorConfig?.afterMs || 0)) || 900)),
+        }))
       : [],
     chapterCards: resolvedChapterCards,
   }
@@ -4257,6 +4290,8 @@ async function runScenarioTtsMode({ scenarioPath, scenarioId, fragmentSource = '
 
   if (muxMeta?.remotionRenderPlanPath || muxMeta?.remotionRenderScriptTsxPath) {
     const remotionMuxMetaPath = join(ttsOutputDir, `scenario-tts-remotion-render-${profileToken}-${runId}.json`)
+    const persistentArtifactsDir = buildPersistentScenarioArtifactsRoot(process.cwd(), scenarioIdOverride, scenarioVersion, 'videoscript')
+    const persistentOutputVideo = join(persistentArtifactsDir, 'final', basename(resolvedOutputVideo))
     await writeFile(remotionMuxMetaPath, JSON.stringify({
       planOnly: remotionPlanOnly ? true : undefined,
       renderPlanPath: muxMeta?.remotionRenderPlanPath || null,
@@ -4266,6 +4301,8 @@ async function runScenarioTtsMode({ scenarioPath, scenarioId, fragmentSource = '
       finalRemotionDocumentPath: muxMeta?.finalRemotionDocumentPath || null,
       frameTimelineLogPath: muxMeta?.frameTimelineLogPath || null,
       outputVideo: resolvedOutputVideo,
+      persistentArtifactsDir,
+      persistentOutputVideo,
     }, null, 2), 'utf8')
     console.log(`Remotion-Render-Artefakte: ${remotionMuxMetaPath}`)
   }
@@ -4302,7 +4339,37 @@ async function runScenarioTtsMode({ scenarioPath, scenarioId, fragmentSource = '
     return
   }
 
+  const persistentArtifacts = await persistStableScenarioVideoArtifact({
+    scenarioId: scenarioIdOverride,
+    scenarioVersion,
+    outputVideo: resolvedOutputVideo,
+  })
+
   console.log(`Profil-Voiceover-Video bereit: ${resolvedOutputVideo}`)
+  console.log(`Persistentes Finalvideo: ${persistentArtifacts.outputVideoRelative}`)
+}
+
+async function persistStableScenarioVideoArtifact({ scenarioId, scenarioVersion, outputVideo }) {
+  const normalizedVersion = buildScenarioArtifactVersionToken(scenarioVersion)
+  const persistentRoot = buildPersistentScenarioArtifactsRoot(process.cwd(), scenarioId, normalizedVersion, 'videoscript')
+  const targetVideoPath = join(persistentRoot, 'final', basename(outputVideo))
+
+  await rm(persistentRoot, { recursive: true, force: true })
+  await mkdir(dirname(targetVideoPath), { recursive: true })
+  await copyFile(outputVideo, targetVideoPath)
+  await writeFile(join(persistentRoot, 'export-meta.json'), JSON.stringify({
+    createdAtIso: new Date().toISOString(),
+    scenarioId,
+    scenarioVersion: normalizedVersion,
+    generatorType: 'videoscript',
+    outputVideoRelative: normalizeWorkspaceRelativePath(relative(process.cwd(), targetVideoPath)),
+    sourceOutputVideoRelative: normalizeWorkspaceRelativePath(relative(process.cwd(), outputVideo)),
+  }, null, 2), 'utf8')
+
+  return {
+    rootRelative: normalizeWorkspaceRelativePath(relative(process.cwd(), persistentRoot)),
+    outputVideoRelative: normalizeWorkspaceRelativePath(relative(process.cwd(), targetVideoPath)),
+  }
 }
 
 async function main() {

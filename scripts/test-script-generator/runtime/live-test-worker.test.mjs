@@ -34,6 +34,12 @@ function createFakePage() {
     url() {
       return this.urlValue
     },
+    viewportSize() {
+      return {
+        width: 1280,
+        height: 720,
+      }
+    },
     async content() {
       return `<html><body>${this.urlValue}</body></html>`
     },
@@ -252,6 +258,19 @@ test('timeline runtime writes a screenshot reference per step', async () => {
   assert.equal(timeline.steps[1].screenshotPath, 'timeline-screenshots/002-click-step.png')
   assert.equal(timeline.steps[2].screenshotPath, 'timeline-screenshots/003-fill-step.png')
   assert.equal(timeline.steps[3].screenshotPath, 'timeline-screenshots/004-scroll-step.png')
+  assert.deepEqual(timeline.video.viewport, {
+    width: 1280,
+    height: 720,
+  })
+  assert.equal(timeline.video.stepSegments.length, 4)
+  assert.equal(timeline.video.stepSegments[1].interactionType, 'click')
+  assert.equal(timeline.video.stepSegments[1].label, 'Click button')
+  assert.equal(timeline.video.clickMarkers.length, 1)
+  assert.equal(timeline.video.clickMarkers[0].x, 240)
+  assert.equal(timeline.video.clickMarkers[0].y, 104)
+  assert.equal(timeline.video.clickMarkers[0].interactionType, 'click')
+  assert.ok(timeline.video.clickMarkers[0].atMs >= timeline.steps[1].startedAtMs)
+  assert.ok(timeline.video.clickMarkers[0].atMs <= timeline.steps[1].endedAtMs)
   assert.deepEqual(timeline.steps[1].clickedElement, {
     x: 120,
     y: 80,
