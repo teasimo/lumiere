@@ -108,6 +108,7 @@ function parseArgs(argv) {
     let profile = null
     let ttsVoice = null
     let scenarioId = null
+    let scenarioVersion = null
     let fragmentSource = 'local'
     let software = null
     let remotionPlanOnly = false
@@ -124,6 +125,10 @@ function parseArgs(argv) {
       }
       if (arg.startsWith('--scenario-id=')) {
         scenarioId = arg.slice('--scenario-id='.length).trim()
+        continue
+      }
+      if (arg.startsWith('--scenario-version=')) {
+        scenarioVersion = arg.slice('--scenario-version='.length).trim()
         continue
       }
       if (arg.startsWith('--fragment-source=')) {
@@ -175,6 +180,7 @@ function parseArgs(argv) {
       scenarioTts: true,
       scenarioPath,
       scenarioId,
+      scenarioVersion,
       software,
       fragmentSource: resolveFragmentSourceForScenario(fragmentSource, scenarioPath, 'lunettes'),
       profile,
@@ -2258,6 +2264,17 @@ function normalizeTimelineClickMarkers(timelineReport) {
     .filter(Boolean)
 }
 
+function resolveTimelineOriginMs(timelineReport) {
+  const steps = Array.isArray(timelineReport?.steps) ? timelineReport.steps : []
+  for (const step of steps) {
+    const startedAtMs = Number(step?.startedAtMs)
+    if (Number.isFinite(startedAtMs) && startedAtMs >= 0) {
+      return Math.max(0, Math.round(startedAtMs))
+    }
+  }
+  return 0
+}
+
 export function buildVisualTimelineFromScenarioTimeline({ timelineReport, clickIndicatorConfig = null }) {
   const stepSegments = normalizeTimelineVideoSegments(timelineReport)
   const clickMarkers = clickIndicatorConfig?.enabled === true
@@ -3913,7 +3930,7 @@ async function exportScenarioTtsDebugArtifacts({
   return debugDir
 }
 
-async function runScenarioTtsMode({ scenarioPath, scenarioId, fragmentSource = 'local', profileName, outputVideo, ttsVoice = null, remotionPlanOnly = false, software = null }) {
+async function runScenarioTtsMode({ scenarioPath, scenarioId, scenarioVersion: scenarioVersionOverride = null, fragmentSource = 'local', profileName, outputVideo, ttsVoice = null, remotionPlanOnly = false, software = null }) {
   const central = loadCentralConfig(process.cwd(), { software })
   const videoScriptConfig = getVideoScriptConfig(central.config)
   const videoIntroConfig = resolveVideoIntroConfig(videoScriptConfig)
@@ -3940,7 +3957,7 @@ async function runScenarioTtsMode({ scenarioPath, scenarioId, fragmentSource = '
     fragmentSource,
   })
   const scenarioXmlRaw = await readFile(scenarioAbsolutePath, 'utf8')
-  const scenarioVersion = parseScenarioVersionFromXml(scenarioXmlRaw)
+  const scenarioVersion = String(scenarioVersionOverride || '').trim() || parseScenarioVersionFromXml(scenarioXmlRaw)
 
   const artifacts = await ensureScenarioVideoTimelinePair({
     scenarioId: scenarioIdOverride,
@@ -4238,12 +4255,23 @@ async function runScenarioTtsMode({ scenarioPath, scenarioId, fragmentSource = '
         }))
       : [],
     clickMarkers: Array.isArray(visualTimeline.clickMarkers)
-      ? visualTimeline.clickMarkers.map((marker) => ({
-          x: Math.max(0, Number(marker?.x || 0)),
-          y: Math.max(0, Number(marker?.y || 0)),
-          at: Math.max(0, Number(marker?.atMs || 0)) / 1000,
-          durationMs: Math.max(1, Math.floor((Number(clickIndicatorConfig?.beforeMs || 0) + Number(clickIndicatorConfig?.afterMs || 0)) || 900)),
-        }))
+      ? (() => {
+          const timelineOriginMs = resolveTimelineOriginMs(artifacts.timeline)
+          const clipStartMs = presentationRange
+            ? Math.max(0, Number(presentationRange.startMs) || 0)
+            : 0
+          return visualTimeline.clickMarkers.map((marker) => {
+            const absoluteAtMs = Math.max(0, Number(marker?.atMs || 0))
+            const sourceRelativeAtMs = Math.max(0, absoluteAtMs - timelineOriginMs)
+            const clipRelativeAtMs = Math.max(0, sourceRelativeAtMs - clipStartMs)
+            return {
+              x: Math.max(0, Number(marker?.x || 0)),
+              y: Math.max(0, Number(marker?.y || 0)),
+              at: clipRelativeAtMs / 1000,
+              durationMs: Math.max(1, Math.floor((Number(clickIndicatorConfig?.beforeMs || 0) + Number(clickIndicatorConfig?.afterMs || 0)) || 900)),
+            }
+          })
+        })()
       : [],
     chapterCards: resolvedChapterCards,
   }

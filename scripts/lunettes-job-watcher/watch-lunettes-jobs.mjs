@@ -1299,6 +1299,7 @@ async function findLatestVideoRenderMeta(scenarioId) {
 function buildTestscriptCommand({ scenarioPath, payload, context }) {
   const scenarioPathArg = toWorkspaceRelativePath(scenarioPath)
   const scenarioId = sanitizeFileToken(payload?.szenario_id, '')
+  const scenarioVersion = String(payload?.szenario_version ?? payload?.scenario_version ?? payload?.version ?? '').trim()
   if (!scenarioId) {
     throw new Error('Job enthaelt keine szenario_id im Payload.')
   }
@@ -1308,6 +1309,7 @@ function buildTestscriptCommand({ scenarioPath, payload, context }) {
     scenarioPathArg,
     '--scenario-id',
     scenarioId,
+    ...(scenarioVersion ? ['--scenario-version', scenarioVersion] : []),
     '--out-dir',
     outDir,
     '--force',
@@ -1336,6 +1338,7 @@ function buildTestscriptCommand({ scenarioPath, payload, context }) {
 function buildVideoscriptCommand({ scenarioPath, payload, context }) {
   const scenarioPathArg = toWorkspaceRelativePath(scenarioPath)
   const scenarioId = sanitizeFileToken(payload?.szenario_id, '')
+  const scenarioVersion = String(payload?.szenario_version ?? payload?.scenario_version ?? payload?.version ?? '').trim()
   if (!scenarioId) {
     throw new Error('Job enthaelt keine szenario_id im Payload.')
   }
@@ -1344,6 +1347,7 @@ function buildVideoscriptCommand({ scenarioPath, payload, context }) {
     'scripts/video-script-generator/remotion-render.mjs',
     scenarioPathArg,
     `--scenario-id=${scenarioId}`,
+    ...(scenarioVersion ? [`--scenario-version=${scenarioVersion}`] : []),
     `--profile=${profile}`,
   ], 'lunettes')
 

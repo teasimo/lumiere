@@ -61,11 +61,13 @@ async function main() {
   const ttsVoiceArg = argv.find((arg) => arg.startsWith('--tts-voice='))
   const profileArg = argv.find((arg) => arg.startsWith('--profile='))
   const scenarioIdArg = argv.find((arg) => arg.startsWith('--scenario-id='))
+  const scenarioVersionArg = argv.find((arg) => arg.startsWith('--scenario-version='))
   const fragmentSourceArg = argv.find((arg) => arg.startsWith('--fragment-source='))
   const softwareArg = argv.find((arg) => arg.startsWith('--software='))
   const profileName = String(profileArg ? profileArg.slice('--profile='.length) : 'all-channels').trim() || 'all-channels'
   const scenarioPathArg = argv.find((arg) => !arg.startsWith('-'))
   const scenarioId = sanitizeScenarioOutputToken(scenarioIdArg ? scenarioIdArg.slice('--scenario-id='.length) : '', '')
+  const scenarioVersion = String(scenarioVersionArg ? scenarioVersionArg.slice('--scenario-version='.length) : '').trim()
   const software = String(softwareArg ? softwareArg.slice('--software='.length) : '').trim()
   const fragmentSource = resolveFragmentSourceForScenario(
     fragmentSourceArg ? fragmentSourceArg.slice('--fragment-source='.length) : null,
@@ -98,6 +100,7 @@ async function main() {
     '--scenario-tts',
     scenarioPathArg,
     `--scenario-id=${scenarioId}`,
+    ...(scenarioVersion ? [`--scenario-version=${scenarioVersion}`] : []),
     `--profile=${profileName}`,
   ], fragmentSource)
   if (software) {

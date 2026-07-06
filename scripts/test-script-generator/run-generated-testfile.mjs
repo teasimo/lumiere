@@ -42,6 +42,7 @@ function parseArgs(argv) {
     scenarioId: null,
     fragmentSource: 'lunettes',
     software: null,
+    scenarioVersion: null,
     playwrightArgs: [],
   }
 
@@ -95,6 +96,16 @@ function parseArgs(argv) {
 
     if (token.startsWith('--scenario-id=')) {
       options.scenarioId = token.slice('--scenario-id='.length)
+      continue
+    }
+
+    if (token === '--scenario-version') {
+      options.scenarioVersion = args.shift() || null
+      continue
+    }
+
+    if (token.startsWith('--scenario-version=')) {
+      options.scenarioVersion = token.slice('--scenario-version='.length)
       continue
     }
 
@@ -266,6 +277,7 @@ function getGeneratedSiblingPathsFromSpec(specAbsolutePath) {
 async function persistScenarioRunArtifacts({
   scenarioPath,
   scenarioId,
+  scenarioVersionOverride = null,
   specPath,
   runRoot,
   artifactsDir,
@@ -277,7 +289,7 @@ async function persistScenarioRunArtifacts({
   const scenarioAbsolutePath = resolve(workspaceRoot, scenarioPath)
   const scenarioPathRelative = relative(workspaceRoot, scenarioAbsolutePath)
   const scenarioXmlRaw = await readFile(scenarioAbsolutePath, 'utf8')
-  const scenarioVersion = parseScenarioVersionFromXml(scenarioXmlRaw)
+  const scenarioVersion = String(scenarioVersionOverride || '').trim() || parseScenarioVersionFromXml(scenarioXmlRaw)
   const specAbsolutePath = resolve(specPath)
   const generatedSiblingPaths = getGeneratedSiblingPathsFromSpec(specAbsolutePath)
   const specMetaPath = generatedSiblingPaths.specMetaPath
@@ -724,6 +736,7 @@ async function main() {
   const persistedArtifacts = await persistScenarioRunArtifacts({
     scenarioPath: options.scenarioPath,
     scenarioId,
+    scenarioVersionOverride: options.scenarioVersion,
     specPath,
     runRoot,
     artifactsDir,
