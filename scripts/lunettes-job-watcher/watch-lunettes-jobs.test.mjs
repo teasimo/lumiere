@@ -93,10 +93,30 @@ test('videoscript artifact plan restores persistent testscript artifacts without
 
   assert.deepEqual(
     plan.restore.map((entry) => entry.artifactKey),
-    ['scenario-cache', 'testscript', 'videoscript'],
+    ['testscript', 'videoscript'],
   )
   assert.deepEqual(
     plan.flush.map((entry) => entry.artifactKey),
-    ['scenario-cache', 'videogenerator', 'videoscript'],
+    ['videoscript'],
   )
+})
+
+test('publish artifact plan uses only persistent artifacts', () => {
+  const plan = buildScenarioArtifactPlan({
+    type: 'publish',
+    szenario_id: '42',
+    payload: {
+      szenario_id: '42',
+    },
+  }, {
+    scenarioMeta: {
+      scenarioId: '42',
+    },
+  }, '7')
+
+  assert.deepEqual(
+    plan.restore.map((entry) => entry.artifactKey),
+    ['testscript', 'videoscript'],
+  )
+  assert.deepEqual(plan.flush, [])
 })

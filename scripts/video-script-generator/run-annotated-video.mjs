@@ -85,6 +85,12 @@ function buildVideoGeneratorRoot(nameToken) {
   )
 }
 
+function buildCanonicalScenarioVideoFilename({ scenarioId, scenarioVersion }) {
+  const normalizedScenarioId = sanitizeFileToken(scenarioId, 'scenario')
+  const normalizedVersion = buildScenarioArtifactVersionToken(scenarioVersion)
+  return `szenario-${normalizedScenarioId}-${normalizedVersion}.mp4`
+}
+
 function toRunId() {
   return new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)
 }
@@ -3964,9 +3970,13 @@ async function runScenarioTtsMode({ scenarioPath, scenarioId, fragmentSource = '
   const runId = toRunId()
   const scenarioOutputRoot = buildScenarioOutputRoot(process.cwd(), scenarioIdOverride, scenarioToken)
   const ttsOutputDir = join(scenarioOutputRoot, OUTPUT_VIDEOGENERATOR_SCOPE_DIR)
+  const canonicalOutputFilename = buildCanonicalScenarioVideoFilename({
+    scenarioId: scenarioIdOverride,
+    scenarioVersion,
+  })
   const resolvedOutputVideo = outputVideo
     ? resolve(outputVideo)
-    : join(ttsOutputDir, `${scenarioToken}-${profileToken}-tts-${runId}.mp4`)
+    : join(ttsOutputDir, canonicalOutputFilename)
 
   await mkdir(dirname(resolvedOutputVideo), { recursive: true })
   await mkdir(ttsOutputDir, { recursive: true })
@@ -4291,7 +4301,10 @@ async function runScenarioTtsMode({ scenarioPath, scenarioId, fragmentSource = '
   if (muxMeta?.remotionRenderPlanPath || muxMeta?.remotionRenderScriptTsxPath) {
     const remotionMuxMetaPath = join(ttsOutputDir, `scenario-tts-remotion-render-${profileToken}-${runId}.json`)
     const persistentArtifactsDir = buildPersistentScenarioArtifactsRoot(process.cwd(), scenarioIdOverride, scenarioVersion, 'videoscript')
-    const persistentOutputVideo = join(persistentArtifactsDir, 'final', basename(resolvedOutputVideo))
+    const persistentOutputVideo = join(persistentArtifactsDir, 'final', buildCanonicalScenarioVideoFilename({
+      scenarioId: scenarioIdOverride,
+      scenarioVersion,
+    }))
     await writeFile(remotionMuxMetaPath, JSON.stringify({
       planOnly: remotionPlanOnly ? true : undefined,
       renderPlanPath: muxMeta?.remotionRenderPlanPath || null,
@@ -4352,7 +4365,10 @@ async function runScenarioTtsMode({ scenarioPath, scenarioId, fragmentSource = '
 async function persistStableScenarioVideoArtifact({ scenarioId, scenarioVersion, outputVideo }) {
   const normalizedVersion = buildScenarioArtifactVersionToken(scenarioVersion)
   const persistentRoot = buildPersistentScenarioArtifactsRoot(process.cwd(), scenarioId, normalizedVersion, 'videoscript')
-  const targetVideoPath = join(persistentRoot, 'final', basename(outputVideo))
+  const targetVideoPath = join(persistentRoot, 'final', buildCanonicalScenarioVideoFilename({
+    scenarioId,
+    scenarioVersion: normalizedVersion,
+  }))
 
   await rm(persistentRoot, { recursive: true, force: true })
   await mkdir(dirname(targetVideoPath), { recursive: true })

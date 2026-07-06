@@ -16,6 +16,7 @@ import {
 } from '../shared/central-config.mjs'
 import {
   buildPersistentScenarioArtifactsRoot,
+  buildScenarioArtifactVersionPathSegment,
   buildScenarioArtifactVersionToken,
   buildScenarioOutputFolderName,
   sanitizeScenarioOutputToken,
@@ -199,7 +200,7 @@ function truncateText(value, maxLength = 500) {
 
 function readS3Config() {
   const bucket = String(process.env.S3_BUCKET || '').trim()
-  const prefix = String(process.env.S3_PREFIX || 'lumiere-worker').trim().replace(/^\/+|\/+$/g, '')
+  const prefix = String(process.env.S3_PREFIX || '').trim().replace(/^\/+|\/+$/g, '')
   const endpointUrl = String(process.env.S3_ENDPOINT_URL || '').trim()
 
   return {
@@ -212,10 +213,25 @@ function readS3Config() {
 
 function buildPersistentScenarioArtifactRemotePrefix({ s3Config, szenarioId, scenarioVersion, generatorKey }) {
   const normalizedScenarioId = sanitizeFileToken(szenarioId, 'scenario')
-  const normalizedVersion = buildScenarioArtifactVersionToken(scenarioVersion)
-  const prefixParts = [s3Config.prefix, 'szenario', normalizedScenarioId, normalizedVersion, generatorKey]
+  const versionPathSegment = buildScenarioArtifactVersionPathSegment({
+    scenarioId: normalizedScenarioId,
+    scenarioVersion,
+  })
+  const prefixParts = [s3Config.prefix, 'szenario', normalizedScenarioId, versionPathSegment, generatorKey]
     .filter(Boolean)
   return `s3://${s3Config.bucket}/${prefixParts.join('/')}`
+}
+
+function preferKnownScenarioVersion(primaryValue, fallbackValue) {
+  const primary = String(primaryValue ?? '').trim()
+  if (primary && primary.toLowerCase() !== 'unknown') {
+    return primary
+  }
+  const fallback = String(fallbackValue ?? '').trim()
+  if (fallback) {
+    return fallback
+  }
+  return primary || 'unknown'
 }
 
 function buildAwsCliArgs(s3Config) {
@@ -1577,7 +1593,11 @@ async function processJob(job, context) {
   const restorePlan = buildScenarioArtifactPlan(job, null, scenarioVersion)
   await restoreScenarioArtifactsFromS3(context, restorePlan)
   const scenarioInput = await resolveScenarioInput(job)
-  const artifactPlan = buildScenarioArtifactPlan(job, scenarioInput, scenarioInput.scenarioMeta?.scenarioVersion || scenarioVersion)
+  const effectiveScenarioVersion = preferKnownScenarioVersion(
+    scenarioInput.scenarioMeta?.scenarioVersion,
+    scenarioVersion,
+  )
+  const artifactPlan = buildScenarioArtifactPlan(job, scenarioInput, effectiveScenarioVersion)
   const scenarioPathRelative = relative(workspaceRoot, scenarioInput.scenarioPath)
   const plan = await buildJobExecutionPlan(job, context, scenarioInput)
 

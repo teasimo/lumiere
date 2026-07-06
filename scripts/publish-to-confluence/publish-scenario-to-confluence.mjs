@@ -8,7 +8,9 @@ import { basename, dirname, extname, join, relative, resolve } from 'path'
 import { Buffer } from 'buffer'
 import { promisify } from 'util'
 import { XMLParser } from 'fast-xml-parser'
-import { buildScenarioOutputFolderName } from '../shared/scenario-output.mjs'
+import {
+  buildPersistentScenarioArtifactsRoot,
+} from '../shared/scenario-output.mjs'
 import { loadCentralConfig } from '../shared/central-config.mjs'
 import { parseScenarioXml } from '../shared/parse-scenario-xml.mjs'
 
@@ -537,160 +539,79 @@ function buildConfluencePageTitle({ scenarioId, scenarioTitle, scenarioVersion }
   return `Szenario ${normalizedScenarioId} : ${normalizedTitle} (Version ${normalizedVersion})`
 }
 
-async function findLatestSuccessfulRender({ scenarioId }) {
-  const folderName = buildScenarioOutputFolderName({ scenarioId, fallbackName: 'scenario' })
-  const videoGeneratorDir = resolve('output', folderName, 'videogenerator')
-  if (!existsSync(videoGeneratorDir)) {
-    throw new Error(`Kein Videogenerator-Ordner gefunden: ${videoGeneratorDir}`)
+async function findLatestSuccessfulRender({ scenarioId, scenarioVersion }) {
+  const persistentVideoscriptDir = buildPersistentScenarioArtifactsRoot(process.cwd(), scenarioId, scenarioVersion, 'videoscript')
+  const exportMetaPath = join(persistentVideoscriptDir, 'export-meta.json')
+  const finalDir = join(persistentVideoscriptDir, 'final')
+  if (!existsSync(exportMetaPath) || !existsSync(finalDir)) {
+    throw new Error(`Kein persistenter Videoscript-Artefaktordner gefunden: ${persistentVideoscriptDir}`)
   }
 
-  const entries = await readdir(videoGeneratorDir, { withFileTypes: true })
-  const metadataFiles = entries
-    .filter((entry) => entry.isFile() && /^scenario-tts-remotion-render-.*\.json$/i.test(entry.name))
-    .map((entry) => join(videoGeneratorDir, entry.name))
-
-  if (!metadataFiles.length) {
-    throw new Error(`Keine Remotion-Metadateien gefunden in ${videoGeneratorDir}`)
+  let exportMeta = null
+  try {
+    exportMeta = JSON.parse(await readFile(exportMetaPath, 'utf8'))
+  } catch {
+    throw new Error(`Videoscript-Metadatei ist ungueltig: ${exportMetaPath}`)
   }
 
-  const candidates = []
-  for (const metaPath of metadataFiles) {
-    let meta = null
-    try {
-      meta = JSON.parse(await readFile(metaPath, 'utf8'))
-    } catch {
-      continue
-    }
-
-    if (meta?.planOnly === true) {
-      continue
-    }
-
-    const outputVideoRaw = String(meta?.outputVideo || '').trim()
-    if (!outputVideoRaw) {
-      continue
-    }
-
-    const outputVideoPath = resolve(outputVideoRaw)
-    if (!existsSync(outputVideoPath)) {
-      continue
-    }
-
-    const [metaStats, videoStats] = await Promise.all([stat(metaPath), stat(outputVideoPath)])
-    if (!videoStats.isFile() || videoStats.size <= 0) {
-      continue
-    }
-
-    candidates.push({
-      metaPath,
-      metaStats,
-      videoPath: outputVideoPath,
-      videoStats,
-    })
+  const outputVideoRelative = String(exportMeta?.outputVideoRelative || '').trim()
+  const outputVideoPath = outputVideoRelative
+    ? resolve(process.cwd(), outputVideoRelative)
+    : null
+  if (!outputVideoPath || !existsSync(outputVideoPath)) {
+    throw new Error(`Persistentes Videoscript-Finalvideo fehlt: ${outputVideoRelative || '<leer>'}`)
   }
 
-  if (!candidates.length) {
-    throw new Error(`Es wurde kein erfolgreich gerendertes Remotion-Video fuer "${scenarioId}" gefunden.`)
+  const [metaStats, videoStats] = await Promise.all([stat(exportMetaPath), stat(outputVideoPath)])
+  if (!videoStats.isFile() || videoStats.size <= 0) {
+    throw new Error(`Persistentes Videoscript-Finalvideo ist leer oder ungueltig: ${outputVideoPath}`)
   }
 
-  candidates.sort((left, right) => {
-    const timeDiff = right.metaStats.mtimeMs - left.metaStats.mtimeMs
-    if (timeDiff !== 0) return timeDiff
-    return right.videoStats.mtimeMs - left.videoStats.mtimeMs
-  })
-
-  return candidates[0]
+  return {
+    metaPath: exportMetaPath,
+    metaStats,
+    videoPath: outputVideoPath,
+    videoStats,
+  }
 }
 
-async function findLatestTimelineRun({ scenarioId, scenarioSourceRelative }) {
-  const folderName = buildScenarioOutputFolderName({ scenarioId, fallbackName: 'scenario' })
-  const runsDir = resolve('output', folderName, 'runs')
-  if (!existsSync(runsDir)) {
-    throw new Error(`Kein Runs-Ordner gefunden: ${runsDir}`)
+async function findLatestTimelineRun({ scenarioId, scenarioVersion, scenarioSourceRelative }) {
+  const persistentTestscriptDir = buildPersistentScenarioArtifactsRoot(process.cwd(), scenarioId, scenarioVersion, 'testscript')
+  if (!existsSync(persistentTestscriptDir)) {
+    throw new Error(`Kein persistenter Testscript-Artefaktordner gefunden: ${persistentTestscriptDir}`)
   }
-
   const normalizedScenarioSource = normalizeWorkspaceRelativePath(scenarioSourceRelative)
-  const runEntries = await readdir(runsDir, { withFileTypes: true })
-  const candidates = []
-
-  for (const runEntry of runEntries) {
-    if (!runEntry.isDirectory()) {
-      continue
-    }
-
-    const runRoot = join(runsDir, runEntry.name)
-    const runMetaPath = join(runRoot, 'run-meta.json')
-    const artifactsDir = join(runRoot, 'artifacts')
-    if (!existsSync(runMetaPath) || !existsSync(artifactsDir)) {
-      continue
-    }
-
-    let runMeta = null
-    try {
-      runMeta = JSON.parse(await readFile(runMetaPath, 'utf8'))
-    } catch {
-      continue
-    }
-
-    const runSource = normalizeWorkspaceRelativePath(runMeta?.scenario?.sourcePathRelative || runMeta?.scenario?.sourcePathNormalized || '')
-    if (runSource && runSource !== normalizedScenarioSource) {
-      continue
-    }
-
-    const artifactEntries = await readdir(artifactsDir, { withFileTypes: true }).catch(() => [])
-    for (const artifactEntry of artifactEntries) {
-      if (!artifactEntry.isDirectory()) {
-        continue
-      }
-
-      const artifactDir = join(artifactsDir, artifactEntry.name)
-      const timelinePath = join(artifactDir, 'scenario-step-timeline.json')
-      const rawVideoPath = join(artifactDir, 'video.webm')
-      if (!existsSync(timelinePath) || !existsSync(rawVideoPath)) {
-        continue
-      }
-
-      let timeline = null
-      try {
-        timeline = JSON.parse(await readFile(timelinePath, 'utf8'))
-      } catch {
-        continue
-      }
-
-      const timelineSource = normalizeWorkspaceRelativePath(timeline?.scenarioSource || '')
-      if (timelineSource && timelineSource !== normalizedScenarioSource) {
-        continue
-      }
-
-      const [timelineStats, rawVideoStats] = await Promise.all([stat(timelinePath), stat(rawVideoPath)])
-      if (!rawVideoStats.isFile() || rawVideoStats.size <= 0) {
-        continue
-      }
-
-      candidates.push({
-        runRoot,
-        runMetaPath,
-        artifactDir,
-        timelinePath,
-        rawVideoPath,
-        timeline,
-        timelineStats,
-        rawVideoStats,
-      })
-    }
+  const timelinePath = join(persistentTestscriptDir, 'timeline', 'scenario-step-timeline.json')
+  const rawVideoPath = join(persistentTestscriptDir, 'rohvideo', 'video.webm')
+  if (!existsSync(timelinePath) || !existsSync(rawVideoPath)) {
+    throw new Error(`Persistente Timeline oder Rohvideo fehlen unter ${persistentTestscriptDir}`)
   }
 
-  if (!candidates.length) {
-    throw new Error(`Kein Testlauf mit Timeline und Rohvideo fuer "${scenarioId}" gefunden.`)
+  let timeline = null
+  try {
+    timeline = JSON.parse(await readFile(timelinePath, 'utf8'))
+  } catch {
+    throw new Error(`Persistente Timeline ist ungueltig: ${timelinePath}`)
   }
 
-  candidates.sort((left, right) => {
-    const timeDiff = right.timelineStats.mtimeMs - left.timelineStats.mtimeMs
-    if (timeDiff !== 0) return timeDiff
-    return right.rawVideoStats.mtimeMs - left.rawVideoStats.mtimeMs
-  })
+  const timelineSource = normalizeWorkspaceRelativePath(timeline?.scenarioSource || '')
+  if (timelineSource && timelineSource !== normalizedScenarioSource) {
+    throw new Error(`Persistente Timeline passt nicht zum Szenario. Erwartet ${normalizedScenarioSource}, gefunden ${timelineSource}`)
+  }
 
-  return candidates[0]
+  const [timelineStats, rawVideoStats] = await Promise.all([stat(timelinePath), stat(rawVideoPath)])
+  if (!rawVideoStats.isFile() || rawVideoStats.size <= 0) {
+    throw new Error(`Persistentes Rohvideo ist leer oder ungueltig: ${rawVideoPath}`)
+  }
+
+  return {
+    artifactDir: persistentTestscriptDir,
+    timelinePath,
+    rawVideoPath,
+    timeline,
+    timelineStats,
+    rawVideoStats,
+  }
 }
 
 function filterTimelineSteps(timeline) {
@@ -1187,9 +1108,14 @@ async function main() {
     })
     const scenarioSourceRelative = normalizeWorkspaceRelativePath(relative(process.cwd(), scenarioAbsolutePath))
 
-    const latestRender = await findLatestSuccessfulRender({ scenarioId }).catch(() => null)
+    const effectiveScenarioVersion = lunettesScenario.version || scenarioMeta.version
+    const latestRender = await findLatestSuccessfulRender({
+      scenarioId,
+      scenarioVersion: effectiveScenarioVersion,
+    }).catch(() => null)
     const latestTimelineRun = await findLatestTimelineRun({
       scenarioId,
+      scenarioVersion: effectiveScenarioVersion,
       scenarioSourceRelative,
     })
     const screenshotPlan = collectScreenshotUploadPlan({

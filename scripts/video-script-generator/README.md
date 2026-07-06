@@ -7,7 +7,8 @@ Diese Doku beschreibt das Zeitmodell des Video-Script-Generators. Sie dokumentie
 Wichtig zum aktuellen Stand:
 
 - Der Pfad `--scenario-tts` basiert fuer Schrittsegmente, Click-Marker und Viewport jetzt primaer auf `scenario-step-timeline.json`.
-- Der Pfad `--scenario-tts` liest Rohvideo und Timeline bevorzugt aus `szenario/<id>/<version>/testscript/{rohvideo,timeline}` und faellt nur fuer Altbestaende auf `output/*` zurueck.
+- Der Pfad `--scenario-tts` liest Rohvideo und Timeline ausschliesslich aus `szenario/<id>/<version_hash>/testscript/{rohvideo,timeline}`.
+- Das finale Videoscript-Video wird ohne Zeitstempel unter `.../videoscript/final/szenario-<id>-<version>.mp4` abgelegt.
 - Die Playwright-Trace bleibt nur noch fuer explizite Altpfade wie `--annotate-only` und fuer trace-spezifische Debug-/Migrationsfaelle relevant.
 - Diese Doku beschreibt deshalb weiterhin das Trace-Modell, aber nicht mehr als einzige Quelle fuer die Video-Zeitdaten.
 

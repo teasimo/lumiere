@@ -100,7 +100,7 @@ npm run publish:scenario:confluence -- neo/interactions/demo.xml 2105671681 --sc
 ## Voraussetzungen
 
 - Node.js 20 oder neuer
-- ein erfolgreich erzeugtes Remotion-Video unter `output/<szenario>/videogenerator`
+- ein erfolgreich erzeugtes finales Videoscript-Video unter `szenario/<id>/<version_hash>/videoscript/final/szenario-<id>-<version>.mp4`
 - entweder Confluence-Page-ID als CLI-Parameter
 - oder `scenario.config.json > scenario["publish-to-confluence"].parent_page_id`
 - Scenario-ID als CLI-Parameter `--scenario-id=<id>`
@@ -128,4 +128,4 @@ Wenn weder eine Zielseite per CLI/Payload noch `parent_page_id` gesetzt ist, bri
 
 ## Hinweis zur Video-Auswahl
 
-Das Script sucht im passenden `videogenerator`-Ordner nach den Dateien `scenario-tts-remotion-render-*.json` und nimmt den neuesten Eintrag, dessen `outputVideo` existiert. `planOnly`-Laeufe werden ignoriert.
+Das Script liest das finale Schulungsvideo aus `szenario/<id>/<version_hash>/videoscript/export-meta.json` und das Rohvideo samt Timeline aus `szenario/<id>/<version_hash>/testscript/...`.

@@ -74,51 +74,47 @@ Empfangene XMLs werden unter `neo/interactions/_lunettes-job-watcher/szenario-<s
 
 ## Versionsspezifische S3-Artefakte
 
-Wenn `S3_BUCKET` gesetzt ist, verwendet der Watcher zusaetzlich dieses Remote-Schema:
+Wenn `S3_BUCKET` gesetzt ist, spiegelt der Watcher ausschliesslich die persistente Artefaktstruktur:
 
 ```text
-s3://<bucket>/<prefix>/scenario-artifacts/<szenario-id>/versions/<version>/<generator>/<artifact-key>/...
+szenario/<szenario-id>/<versionsnummer>_<hash>/<generator>/
 ```
 
-Zusaetzlich gibt es eine persistente, nicht-temporaere Artefaktstruktur unter:
-
-```text
-szenario/<szenario-id>/<version>/<generator>/
-```
-
-Diese Struktur wird im Azure-Container ebenfalls per S3-Sync gespiegelt. Die bisherige temp-/run-orientierte Ablage bleibt parallel bestehen und wird vorerst nicht entfernt.
+Ist `S3_PREFIX` leer oder nicht gesetzt, liegt `szenario/...` direkt im Bucket-Root. Es gibt keinen impliziten Standard-Prefix `lumiere-worker` mehr.
 
 Dabei gilt:
 
 - `<szenario-id>` ist die Lunettes-`szenario_id`
-- `<version>` ist die ermittelte Szenario-Version
-- `<generator>` ist aktuell `shared`, `testscript` oder `videoscript`
-- `<artifact-key>` ist z. B. `scenario-cache`, `runs`, `testfiles` oder `videogenerator`
+- `<versionsnummer>` ist die ermittelte Szenario-Version
+- `<hash>` ist ein gekuerzter SHA-1 ueber `Szenario-<szenario-id>-<versionsnummer>`
+- `<generator>` ist aktuell `testscript` oder `videoscript`
 
 Inhalt der persistenten Struktur:
 
-- `szenario/<id>/<version>/testscript/rohvideo/video.webm`
-- `szenario/<id>/<version>/testscript/timeline/scenario-step-timeline.json`
-- `szenario/<id>/<version>/testscript/screenshots/...`
-- `szenario/<id>/<version>/videoscript/final/<dateiname>.mp4`
+- `szenario/<id>/<version_hash>/testscript/rohvideo/video.webm`
+- `szenario/<id>/<version_hash>/testscript/timeline/scenario-step-timeline.json`
+- `szenario/<id>/<version_hash>/testscript/screenshots/...`
+- `szenario/<id>/<version_hash>/testscript/export-meta.json`
+- `szenario/<id>/<version_hash>/videoscript/final/szenario-<id>-<version>.mp4`
+- `szenario/<id>/<version_hash>/videoscript/export-meta.json`
 
 Restore/Flush pro Job-Typ:
 
 - `testscript`:
-  Restore `shared/scenario-cache`, `szenario/<id>/<version>/testscript`
-  Flush `shared/scenario-cache`, `testscript/runs`, `testscript/testfiles`, `szenario/<id>/<version>/testscript`
+  Restore `szenario/<id>/<version_hash>/testscript`
+  Flush `szenario/<id>/<version_hash>/testscript`
 - `videoscript`:
-  Restore `shared/scenario-cache`, `szenario/<id>/<version>/testscript`, `szenario/<id>/<version>/videoscript`
-  Flush `shared/scenario-cache`, `videoscript/videogenerator`, `szenario/<id>/<version>/videoscript`
+  Restore `szenario/<id>/<version_hash>/testscript`, `szenario/<id>/<version_hash>/videoscript`
+  Flush `szenario/<id>/<version_hash>/videoscript`
 - `publish`:
-  Restore `shared/scenario-cache`, `testscript/runs`, `videoscript/videogenerator`, `szenario/<id>/<version>/testscript`, `szenario/<id>/<version>/videoscript`
-  Flush `shared/scenario-cache`
+  Restore `szenario/<id>/<version_hash>/testscript`, `szenario/<id>/<version_hash>/videoscript`
+  Flush nichts
 
 Verhalten:
 
 - Vor jedem Job wird zuerst die Szenario-Version bestimmt.
-- Danach werden nur die potentiell benoetigten Artefakte fuer genau diese `szenario_id` und Version von S3 geholt.
-- Nach dem Job werden nur die Artefakte des betroffenen Generators fuer genau diese Version mit `sync --delete` ersetzt.
+- Danach werden nur die benoetigten persistenten Artefakte fuer genau diese `szenario_id` und diesen `version_hash` von S3 geholt.
+- Nach dem Job werden nur die persistenten Artefakte des betroffenen Generators fuer genau diesen `version_hash` mit `sync --delete` ersetzt.
 - Artefakte anderer Versionen bleiben unberuehrt.
 
 Die stdout/stderr-Ausgaben der gestarteten Skripte werden zusaetzlich als gebuendelte `progress`-Events an die Render-Job-API gesendet: spaetestens nach 5 Zeilen oder nach 60 Sekunden, auch wenn bis dahin weniger Zeilen angefallen sind.
@@ -219,15 +215,15 @@ Beispiel fuer den `result`-Payload eines erfolgreichen `testscript`-Jobs:
   "run_root": "output/7/runs/20260617-100358-605",
   "artifacts_dir": "output/7/runs/20260617-100358-605/artifacts",
   "generated_dir": "output/7/runs/20260617-100358-605/generated",
-  "persistent_artifacts_dir": "szenario/7/2/testscript",
-  "persistent_raw_video": "szenario/7/2/testscript/rohvideo/video.webm",
-  "persistent_scenario_step_timeline": "szenario/7/2/testscript/timeline/scenario-step-timeline.json",
-  "persistent_screenshots_dir": "szenario/7/2/testscript/screenshots",
+  "persistent_artifacts_dir": "szenario/7/2_2f3c4d5e6a7b/testscript",
+  "persistent_raw_video": "szenario/7/2_2f3c4d5e6a7b/testscript/rohvideo/video.webm",
+  "persistent_scenario_step_timeline": "szenario/7/2_2f3c4d5e6a7b/testscript/timeline/scenario-step-timeline.json",
+  "persistent_screenshots_dir": "szenario/7/2_2f3c4d5e6a7b/testscript/screenshots",
   "run_meta_path": "output/7/runs/20260617-100358-605/run-meta.json",
   "scenario_step_timeline_path": "output/7/runs/20260617-100358-605/artifacts/temp-lunettes-job-watcher--9d5b3-s-generated-flow-for-source/scenario-step-timeline.json",
   "scenario_step_timeline": {
     "scenarioId": "source",
-    "scenarioVersion": "unknown",
+    "scenarioVersion": "7",
     "scenarioSource": "neo/interactions/_lunettes-job-watcher/szenario-7/source.xml",
     "generatedAtIso": "2026-06-17T08:04:39.114Z",
     "steps": [
