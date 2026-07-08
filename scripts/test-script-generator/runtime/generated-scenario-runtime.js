@@ -36,6 +36,28 @@ async function captureTimelineStepScreenshot({
   return screenshotRelativePath.replace(/\\/g, '/')
 }
 
+async function captureTimelineStepHtmlSnapshot({
+  page,
+  testInfo,
+  stepId,
+  stepIndex,
+}) {
+  if (!page || !testInfo || typeof testInfo.outputPath !== 'function') {
+    return null
+  }
+
+  const stepToken = sanitizePathSegment(stepId) || `step-${stepIndex + 1}`
+  const htmlFilename = `${String(stepIndex + 1).padStart(3, '0')}-${stepToken}.html`
+  const htmlRelativePath = join('timeline-html-snapshots', htmlFilename)
+  const htmlAbsolutePath = testInfo.outputPath(htmlRelativePath)
+
+  const html = await page.content()
+  await mkdir(dirname(htmlAbsolutePath), { recursive: true })
+  await writeFile(htmlAbsolutePath, html, 'utf8')
+
+  return htmlRelativePath.replace(/\\/g, '/')
+}
+
 function buildTimelineStepSegment(step) {
   const interactionType = inferTimelineInteractionType(step)
   const startedAtMs = Number(step?.startedAtMs)
@@ -342,6 +364,7 @@ export function createScenarioTimelineRuntime({
     wrapStep: (stepId, execute) => test.step(stepId, execute),
     onStepComplete: async (stepReport) => {
       let screenshotPath = null
+      let htmlSnapshotPath = null
       try {
         screenshotPath = await captureTimelineStepScreenshot({
           page,
@@ -367,9 +390,35 @@ export function createScenarioTimelineRuntime({
         }
       }
 
+      try {
+        htmlSnapshotPath = await captureTimelineStepHtmlSnapshot({
+          page,
+          testInfo,
+          stepId: stepReport?.stepId,
+          stepIndex,
+        })
+      } catch (error) {
+        const htmlSnapshotError = {
+          name: String(error?.name || 'Error'),
+          message: String(error?.message || error),
+        }
+        const nextLog = Array.isArray(stepReport?.log) ? [...stepReport.log] : []
+        nextLog.push({
+          timestamp: new Date().toISOString(),
+          level: 'warning',
+          message: 'timeline-html-snapshot-failed',
+          data: htmlSnapshotError,
+        })
+        stepReport = {
+          ...stepReport,
+          log: nextLog,
+        }
+      }
+
       timeline.push({
         ...stepReport,
         screenshotPath,
+        htmlSnapshotPath,
       })
       stepIndex += 1
     },

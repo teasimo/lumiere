@@ -233,7 +233,7 @@ test('live-step-runner reports html and screenshot on success', async () => {
   assert.equal(results[0].screenshot, Buffer.from('png').toString('base64'))
 })
 
-test('timeline runtime writes a screenshot reference per step', async () => {
+test('timeline runtime writes screenshot and html snapshot references per step', async () => {
   const page = createFakePage()
   const runtimeRoot = await mkdtemp(join(tmpdir(), 'timeline-runtime-'))
   const timelineRuntime = createScenarioTimelineRuntime({
@@ -291,6 +291,10 @@ test('timeline runtime writes a screenshot reference per step', async () => {
   assert.equal(timeline.steps[1].screenshotPath, 'timeline-screenshots/002-click-step.png')
   assert.equal(timeline.steps[2].screenshotPath, 'timeline-screenshots/003-fill-step.png')
   assert.equal(timeline.steps[3].screenshotPath, 'timeline-screenshots/004-scroll-step.png')
+  assert.equal(timeline.steps[0].htmlSnapshotPath, 'timeline-html-snapshots/001-open-step.html')
+  assert.equal(timeline.steps[1].htmlSnapshotPath, 'timeline-html-snapshots/002-click-step.html')
+  assert.equal(timeline.steps[2].htmlSnapshotPath, 'timeline-html-snapshots/003-fill-step.html')
+  assert.equal(timeline.steps[3].htmlSnapshotPath, 'timeline-html-snapshots/004-scroll-step.html')
   assert.deepEqual(timeline.video.viewport, {
     width: 1280,
     height: 720,
@@ -332,6 +336,10 @@ test('timeline runtime writes a screenshot reference per step', async () => {
   assert.equal(
     String(await readFile(join(runtimeRoot, timeline.steps[0].screenshotPath))),
     'png',
+  )
+  assert.match(
+    await readFile(join(runtimeRoot, timeline.steps[0].htmlSnapshotPath), 'utf8'),
+    /https:\/\/example\.test\/timeline/,
   )
 })
 

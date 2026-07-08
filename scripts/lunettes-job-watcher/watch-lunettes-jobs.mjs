@@ -1634,6 +1634,7 @@ async function buildJobResult(job, scenarioInput, logPath, executionSummary = nu
           persistent_raw_video: latestRun.parsed.exportedTo.persistentRawVideoRelative || null,
           persistent_scenario_step_timeline: latestRun.parsed.exportedTo.persistentTimelineRelative || null,
           persistent_screenshots_dir: latestRun.parsed.exportedTo.persistentScreenshotsRelative || null,
+          persistent_html_snapshots_dir: latestRun.parsed.exportedTo.persistentHtmlSnapshotsRelative || null,
         }
         : {}),
       run_meta_path: latestRun ? relative(workspaceRoot, latestRun.runMetaPath) : null,

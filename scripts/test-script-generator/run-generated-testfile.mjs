@@ -376,6 +376,7 @@ async function persistScenarioRunArtifacts({
     runMeta.exportedTo.persistentRawVideoRelative = persistentArtifacts.rawVideoRelative
     runMeta.exportedTo.persistentTimelineRelative = persistentArtifacts.timelineRelative
     runMeta.exportedTo.persistentScreenshotsRelative = persistentArtifacts.screenshotsRelative
+    runMeta.exportedTo.persistentHtmlSnapshotsRelative = persistentArtifacts.htmlSnapshotsRelative
     await writeFile(runMetaPath, JSON.stringify(runMeta, null, 2), 'utf8')
   }
 
@@ -426,6 +427,7 @@ async function persistStableScenarioArtifacts({ scenarioId, scenarioVersion, art
   let rawVideoRelative = null
   let timelineRelative = null
   let screenshotsRelative = null
+  let htmlSnapshotsRelative = null
 
   if (rawVideoPath) {
     const targetPath = join(persistentRoot, 'rohvideo', 'video.webm')
@@ -446,6 +448,13 @@ async function persistStableScenarioArtifacts({ scenarioId, scenarioVersion, art
       await cp(sourceScreenshotsDir, targetScreenshotsDir, { recursive: true, force: true })
       screenshotsRelative = relative(workspaceRoot, targetScreenshotsDir)
     }
+
+    const sourceHtmlSnapshotsDir = join(dirname(timelinePath), 'timeline-html-snapshots')
+    if (existsSync(sourceHtmlSnapshotsDir)) {
+      const targetHtmlSnapshotsDir = join(persistentRoot, 'html-snapshots')
+      await cp(sourceHtmlSnapshotsDir, targetHtmlSnapshotsDir, { recursive: true, force: true })
+      htmlSnapshotsRelative = relative(workspaceRoot, targetHtmlSnapshotsDir)
+    }
   }
 
   await writeFile(join(persistentRoot, 'export-meta.json'), JSON.stringify({
@@ -457,6 +466,7 @@ async function persistStableScenarioArtifacts({ scenarioId, scenarioVersion, art
     rawVideoRelative,
     timelineRelative,
     screenshotsRelative,
+    htmlSnapshotsRelative,
   }, null, 2), 'utf8')
 
   return {
@@ -464,6 +474,7 @@ async function persistStableScenarioArtifacts({ scenarioId, scenarioVersion, art
     rawVideoRelative,
     timelineRelative,
     screenshotsRelative,
+    htmlSnapshotsRelative,
   }
 }
 
