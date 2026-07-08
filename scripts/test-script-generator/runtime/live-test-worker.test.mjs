@@ -642,6 +642,54 @@ test('runner claims explicit live test id after register when configured', async
   ])
 })
 
+test('runner keeps polling when initial claim finds no claimable live test', async () => {
+  const calls = []
+  const runner = new LiveTestWorkerRunner({
+    client: {
+      async register() {
+        calls.push('register')
+        return { sessionId: 'session-wait', status: 'registered' }
+      },
+      async claimLiveTest(sessionId, liveTestId) {
+        calls.push(`claim:${sessionId}:${String(liveTestId ?? '')}`)
+        const error = new Error('HTTP 409 Conflict')
+        error.statusCode = 409
+        error.responsePayload = { error: 'Kein claimbarer Live-Test gefunden.' }
+        throw error
+      },
+      async nextStep(sessionId) {
+        calls.push(`next:${sessionId}`)
+        return { type: 'release', reason: 'test-finished' }
+      },
+      async release(sessionId, reason) {
+        calls.push(`release:${sessionId}:${reason}`)
+      },
+    },
+    workerName: 'test-worker',
+    pollIntervalMs: 1,
+    sleepImpl: async () => {},
+    browserFactory: async () => ({
+      async newPage() {
+        return createFakePage()
+      },
+      async close() {
+        return undefined
+      },
+    }),
+    resolveScenarioSteps: async () => ({ flow: [] }),
+    testScriptConfig: {},
+  })
+
+  await runner.run()
+
+  assert.deepEqual(calls, [
+    'register',
+    'claim:session-wait:',
+    'next:session-wait',
+    'release:session-wait:test-finished',
+  ])
+})
+
 test('lunettes fragment fetch forwards Status default and Version to scenario endpoint', async () => {
   const runtimeRoot = await mkdtemp(join(tmpdir(), 'live-test-worker-'))
   const scenarioPath = join(runtimeRoot, 'source.xml')

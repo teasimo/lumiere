@@ -105,6 +105,19 @@ async function captureStepArtifacts(page) {
   return { url, html, screenshot }
 }
 
+function isNoClaimableLiveTestError(error) {
+  const statusCode = Number(error?.statusCode)
+  const responsePayload = error?.responsePayload
+  const payloadText = responsePayload == null
+    ? ''
+    : typeof responsePayload === 'string'
+      ? responsePayload
+      : JSON.stringify(responsePayload)
+
+  return statusCode === 409
+    && payloadText.toLowerCase().includes('kein claimbarer live-test gefunden')
+}
+
 export class LunettesLiveTestClient {
   constructor({ baseUrl, username, password, fetchImpl = fetch }) {
     this.baseUrl = normalizeBaseUrl(baseUrl)
@@ -133,7 +146,12 @@ export class LunettesLiveTestClient {
 
     if (!response.ok) {
       const details = payload == null ? '' : ` Response: ${typeof payload === 'string' ? payload : JSON.stringify(payload)}`
-      throw new Error(`HTTP ${response.status} ${response.statusText} for ${method} ${path}.${details}`)
+      const error = new Error(`HTTP ${response.status} ${response.statusText} for ${method} ${path}.${details}`)
+      error.statusCode = response.status
+      error.responsePayload = payload
+      error.path = path
+      error.method = method
+      throw error
     }
 
     return payload
@@ -280,7 +298,17 @@ export class LiveTestWorkerRunner {
       throw new Error('Cannot claim live test without session_id.')
     }
 
-    const response = await this.client.claimLiveTest(this.sessionId, this.liveTestId)
+    let response
+    try {
+      response = await this.client.claimLiveTest(this.sessionId, this.liveTestId)
+    } catch (error) {
+      if (isNoClaimableLiveTestError(error)) {
+        this.idleWithoutLiveTestSince = 0
+        console.log(`[live-test-worker] claim pending session_id=${this.sessionId} mode=${this.liveTestId ? 'explicit' : 'latest-running'} reason=no-claimable-live-test`)
+        return null
+      }
+      throw error
+    }
     const claimedLiveTestId = response?.liveTest?.id ?? this.liveTestId ?? null
     console.log(`[live-test-worker] claimed session_id=${this.sessionId} live_test_id=${String(claimedLiveTestId ?? '') || '-'} mode=${this.liveTestId ? 'explicit' : 'latest-running'}`)
     return response
