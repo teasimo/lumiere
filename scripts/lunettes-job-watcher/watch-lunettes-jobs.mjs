@@ -217,9 +217,46 @@ function buildPersistentScenarioArtifactRemotePrefix({ s3Config, szenarioId, sce
     scenarioId: normalizedScenarioId,
     scenarioVersion,
   })
-  const prefixParts = [s3Config.prefix, 'szenario', normalizedScenarioId, versionPathSegment, generatorKey]
+  return buildPersistentScenarioArtifactRemotePrefixFromVersionPathSegment({
+    s3Config,
+    szenarioId: normalizedScenarioId,
+    versionPathSegment,
+    generatorKey,
+  })
+}
+
+function buildPersistentScenarioArtifactRemotePrefixFromVersionPathSegment({ s3Config, szenarioId, versionPathSegment, generatorKey }) {
+  const normalizedScenarioId = sanitizeFileToken(szenarioId, 'scenario')
+  const normalizedVersionPathSegment = String(versionPathSegment || '').trim()
+  const prefixParts = [s3Config.prefix, 'szenario', normalizedScenarioId, normalizedVersionPathSegment, generatorKey]
     .filter(Boolean)
   return `s3://${s3Config.bucket}/${prefixParts.join('/')}`
+}
+
+function parseVersionPathSegment(versionPathSegment) {
+  const rawSegment = String(versionPathSegment || '').trim()
+  const versionToken = rawSegment.split('_')[0] || ''
+  const isNumeric = /^\d+$/.test(versionToken)
+  return {
+    rawSegment,
+    versionToken,
+    isNumeric,
+    numericValue: isNumeric ? Number.parseInt(versionToken, 10) : null,
+  }
+}
+
+function compareVersionPathSegmentsDescending(leftSegment, rightSegment) {
+  const left = parseVersionPathSegment(leftSegment)
+  const right = parseVersionPathSegment(rightSegment)
+
+  if (left.isNumeric && right.isNumeric && left.numericValue !== right.numericValue) {
+    return right.numericValue - left.numericValue
+  }
+  if (left.isNumeric !== right.isNumeric) {
+    return left.isNumeric ? -1 : 1
+  }
+
+  return right.versionToken.localeCompare(left.versionToken, undefined, { numeric: true, sensitivity: 'base' })
 }
 
 function buildAwsCliArgs(s3Config) {
@@ -234,6 +271,43 @@ async function runAwsCli(s3Config, args) {
   await execFileAsync('aws', [...buildAwsCliArgs(s3Config), ...args], {
     cwd: workspaceRoot,
   })
+}
+
+async function runAwsCliCaptureStdout(s3Config, args) {
+  const { stdout } = await execFileAsync('aws', [...buildAwsCliArgs(s3Config), ...args], {
+    cwd: workspaceRoot,
+  })
+  return String(stdout || '')
+}
+
+async function listScenarioVersionPathSegmentsFromS3(s3Config, szenarioId) {
+  const normalizedScenarioId = sanitizeFileToken(szenarioId, 'scenario')
+  const scenarioRootPrefix = [s3Config.prefix, 'szenario', normalizedScenarioId]
+    .filter(Boolean)
+    .join('/')
+  const scenarioRoot = `s3://${s3Config.bucket}/${scenarioRootPrefix}/`
+
+  const stdout = await runAwsCliCaptureStdout(s3Config, ['s3', 'ls', scenarioRoot])
+  const lines = stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+  const versionPathSegments = []
+  for (const line of lines) {
+    const match = line.match(/^PRE\s+(.+?)\/$/)
+    if (!match) {
+      continue
+    }
+    const segment = String(match[1] || '').trim()
+    if (!segment) {
+      continue
+    }
+    versionPathSegments.push(segment)
+  }
+
+  versionPathSegments.sort(compareVersionPathSegmentsDescending)
+  return versionPathSegments
 }
 
 function sleep(ms) {
@@ -888,58 +962,95 @@ async function restoreScenarioArtifactsFromS3(context, plan) {
   }
 
   for (const artifact of plan.restore) {
-    const remotePrefix = buildPersistentScenarioArtifactRemotePrefix({
-      s3Config: context.s3Config,
-      szenarioId: plan.lunettesScenarioId,
+    const primaryVersionPathSegment = buildScenarioArtifactVersionPathSegment({
+      scenarioId: plan.lunettesScenarioId,
       scenarioVersion: plan.scenarioVersion,
-      generatorKey: artifact.generatorKey,
     })
-    const stagingPath = join(
-      runtimeRoot,
-      'restore-staging',
-      `${plan.lunettesScenarioId}-${plan.scenarioVersion}-${artifact.artifactKey}`,
-    )
-    await clearLocalArtifactPath(stagingPath)
-    await ensureDir(stagingPath)
-    console.log(`[watcher] Restore ${artifact.artifactKey}: ${remotePrefix} -> ${normalizeWorkspaceRelativePath(stagingPath)}`)
+    const remoteCandidates = [
+      {
+        versionPathSegment: primaryVersionPathSegment,
+        reason: 'exact-version',
+      },
+    ]
 
-    const restoreSucceeded = await runAwsCli(context.s3Config, [
-      's3',
-      'sync',
-      remotePrefix,
-      stagingPath,
-      '--only-show-errors',
-    ]).then(() => true).catch((error) => {
-      const message = String(error?.stderr || error?.message || error).trim()
-      console.warn(`[watcher] Restore ${artifact.artifactKey} fehlgeschlagen oder leer: ${message}`)
-      return false
-    })
-
-    const stagingHasEntries = restoreSucceeded && await directoryHasEntries(stagingPath)
-    if (!stagingHasEntries) {
-      console.log(`[watcher] Restore ${artifact.artifactKey}: kein verwendbares S3-Artefakt gefunden, lokaler Bestand bleibt erhalten.`)
-      await clearLocalArtifactPath(stagingPath)
-      continue
-    }
-
-    const backupPath = `${artifact.localPath}.restore-backup`
-    await clearLocalArtifactPath(backupPath)
-    if (existsSync(artifact.localPath)) {
-      await rename(artifact.localPath, backupPath)
-    }
-
-    try {
-      await ensureDir(dirname(artifact.localPath))
-      await rename(stagingPath, artifact.localPath)
-      await clearLocalArtifactPath(backupPath)
-      console.log(`[watcher] Restore ${artifact.artifactKey}: lokaler Artefaktordner aktualisiert.`)
-    } catch (error) {
-      await clearLocalArtifactPath(artifact.localPath)
-      if (existsSync(backupPath)) {
-        await rename(backupPath, artifact.localPath).catch(() => {})
+    if (artifact.generatorKey === 'testscript') {
+      const fallbackVersionSegments = await listScenarioVersionPathSegmentsFromS3(context.s3Config, plan.lunettesScenarioId)
+        .catch((error) => {
+          const message = String(error?.stderr || error?.message || error).trim()
+          console.warn(`[watcher] Konnte S3-Versionen fuer szenario=${plan.lunettesScenarioId} nicht listen: ${message}`)
+          return []
+        })
+      for (const fallbackSegment of fallbackVersionSegments) {
+        if (fallbackSegment === primaryVersionPathSegment) {
+          continue
+        }
+        remoteCandidates.push({
+          versionPathSegment: fallbackSegment,
+          reason: 'fallback-version',
+        })
       }
+    }
+
+    let restored = false
+    for (const candidate of remoteCandidates) {
+      const remotePrefix = buildPersistentScenarioArtifactRemotePrefixFromVersionPathSegment({
+        s3Config: context.s3Config,
+        szenarioId: plan.lunettesScenarioId,
+        versionPathSegment: candidate.versionPathSegment,
+        generatorKey: artifact.generatorKey,
+      })
+      const stagingPath = join(
+        runtimeRoot,
+        'restore-staging',
+        `${plan.lunettesScenarioId}-${candidate.versionPathSegment}-${artifact.artifactKey}`,
+      )
       await clearLocalArtifactPath(stagingPath)
-      throw error
+      await ensureDir(stagingPath)
+      console.log(`[watcher] Restore ${artifact.artifactKey}: ${remotePrefix} -> ${normalizeWorkspaceRelativePath(stagingPath)} (${candidate.reason})`)
+
+      const restoreSucceeded = await runAwsCli(context.s3Config, [
+        's3',
+        'sync',
+        remotePrefix,
+        stagingPath,
+        '--only-show-errors',
+      ]).then(() => true).catch((error) => {
+        const message = String(error?.stderr || error?.message || error).trim()
+        console.warn(`[watcher] Restore ${artifact.artifactKey} fehlgeschlagen oder leer (${candidate.versionPathSegment}): ${message}`)
+        return false
+      })
+
+      const stagingHasEntries = restoreSucceeded && await directoryHasEntries(stagingPath)
+      if (!stagingHasEntries) {
+        await clearLocalArtifactPath(stagingPath)
+        continue
+      }
+
+      const backupPath = `${artifact.localPath}.restore-backup`
+      await clearLocalArtifactPath(backupPath)
+      if (existsSync(artifact.localPath)) {
+        await rename(artifact.localPath, backupPath)
+      }
+
+      try {
+        await ensureDir(dirname(artifact.localPath))
+        await rename(stagingPath, artifact.localPath)
+        await clearLocalArtifactPath(backupPath)
+        console.log(`[watcher] Restore ${artifact.artifactKey}: lokaler Artefaktordner aktualisiert (Version ${candidate.versionPathSegment}).`)
+        restored = true
+        break
+      } catch (error) {
+        await clearLocalArtifactPath(artifact.localPath)
+        if (existsSync(backupPath)) {
+          await rename(backupPath, artifact.localPath).catch(() => {})
+        }
+        await clearLocalArtifactPath(stagingPath)
+        throw error
+      }
+    }
+
+    if (!restored) {
+      console.log(`[watcher] Restore ${artifact.artifactKey}: kein verwendbares S3-Artefakt gefunden, lokaler Bestand bleibt erhalten.`)
     }
   }
 }

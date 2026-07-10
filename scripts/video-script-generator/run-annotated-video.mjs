@@ -415,10 +415,56 @@ async function readAnnotateMetaIfExists(filePath) {
 }
 
 function normalizeWorkspaceRelativePath(pathValue) {
-  return String(pathValue || '')
+  const raw = String(pathValue || '')
     .replace(/\\/g, '/')
-    .replace(/^\.\//, '')
     .trim()
+
+  if (!raw) {
+    return ''
+  }
+
+  const withoutDotPrefix = raw.replace(/^\.\//, '')
+  const workspaceRoot = resolve(process.cwd())
+    .replace(/\\/g, '/')
+    .replace(/\/+$/, '')
+
+  if (!workspaceRoot) {
+    return withoutDotPrefix
+  }
+
+  const absoluteCandidate = resolve(withoutDotPrefix)
+    .replace(/\\/g, '/')
+    .replace(/\/+$/, '')
+  const workspacePrefix = `${workspaceRoot}/`
+  if (absoluteCandidate === workspaceRoot) {
+    return ''
+  }
+  if (absoluteCandidate.startsWith(workspacePrefix)) {
+    return absoluteCandidate.slice(workspacePrefix.length)
+  }
+
+  return withoutDotPrefix
+}
+
+function areScenarioSourcesEquivalent(foundSource, requiredSource, scenarioId = '') {
+  const normalizedFound = normalizeWorkspaceRelativePath(foundSource)
+  const normalizedRequired = normalizeWorkspaceRelativePath(requiredSource)
+
+  if (normalizedFound === normalizedRequired) {
+    return true
+  }
+
+  if (!normalizedFound || !normalizedRequired) {
+    return false
+  }
+
+  const normalizedScenarioId = sanitizeScenarioOutputToken(scenarioId, '')
+  if (!normalizedScenarioId) {
+    return false
+  }
+
+  const canonicalSuffix = `neo/interactions/_lunettes-job-watcher/szenario-${normalizedScenarioId}/source.xml`
+  return normalizedFound.endsWith(canonicalSuffix) && normalizedRequired.endsWith(canonicalSuffix)
 }
 
 const SCENARIO_INTERACTION_SHORTHAND_KEYS = new Set([
@@ -1135,7 +1181,7 @@ async function assertScenarioMatchesRawVideoIgnoringPresentation({
     throw new Error([
       'Das aktuelle Szenario passt nicht mehr zum vorhandenen Rohvideo (Vergleich ignoriert presentation/slide/info/chapter/schritt).',
       'Bitte zuerst das Rohvideo neu generieren:',
-      `npm run generate:video:force -- ${scenarioPathRelative}`,
+      `npm run run:videoscript -- ${scenarioPathRelative} --scenario-id=${scenarioId}${scenarioVersion ? ` --scenario-version=${scenarioVersion}` : ''}`,
     ].join(' '))
   }
 }
@@ -2161,7 +2207,7 @@ async function findPersistentScenarioVideoTimelinePair({
 
     const timeline = await readJsonIfExists(timelinePath)
     const source = normalizeWorkspaceRelativePath(timeline?.scenarioSource)
-    if (source !== requiredSource) {
+    if (!areScenarioSourcesEquivalent(source, requiredSource, scenarioId)) {
       continue
     }
 
@@ -2215,7 +2261,7 @@ async function ensureScenarioVideoTimelinePair({ scenarioId, scenarioVersion, sc
     'Kein vorhandenes Rohvideo fuer das Szenario gefunden.',
     `Erwartet unter szenario/${scenarioId}/*/testscript mit scenarioSource=${scenarioPathRelative}; verwendet wird die hoechste gefundene Version (z. B. 8_* vor 7_*).`,
     `Direkt erwarteter Lauf waere: szenario/${scenarioId}/${buildScenarioArtifactVersionPathSegment({ scenarioId, scenarioVersion })}/testscript.`,
-    `Bitte zuerst ausfuehren: npm run generate:video:force -- ${scenarioPathRelative}`,
+    `Bitte zuerst ausfuehren: npm run run:videoscript -- ${scenarioPathRelative} --scenario-id=${scenarioId}${scenarioVersion ? ` --scenario-version=${scenarioVersion}` : ''}`,
   ].join(' '))
 }
 
