@@ -21,6 +21,7 @@ import {
 } from '../shared/azure-speech.mjs'
 import { getVideoScriptConfig, loadCentralConfig } from '../shared/central-config.mjs'
 import {
+  PERSISTENT_SCENARIO_ARTIFACTS_ROOT_DIR,
   buildPersistentScenarioArtifactsRoot,
   buildScenarioArtifactVersionPathSegment,
   buildScenarioArtifactVersionToken,
@@ -2117,28 +2118,86 @@ async function findPersistentScenarioVideoTimelinePair({
   scenarioVersion,
   scenarioPathRelative,
 }) {
-  const persistentRoot = buildPersistentScenarioArtifactsRoot(workspaceRoot, scenarioId, scenarioVersion, 'testscript')
-  const videoPath = join(persistentRoot, 'rohvideo', 'video.webm')
-  const timelinePath = join(persistentRoot, 'timeline', 'scenario-step-timeline.json')
-  if (!existsSync(videoPath) || !existsSync(timelinePath)) {
-    return null
+  const parseVersionMeta = (versionPathSegment) => {
+    const rawSegment = String(versionPathSegment || '').trim()
+    const versionToken = rawSegment.split('_')[0] || ''
+    const isNumeric = /^\d+$/.test(versionToken)
+    return {
+      versionPathSegment: rawSegment,
+      versionToken,
+      isNumeric,
+      numericValue: isNumeric ? Number.parseInt(versionToken, 10) : null,
+    }
   }
 
-  const timeline = await readJsonIfExists(timelinePath)
-  const source = normalizeWorkspaceRelativePath(timeline?.scenarioSource)
-  if (source !== normalizeWorkspaceRelativePath(scenarioPathRelative)) {
-    return null
+  const expectedPersistentRoot = buildPersistentScenarioArtifactsRoot(workspaceRoot, scenarioId, scenarioVersion, 'testscript')
+  const scenarioRoot = join(
+    workspaceRoot,
+    PERSISTENT_SCENARIO_ARTIFACTS_ROOT_DIR,
+    buildScenarioOutputFolderName({ scenarioId, fallbackName: 'scenario' }),
+  )
+  const requiredSource = normalizeWorkspaceRelativePath(scenarioPathRelative)
+  const candidateDirs = [expectedPersistentRoot]
+
+  if (existsSync(scenarioRoot)) {
+    const entries = await readdir(scenarioRoot, { withFileTypes: true })
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue
+      const testscriptDir = join(scenarioRoot, entry.name, 'testscript')
+      if (!existsSync(testscriptDir)) continue
+      if (testscriptDir !== expectedPersistentRoot) {
+        candidateDirs.push(testscriptDir)
+      }
+    }
   }
 
-  const timelineStat = await stat(timelinePath)
-  return {
-    dir: persistentRoot,
-    videoPath,
-    timelinePath,
-    timeline,
-    mtimeMs: timelineStat.mtimeMs,
-    sourceType: 'persistent',
+  const candidates = []
+  for (const candidateDir of candidateDirs) {
+    const videoPath = join(candidateDir, 'rohvideo', 'video.webm')
+    const timelinePath = join(candidateDir, 'timeline', 'scenario-step-timeline.json')
+    if (!existsSync(videoPath) || !existsSync(timelinePath)) {
+      continue
+    }
+
+    const timeline = await readJsonIfExists(timelinePath)
+    const source = normalizeWorkspaceRelativePath(timeline?.scenarioSource)
+    if (source !== requiredSource) {
+      continue
+    }
+
+    const videoStat = await stat(videoPath)
+    const versionPathSegment = basename(dirname(candidateDir))
+    const versionMeta = parseVersionMeta(versionPathSegment)
+    candidates.push({
+      dir: candidateDir,
+      videoPath,
+      timelinePath,
+      timeline,
+      versionPathSegment,
+      versionToken: versionMeta.versionToken,
+      versionIsNumeric: versionMeta.isNumeric,
+      versionNumericValue: versionMeta.numericValue,
+      mtimeMs: videoStat.mtimeMs,
+      sourceType: 'persistent',
+    })
   }
+
+  candidates.sort((left, right) => {
+    if (left.versionIsNumeric && right.versionIsNumeric && left.versionNumericValue !== right.versionNumericValue) {
+      return right.versionNumericValue - left.versionNumericValue
+    }
+    if (left.versionIsNumeric !== right.versionIsNumeric) {
+      return left.versionIsNumeric ? -1 : 1
+    }
+
+    const tokenCompare = right.versionToken.localeCompare(left.versionToken, undefined, { numeric: true, sensitivity: 'base' })
+    if (tokenCompare !== 0) {
+      return tokenCompare
+    }
+
+    return right.mtimeMs - left.mtimeMs
+  })
+  return candidates[0] || null
 }
 
 async function ensureScenarioVideoTimelinePair({ scenarioId, scenarioVersion, scenarioPathRelative }) {
@@ -2154,7 +2213,8 @@ async function ensureScenarioVideoTimelinePair({ scenarioId, scenarioVersion, sc
 
   throw new Error([
     'Kein vorhandenes Rohvideo fuer das Szenario gefunden.',
-    `Erwartet unter szenario/${scenarioId}/${buildScenarioArtifactVersionPathSegment({ scenarioId, scenarioVersion })}/testscript mit scenarioSource=${scenarioPathRelative}.`,
+    `Erwartet unter szenario/${scenarioId}/*/testscript mit scenarioSource=${scenarioPathRelative}; verwendet wird die hoechste gefundene Version (z. B. 8_* vor 7_*).`,
+    `Direkt erwarteter Lauf waere: szenario/${scenarioId}/${buildScenarioArtifactVersionPathSegment({ scenarioId, scenarioVersion })}/testscript.`,
     `Bitte zuerst ausfuehren: npm run generate:video:force -- ${scenarioPathRelative}`,
   ].join(' '))
 }
