@@ -134,6 +134,41 @@ export const centralFillStrategies = [
   },
 
   {
+    // Quasar QEditor exposes its data-id on the editor wrapper. The runtime
+    // resolves that wrapper to this contenteditable child before strategies
+    // are selected.
+    name: 'quasar-editor-contenteditable',
+    async match({ isSelect, elementInfo }) {
+      if (isSelect) return false
+      const className = String(elementInfo?.className || '')
+      return elementInfo?.isContentEditable === true && className.includes('q-editor__content')
+    },
+    async run({ page, locator, expectedValue, isAppend }) {
+      if (!expectedValue && !isAppend) {
+        return { handled: false }
+      }
+
+      await locator.click()
+      if (isAppend) {
+        await page.keyboard.press('Control+End').catch(() => {})
+      } else {
+        await page.keyboard.press('Control+A')
+        await page.keyboard.press('Delete')
+      }
+
+      if (expectedValue) {
+        // insertText belongs to Playwright's Keyboard API, not to DOM elements.
+        await page.keyboard.insertText(expectedValue)
+      }
+
+      await locator.dispatchEvent('input', { inputType: 'insertText', data: expectedValue })
+      await locator.dispatchEvent('change')
+      await page.keyboard.press('Tab')
+      return { handled: true }
+    },
+  },
+
+  {
     name: 'generic-contenteditable',
     async match({ testId, isSelect, elementInfo }) {
       if (isSelect) return false
