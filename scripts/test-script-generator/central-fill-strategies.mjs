@@ -186,21 +186,17 @@ export const centralFillStrategies = [
           await locator.type(expectedValue, { delay: 40 })
         }
       } else {
-        await page.keyboard.press('Control+A')
-        await page.keyboard.press('Delete')
-
-        // For contenteditable, use insertText to avoid key events
-        await page.evaluate(
-          ({ text }) => {
-            const el = document.activeElement
-            if (el?.contentEditable === 'true') {
-              el.insertText(text)
-              el.dispatchEvent(new Event('input', { bubbles: true }))
-              el.dispatchEvent(new Event('change', { bubbles: true }))
-            }
-          },
-          { text: expectedValue }
-        )
+        // Playwright supports filling contenteditable elements directly.
+        try {
+          await locator.fill(expectedValue)
+        } catch {
+          // Fallback for editors that block fill and only react to key input.
+          await page.keyboard.press('Control+A')
+          await page.keyboard.press('Backspace')
+          if (expectedValue) {
+            await locator.pressSequentially(expectedValue)
+          }
+        }
       }
 
       await page.keyboard.press('Tab')
